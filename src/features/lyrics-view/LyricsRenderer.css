@@ -1,0 +1,89 @@
+.lyrics-wrapper {
+  flex: 1;
+  width: 100%;
+  max-width: 800px;
+  height: 60vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  padding: 0 5%;
+  
+  /* Hide scrollbar for a cleaner premium look */
+  -ms-overflow-style: none;  
+  scrollbar-width: none;  
+  
+  /* Masking the top and bottom to create a faded edges scroll effect */
+  -webkit-mask-image: linear-gradient(to bottom, transparent, black 15%, black 85%, transparent);
+  mask-image: linear-gradient(to bottom, transparent, black 15%, black 85%, transparent);
+}
+
+.lyrics-wrapper::-webkit-scrollbar {
+  display: none;
+}
+
+.scroll-padding-top,
+.scroll-padding-bottom {
+  min-height: 40vh; /* Allow pushing the lines nicely up the scroll port */
+}
+
+/* Base states */
+.lyric-line-box {
+  padding: 18px 24px;
+  margin: 12px 0;
+  border-radius: 20px;
+  cursor: pointer;
+  transform-origin: left center;
+  transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  opacity: 0.3;
+  transform: scale(0.9) translateY(0);
+  background: transparent;
+}
+
+.lyric-line-box:hover {
+  opacity: 0.6;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.lyric-text {
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text-main);
+  text-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  line-height: 1.2;
+}
+
+/* Past lines fade away smoothly */
+.lyric-line-box.past {
+  opacity: 0.15;
+  transform: scale(0.85);
+  filter: blur(1px);
+}
+
+/* Active line glows with glassmorphism style and premium scale */
+.lyric-line-box.active {
+  opacity: 1;
+  transform: scale(1.05);
+  filter: blur(0);
+  background: var(--glass-bg);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid var(--glass-border);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.2), 
+              inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+/* Empty spacer styling */
+.lyric-line-box.empty .lyric-text {
+  color: var(--text-muted);
+  font-size: 1.2rem;
+  opacity: 0.3;
+  letter-spacing: 4px;
+}
+.lyric-line-box.active.empty {
+  transform: scale(1);
+  box-shadow: none;
+  background: transparent;
+  backdrop-filter: none;
+  border-color: transparent;
+}
