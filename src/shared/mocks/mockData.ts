@@ -17,3 +17,18 @@ export const MOCK_LRC = `[ti:Never Gonna Give You Up]
 [00:53.64] Never gonna say goodbye
 [00:55.61] Never gonna tell a lie and hurt you
 `;
+
+export const MOCK_LRC_EDGE = `[ti:Edge Case Simulator]
+[ar:Lyra Dev]
+[al:Instrumental Gaps & Rapidity]
+[00:00.00] 
+[00:02.00] Testing singing bounds (ends at ~5s)
+[00:10.00] Long instrumental gap just finished!
+[00:12.50] Rapid sequence 1
+[00:13.00] Sequence 2
+[00:13.50] Sequence 3
+[00:14.00][00:15.00] Repeating multi-timestamp hook
+[00:16.50] 
+[00:18.00] Re-activated after pure blank tag.
+[00:21.00] Outro.
+`;

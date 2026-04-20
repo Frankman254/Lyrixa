@@ -7,14 +7,11 @@
   display: flex;
   flex-direction: column;
   padding: 0 5%;
-  
-  /* Hide scrollbar for a cleaner premium look */
   -ms-overflow-style: none;  
   scrollbar-width: none;  
-  
-  /* Masking the top and bottom to create a faded edges scroll effect */
   -webkit-mask-image: linear-gradient(to bottom, transparent, black 15%, black 85%, transparent);
   mask-image: linear-gradient(to bottom, transparent, black 15%, black 85%, transparent);
+  transition: opacity 0.8s ease;
 }
 
 .lyrics-wrapper::-webkit-scrollbar {
@@ -23,10 +20,9 @@
 
 .scroll-padding-top,
 .scroll-padding-bottom {
-  min-height: 40vh; /* Allow pushing the lines nicely up the scroll port */
+  min-height: 40vh;
 }
 
-/* Base states */
 .lyric-line-box {
   padding: 18px 24px;
   margin: 12px 0;
@@ -53,11 +49,18 @@
   line-height: 1.2;
 }
 
-/* Past lines fade away smoothly */
+/* Past lines - fade out organically */
 .lyric-line-box.past {
   opacity: 0.15;
   transform: scale(0.85);
   filter: blur(1px);
+}
+
+/* Upcoming lines - dimmer */
+.lyric-line-box.upcoming {
+  opacity: 0.1;
+  transform: scale(0.9);
+  filter: blur(2px);
 }
 
 /* Active line glows with glassmorphism style and premium scale */
@@ -71,6 +74,46 @@
   border: 1px solid var(--glass-border);
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.2), 
               inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+/* Instrumental Ambient mapping */
+.lyrics-wrapper.instrumental-ambient .lyric-line-box.active {
+  opacity: 0.3;
+  transform: scale(0.95);
+  box-shadow: none;
+  background: rgba(255,255,255,0.02);
+  border-color: transparent;
+  backdrop-filter: blur(8px);
+}
+
+.lyrics-wrapper.instrumental-ambient {
+  /* Subtle global pulse indicating instrumental waiting */
+  animation: instrumentalPulse 4s infinite alternate ease-in-out;
+}
+
+@keyframes instrumentalPulse {
+  0% { opacity: 0.8; }
+  100% { opacity: 0.4; }
+}
+
+/* Progress bar styles map cleanly to --progress inline prop */
+.progress-bar-container {
+  margin-top: 16px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  overflow: hidden;
+  position: relative;
+  width: 100%;
+}
+
+.progress-bar-fill {
+  background: var(--accent);
+  height: 100%;
+  width: 100%;
+  transform-origin: left;
+  transform: scaleX(var(--progress, 0));
+  transition: transform 0.05s linear; 
 }
 
 /* Empty spacer styling */

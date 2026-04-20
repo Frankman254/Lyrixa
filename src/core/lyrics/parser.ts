@@ -12,30 +12,29 @@ export function parseLRC(lrcContent: string): ParsedLrc {
   // Regex to match timestamps like [00:12.34], [01:22.333], etc.
   const timeRegex = /\[(\d{2,}):(\d{2}(?:\.\d{2,3})?)\]/g;
   // Regex to match metadata tags like [ti:Title]
-  const metaRegex = /\[([a-zA-Z]+):([^\]]+)\]/;
+  const metaRegex = /^\[([a-zA-Z]+):([^\]]*)\]$/;
 
   for (let i = 0; i < lines.length; i++) {
     const rawLine = lines[i]?.trim();
     if (!rawLine) continue;
 
-    // Check for metadata
+    // Check for metadata first
     const metaMatch = metaRegex.exec(rawLine);
     if (metaMatch && !timeRegex.test(rawLine)) {
-      metadata[metaMatch[1]] = metaMatch[2]?.trim() || '';
+      // Normalize casing on metadata key mapping for standard access
+      const key = metaMatch[1]!.toLowerCase();
+      metadata[key] = metaMatch[2]?.trim() || '';
       continue;
     }
 
-    // Extract time tags and text
-    // A single line could technically have multiple tags (e.g., repeating chorus)
-    // We will extract all tags and duplicate the line text for each timestamp.
+    // Resetting for safety
+    timeRegex.lastIndex = 0; 
+    let lastMatchEnd = 0;
     
     let match;
     const timestamps: number[] = [];
-    
-    // We need to reset lastIndex because we use the global flag 'g' locally for exec
-    timeRegex.lastIndex = 0; 
-    let lastMatchEnd = 0;
 
+    // Extract all associated time tags on the current line
     while ((match = timeRegex.exec(rawLine)) !== null) {
       const minutes = parseInt(match[1] || '0', 10);
       const seconds = parseFloat(match[2] || '0');
@@ -45,18 +44,22 @@ export function parseLRC(lrcContent: string): ParsedLrc {
 
     if (timestamps.length > 0) {
       // The text is whatever follows the last time tag
+      // It can be empty, which is a standardized way of representing instrumental gaps
       const text = rawLine.substring(lastMatchEnd).trim();
       
       timestamps.forEach(time => {
         parsedLines.push({
           startTime: time,
-          text: text
+          text: text,
+          // Scaffolded word-level placeholder for future processing logic
+          // A real karaoke parser would extract `text` further tracking micro-timestamps
+          words: undefined
         });
       });
     }
   }
 
-  // Sort lines by timestamp since multiple tags could have been out of typical order
+  // Strictly sort lines by timestamp to ensure engine sequential resolving handles correctly
   parsedLines.sort((a, b) => a.startTime - b.startTime);
 
   return {

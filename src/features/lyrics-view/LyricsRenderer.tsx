@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import type { TimelineSnapshot, TimelineEntry } from '../../core/types/timeline';
 import type { LyricLine } from '../../core/types/lyrics';
-import './LyricsRenderer.css'; // Premium Vanilla CSS
+import './LyricsRenderer.css';
 
 interface LyricsRendererProps {
   entries: TimelineEntry<LyricLine>[];
@@ -25,27 +25,36 @@ export function LyricsRenderer({ entries, snapshot, onLineClick }: LyricsRendere
     }
   }, [snapshot.activeIndex]);
 
+  const isInstrumental = snapshot.phase === 'instrumental-gap';
+
   return (
-    <div className="lyrics-wrapper" ref={containerRef}>
+    <div className={`lyrics-wrapper ${isInstrumental ? 'instrumental-ambient' : ''}`} ref={containerRef}>
       <div className="scroll-padding-top" />
       {entries.map((entry, index) => {
         const isActive = index === snapshot.activeIndex;
+        const isUpcoming = index > snapshot.activeIndex;
         const isPast = index < snapshot.activeIndex;
-
-        // Skip rendering completely blank space strings if they aren't active to save UI noise, 
-        // Or render them smaller. Let's just render them as small breaks.
         const isEmpty = entry.data.text.trim() === '';
+
+        // Inject interpolation variable for fluidity
+        const progressStyle = isActive ? { '--progress': snapshot.progress } as React.CSSProperties : {};
 
         return (
           <div
             key={entry.id}
             data-active={isActive}
-            className={`lyric-line-box ${isActive ? 'active' : ''} ${isPast ? 'past' : ''} ${isEmpty ? 'empty' : ''}`}
+            className={`lyric-line-box ${isActive ? 'active' : ''} ${isUpcoming ? 'upcoming' : ''} ${isPast ? 'past' : ''} ${isEmpty ? 'empty' : ''}`}
+            style={progressStyle}
             onClick={() => onLineClick?.(entry.startTime)}
             role="button"
             tabIndex={0}
           >
             <span className="lyric-text">{entry.data.text || '•••'}</span>
+            {isActive && !isInstrumental && (
+              <div className="progress-bar-container">
+                <div className="progress-bar-fill" />
+              </div>
+            )}
           </div>
         );
       })}

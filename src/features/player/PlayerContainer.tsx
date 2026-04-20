@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { MOCK_LRC } from '../../shared/mocks/mockData';
+import { MOCK_LRC, MOCK_LRC_EDGE } from '../../shared/mocks/mockData';
 import { parseLRC } from '../../core/lyrics/parser';
 import { createTimelineEntries, computeTimelineSnapshot } from '../../core/timeline/engine';
 import { LyricsRenderer } from '../lyrics-view/LyricsRenderer';
@@ -10,22 +10,27 @@ import './PlayerContainer.css';
 export function PlayerContainer() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
+  const [useEdgeMock, setUseEdgeMock] = useState(false);
   
-  // Create entries once on mount
+  // Create entries whenever mock toggle changes
   const entries = useMemo(() => {
-    const parsed = parseLRC(MOCK_LRC);
+    const rawData = useEdgeMock ? MOCK_LRC_EDGE : MOCK_LRC;
+    const parsed = parseLRC(rawData);
     return createTimelineEntries(
       parsed.lines,
       (line) => line.startTime,
       (_, index) => `lyric-${index}`
     );
-  }, []);
+  }, [useEdgeMock]);
 
   const [snapshot, setSnapshot] = useState<TimelineSnapshot<LyricLine>>({
     currentTime: 0,
     activeIndex: -1,
     previousIndex: -1,
-    activeEntry: null
+    activeEntry: null,
+    nextEntry: null,
+    progress: 0,
+    phase: 'idle'
   });
 
   const requestRef = useRef<number | undefined>(undefined);
@@ -43,8 +48,9 @@ export function PlayerContainer() {
     
     setCurrentTime((prev) => {
       // Loop around to 0 when it reaches approx end of song (mocked as 60s for demo)
+      const maxTime = useEdgeMock ? 25 : 60;
       const newTime = prev + delta;
-      return newTime > 60 ? 0 : newTime; 
+      return newTime > maxTime ? 0 : newTime; 
     });
     
     lastTimeRef.current = timeNow;
@@ -61,16 +67,27 @@ export function PlayerContainer() {
     return () => {
       if (requestRef.current) cancelAnimationFrame(requestRef.current);
     };
-  }, [isPlaying]);
+  }, [isPlaying, useEdgeMock]);
+
+  // Reset time cleanly when changing tracks
+  const handleToggleMock = () => {
+    setUseEdgeMock(!useEdgeMock);
+    setCurrentTime(0);
+  };
 
   return (
     <div className="player-container">
       <header className="player-header glass-panel">
         <div className="player-meta">
           <h1>LyraMotion Core</h1>
-          <p>Playing mock data • {currentTime.toFixed(2)}s</p>
+          <p>
+             {useEdgeMock ? 'Edge Simulator' : 'Rick Astley'} • {currentTime.toFixed(2)}s [{snapshot.phase}]
+          </p>
         </div>
         <div className="player-controls">
+          <button className="toggle-btn" onClick={handleToggleMock}>
+            Toggle Track
+          </button>
           <button 
             className="play-btn" 
             onClick={() => setIsPlaying(!isPlaying)}
