@@ -214,6 +214,7 @@ export function PlayerContainer() {
               session={syncSession}
               audioTime={currentTime}
               isPlaying={isPlaying}
+              onPlayToggle={() => setIsPlaying(!isPlaying)}
               onStampLine={stampNextLine}
               onUndoLast={undoLastStamp}
               onExitSync={() => setRenderMode('editor')}

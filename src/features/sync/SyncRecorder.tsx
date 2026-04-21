@@ -13,6 +13,8 @@ interface SyncRecorderProps {
   onStampLine: (time: number) => void;
   /** Para cancelar el último registro si el usuario cometió un error */
   onUndoLast: () => void;
+  /** Función para alternar entre reproducir y pausar el audio (Play/Pause) */
+  onPlayToggle: () => void;
   /** Salir del modo grabador */
   onExitSync: () => void;
 }
@@ -26,6 +28,7 @@ export function SyncRecorder({
   session, 
   audioTime, 
   isPlaying, 
+  onPlayToggle,
   onStampLine, 
   onUndoLast,
   onExitSync 
@@ -95,6 +98,9 @@ export function SyncRecorder({
       <div className="sync-header">
         <h2>Sync Editor</h2>
         <div className="sync-actions">
+          <button className="sync-btn primary" onClick={onPlayToggle}>
+            {isPlaying ? '⏸ Pause Audio' : '▶ Play Audio'}
+          </button>
           <button className="sync-btn" onClick={onUndoLast} disabled={session.syncedLines.length === 0}>
             Undo Last Stamp
           </button>
