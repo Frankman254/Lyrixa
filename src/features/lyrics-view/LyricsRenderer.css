@@ -12,6 +12,17 @@
   -webkit-mask-image: linear-gradient(to bottom, transparent, black 15%, black 85%, transparent);
   mask-image: linear-gradient(to bottom, transparent, black 15%, black 85%, transparent);
   transition: opacity 0.8s ease;
+  
+  /* Applying alignment from CSS vars */
+  align-items: center;
+}
+
+.lyrics-wrapper[style*="--lyric-alignment: left"] {
+  align-items: flex-start;
+}
+
+.lyrics-wrapper[style*="--lyric-alignment: right"] {
+  align-items: flex-end;
 }
 
 .lyrics-wrapper::-webkit-scrollbar {
@@ -24,55 +35,83 @@
 }
 
 .lyric-line-box {
-  padding: 18px 24px;
+  padding: 12px 24px;
   margin: 12px 0;
   border-radius: 20px;
   cursor: pointer;
-  transform-origin: left center;
+  transform-origin: center center;
   transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1);
-  opacity: 0.3;
-  transform: scale(0.9) translateY(0);
+  opacity: 0;
+  transform: translateY(20px) scale(0.95);
   background: transparent;
+  width: 100%;
+  box-sizing: border-box;
 }
 
-.lyric-line-box:hover {
-  opacity: 0.6;
-  background: rgba(255, 255, 255, 0.03);
+.lyrics-wrapper[style*="--lyric-alignment: center"] .lyric-line-box {
+  text-align: center;
+}
+
+.lyrics-wrapper[style*="--lyric-alignment: left"] .lyric-line-box {
+  text-align: left;
+}
+
+.lyrics-wrapper[style*="--lyric-alignment: right"] .lyric-line-box {
+  text-align: right;
 }
 
 .lyric-text {
-  font-size: 2rem;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  color: var(--text-main);
-  text-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-  line-height: 1.2;
+  font-size: var(--lyric-font-size);
+  font-weight: var(--lyric-font-weight);
+  letter-spacing: var(--lyric-letter-spacing);
+  line-height: var(--lyric-line-spacing);
+  color: var(--lyric-color-primary);
+  text-shadow: 0 4px calc(12px * var(--lyric-shadow-intensity)) rgba(0, 0, 0, var(--lyric-shadow-intensity));
+  transition: color 0.4s ease, text-shadow 0.4s ease, font-size 0.4s ease;
+  display: block;
+  white-space: pre-wrap; /* Mantiene los saltos de línea de los párrafos */
 }
 
-/* Past lines - fade out organically */
+/* Past lines - move up and fade out organically */
 .lyric-line-box.past {
   opacity: 0.15;
-  transform: scale(0.85);
-  filter: blur(1px);
+  transform: translateY(-10px) scale(0.9);
+  filter: blur(var(--lyric-blur));
+}
+
+.lyric-line-box.past .lyric-text {
+  color: var(--lyric-color-secondary);
 }
 
 /* Upcoming lines - dimmer */
 .lyric-line-box.upcoming {
-  opacity: 0.1;
-  transform: scale(0.9);
-  filter: blur(2px);
+  opacity: 0.2;
+  transform: translateY(0px) scale(0.9);
+  filter: blur(1px);
+}
+
+.lyric-line-box.upcoming .lyric-text {
+  color: var(--lyric-color-secondary);
 }
 
 /* Active line glows with glassmorphism style and premium scale */
 .lyric-line-box.active {
   opacity: 1;
-  transform: scale(1.05);
+  transform: translateY(0px) scale(1.05);
   filter: blur(0);
-  background: var(--glass-bg);
+}
+
+.lyric-line-box.active .lyric-text {
+  color: var(--lyric-color-active);
+  text-shadow: 0 0 20px var(--lyric-glow), 0 4px calc(12px * var(--lyric-shadow-intensity)) rgba(0, 0, 0, var(--lyric-shadow-intensity));
+}
+
+.lyric-line-box.active.emphasize-bg {
+  background: rgba(255, 255, 255, 0.05);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
-  border: 1px solid var(--glass-border);
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.2), 
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, calc(0.2 * var(--lyric-shadow-intensity))), 
               inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
@@ -108,7 +147,8 @@
 }
 
 .progress-bar-fill {
-  background: var(--accent);
+  background: var(--lyric-color-active);
+  box-shadow: 0 0 10px var(--lyric-glow);
   height: 100%;
   width: 100%;
   transform-origin: left;
@@ -118,11 +158,12 @@
 
 /* Empty spacer styling */
 .lyric-line-box.empty .lyric-text {
-  color: var(--text-muted);
-  font-size: 1.2rem;
+  color: var(--lyric-color-secondary);
+  font-size: calc(var(--lyric-font-size) * 0.6);
   opacity: 0.3;
   letter-spacing: 4px;
 }
+
 .lyric-line-box.active.empty {
   transform: scale(1);
   box-shadow: none;

@@ -1,0 +1,189 @@
+.sync-recorder-wrapper {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 800px;
+  height: 80vh;
+  margin: 0 auto;
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--glass-border);
+}
+
+.sync-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 32px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.sync-header h2 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.sync-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.sync-btn {
+  background: transparent;
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: all 0.2s;
+}
+
+.sync-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.sync-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.sync-btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+.sync-btn.danger {
+  border-color: rgba(255, 100, 100, 0.5);
+  color: #ffaaaa;
+}
+
+.sync-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 32px;
+  gap: 24px;
+  overflow: hidden;
+}
+
+.synced-history {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 4px;
+  position: relative;
+  overflow: hidden;
+}
+
+.history-fade-out {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 60px;
+  background: linear-gradient(to bottom, var(--glass-bg) 0%, transparent 100%);
+  z-index: 2;
+  pointer-events: none;
+}
+
+.history-line {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.9rem;
+  display: flex;
+  gap: 12px;
+  padding: 4px 0;
+}
+
+.history-line .time-tag {
+  color: var(--accent);
+  font-family: monospace;
+}
+
+.sync-target-area {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 32px;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+}
+
+.target-label {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.target-line {
+  font-size: 2rem;
+  font-weight: bold;
+  color: #fff;
+  text-align: center;
+  margin-bottom: 8px;
+  white-space: pre-wrap;
+}
+
+.stamp-btn {
+  background: #fff;
+  color: #000;
+  border: none;
+  padding: 16px 32px;
+  border-radius: 8px;
+  font-size: 1.2rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.1s;
+}
+
+.stamp-btn:disabled {
+  background: rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.5);
+  cursor: not-allowed;
+}
+
+.stamp-btn.pulse {
+  animation: idlePulse 2s infinite alternate;
+}
+
+.stamp-btn:active:not(:disabled) {
+  transform: scale(0.95);
+  background: var(--accent);
+  color: #fff;
+}
+
+@keyframes idlePulse {
+  0% { box-shadow: 0 0 0 rgba(255, 255, 255, 0.4); }
+  100% { box-shadow: 0 0 20px rgba(255, 255, 255, 0.2); }
+}
+
+.finished-state {
+  text-align: center;
+  color: var(--accent);
+}
+
+.upcoming-preview {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  opacity: 0.4;
+}
+
+.upcoming-line {
+  font-size: 1.1rem;
+  color: #fff;
+}
+
+.upcoming-line.faded {
+  opacity: 0.5;
+  font-style: italic;
+}
