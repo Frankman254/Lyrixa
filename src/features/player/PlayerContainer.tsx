@@ -213,10 +213,14 @@ export function PlayerContainer() {
             <SyncRecorder 
               session={syncSession}
               audioTime={currentTime}
+              duration={duration}
               isPlaying={isPlaying}
+              styleConfig={styleConfig}
+              analyser={audioEngineRef.current?.getAnalyser() ?? null}
               onPlayToggle={() => setIsPlaying(!isPlaying)}
               onStampLine={stampNextLine}
               onUndoLast={undoLastStamp}
+              onSeek={seekTime}
               onExitSync={() => setRenderMode('editor')}
             />
           ) : (

@@ -1,189 +1,367 @@
-.sync-recorder-wrapper {
+/* ═════════════════════════════════════════════════
+   SYNC WORKSPACE — FL STUDIO DAW FULLSCREEN LAYOUT
+   ═════════════════════════════════════════════════ */
+
+.sync-workspace {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
   display: flex;
   flex-direction: column;
-  width: 100%;
-  max-width: 800px;
-  height: 80vh;
-  margin: 0 auto;
-  border-radius: 16px;
+  background: #0a0a0f;
+  color: #fff;
+  font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
   overflow: hidden;
-  background: var(--glass-bg);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid var(--glass-border);
 }
 
-.sync-header {
+/* ── TOP BAR ────────────────────────────────────── */
+
+.sync-topbar {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 20px 32px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(0, 0, 0, 0.2);
+  justify-content: space-between;
+  padding: 10px 20px;
+  background: rgba(15, 15, 25, 0.95);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
+  gap: 16px;
+  backdrop-filter: blur(10px);
 }
 
-.sync-header h2 {
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.topbar-left h2 {
   margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  background: linear-gradient(135deg, #646cff, #53c2f0);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.topbar-track {
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.4);
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.topbar-center {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-family: 'Inter', monospace;
+  font-feature-settings: "tnum";
+  font-variant-numeric: tabular-nums;
+}
+
+.topbar-time {
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: #fff;
+}
+
+.topbar-separator {
+  color: rgba(255, 255, 255, 0.25);
   font-size: 1.2rem;
 }
 
-.sync-actions {
+.topbar-duration {
+  font-size: 1rem;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.topbar-right {
   display: flex;
-  gap: 12px;
+  gap: 8px;
 }
 
-.sync-btn {
-  background: transparent;
+.tb-btn {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   color: #fff;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  padding: 8px 16px;
+  padding: 6px 14px;
   border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 500;
   cursor: pointer;
-  font-size: 0.85rem;
-  transition: all 0.2s;
+  transition: all 0.15s ease;
+  white-space: nowrap;
 }
 
-.sync-btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.1);
+.tb-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.25);
 }
 
-.sync-btn:disabled {
-  opacity: 0.5;
+.tb-btn:disabled {
+  opacity: 0.3;
   cursor: not-allowed;
 }
 
-.sync-btn.primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  font-weight: 600;
+.tb-btn.accent {
+  background: rgba(100, 108, 255, 0.2);
+  border-color: rgba(100, 108, 255, 0.4);
+  color: #a5abff;
 }
 
-.sync-btn.danger {
-  border-color: rgba(255, 100, 100, 0.5);
-  color: #ffaaaa;
+.tb-btn.accent:hover {
+  background: rgba(100, 108, 255, 0.35);
 }
 
-.sync-body {
+.tb-btn.danger {
+  border-color: rgba(255, 80, 80, 0.4);
+  color: #ff8888;
+}
+
+.tb-btn.danger:hover {
+  background: rgba(255, 80, 80, 0.15);
+}
+
+/* ── MAIN SPLIT ─────────────────────────────────── */
+
+.sync-split {
   flex: 1;
   display: flex;
-  flex-direction: column;
-  padding: 32px;
-  gap: 24px;
   overflow: hidden;
 }
 
-.synced-history {
-  flex: 1;
+.sync-panel {
   display: flex;
   flex-direction: column;
-  justify-content: flex-end;
-  gap: 4px;
+  overflow: hidden;
+}
+
+.panel-label {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: rgba(255, 255, 255, 0.2);
+  padding: 10px 16px 6px;
+  flex-shrink: 0;
+}
+
+/* ── LEFT: LIVE PREVIEW ─────────────────────────── */
+
+.preview-panel {
+  flex: 1;
+  background: linear-gradient(180deg, #0a0a12 0%, #0d0d18 100%);
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.preview-viewport {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
   position: relative;
-  overflow: hidden;
 }
 
-.history-fade-out {
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 60px;
-  background: linear-gradient(to bottom, var(--glass-bg) 0%, transparent 100%);
-  z-index: 2;
-  pointer-events: none;
+.preview-viewport .lyrics-wrapper {
+  height: 100%;
+  max-width: 100%;
 }
 
-.history-line {
-  color: rgba(255, 255, 255, 0.5);
-  font-size: 0.9rem;
+.preview-empty {
+  text-align: center;
+  color: rgba(255, 255, 255, 0.15);
+  font-size: 1rem;
+}
+
+/* ── RIGHT: CONSOLE ─────────────────────────────── */
+
+.console-panel {
+  width: 480px;
+  min-width: 400px;
+  background: linear-gradient(180deg, #0c0c14 0%, #08080e 100%);
   display: flex;
-  gap: 12px;
-  padding: 4px 0;
+  flex-direction: column;
+  gap: 0;
 }
 
-.history-line .time-tag {
-  color: var(--accent);
-  font-family: monospace;
+.console-spectrum {
+  height: 120px;
+  flex-shrink: 0;
+  padding: 8px 12px;
+  box-sizing: border-box;
 }
 
-.sync-target-area {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  padding: 32px;
-  border-radius: 12px;
+.console-timeline {
+  padding: 4px 16px;
+  flex-shrink: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* ── STAMP AREA (the main action zone) ──────────── */
+
+.console-stamp {
+  padding: 20px 20px 16px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 16px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  gap: 12px;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-.target-label {
-  color: var(--text-muted);
-  font-size: 0.85rem;
+.stamp-progress-label {
+  font-size: 0.7rem;
   text-transform: uppercase;
-  letter-spacing: 1px;
+  letter-spacing: 1.5px;
+  color: rgba(255, 255, 255, 0.3);
 }
 
-.target-line {
-  font-size: 2rem;
-  font-weight: bold;
+.stamp-target-text {
+  font-size: 1.1rem;
+  font-weight: 700;
   color: #fff;
   text-align: center;
-  margin-bottom: 8px;
+  max-height: 100px;
+  overflow-y: auto;
   white-space: pre-wrap;
+  line-height: 1.4;
+  padding: 0 8px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.2) transparent;
 }
 
 .stamp-btn {
   background: #fff;
   color: #000;
   border: none;
-  padding: 16px 32px;
+  padding: 14px 40px;
   border-radius: 8px;
-  font-size: 1.2rem;
-  font-weight: bold;
+  font-size: 1.1rem;
+  font-weight: 800;
   cursor: pointer;
   transition: all 0.1s;
+  letter-spacing: 1px;
 }
 
 .stamp-btn:disabled {
-  background: rgba(255, 255, 255, 0.2);
-  color: rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.4);
   cursor: not-allowed;
 }
 
 .stamp-btn.pulse {
-  animation: idlePulse 2s infinite alternate;
+  animation: stampPulse 1.5s infinite alternate;
 }
 
 .stamp-btn:active:not(:disabled) {
-  transform: scale(0.95);
-  background: var(--accent);
+  transform: scale(0.96);
+  background: #646cff;
   color: #fff;
 }
 
-@keyframes idlePulse {
-  0% { box-shadow: 0 0 0 rgba(255, 255, 255, 0.4); }
-  100% { box-shadow: 0 0 20px rgba(255, 255, 255, 0.2); }
+@keyframes stampPulse {
+  0% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.3); }
+  100% { box-shadow: 0 0 24px 4px rgba(100, 108, 255, 0.25); }
 }
 
-.finished-state {
-  text-align: center;
-  color: var(--accent);
-}
-
-.upcoming-preview {
-  flex: 1;
+.stamp-upcoming {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  opacity: 0.4;
+  gap: 4px;
+  width: 100%;
+  max-height: 50px;
+  overflow: hidden;
 }
 
-.upcoming-line {
-  font-size: 1.1rem;
-  color: #fff;
+.stamp-upcoming .upcoming-line {
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.2);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.upcoming-line.faded {
-  opacity: 0.5;
-  font-style: italic;
+.stamp-finished {
+  text-align: center;
+  padding: 16px 0;
+}
+
+.stamp-finished h3 {
+  margin: 0 0 6px;
+  color: #646cff;
+  font-size: 1.2rem;
+}
+
+.stamp-finished p {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 0.85rem;
+}
+
+/* ── HISTORY LOG ────────────────────────────────── */
+
+.console-history {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.1) transparent;
+}
+
+.history-row {
+  display: flex;
+  gap: 10px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  transition: background 0.15s;
+}
+
+.history-row:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.history-time {
+  color: #646cff;
+  font-family: 'Inter', monospace;
+  font-feature-settings: "tnum";
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+  min-width: 50px;
+}
+
+.history-text {
+  color: rgba(255, 255, 255, 0.5);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── RESPONSIVE ─────────────────────────────────── */
+
+@media (max-width: 900px) {
+  .sync-split {
+    flex-direction: column;
+  }
+
+  .console-panel {
+    width: 100%;
+    min-width: unset;
+  }
+
+  .preview-panel {
+    border-right: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    max-height: 35vh;
+  }
 }

@@ -4,6 +4,8 @@ import { useEffect, useRef, useImperativeHandle, forwardRef } from 'react';
 export interface AudioEngineRef {
   /** Permite al componente padre cambiar el tiempo de reproducción manualmente */
   seekTo: (time: number) => void;
+  /** Obtiene la instancia del Web Audio AnalyserNode para dibujar espectros/ondas visuales */
+  getAnalyser: () => AnalyserNode | null;
 }
 
 interface AudioEngineProps {
@@ -27,6 +29,28 @@ export const AudioEngine = forwardRef<AudioEngineRef, AudioEngineProps>(({
   onEnded
 }, ref) => {
   const audioRef = useRef<HTMLAudioElement>(null);
+  
+  // Nodos de análisis Web Audio (FL Studio vibes)
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const isConnectedRef = useRef(false);
+
+  // Inicialización Lazy del Contexto de Audio
+  const initWebAudio = () => {
+    if (!audioCtxRef.current) {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      audioCtxRef.current = new AudioCtx();
+      analyserRef.current = audioCtxRef.current.createAnalyser();
+      analyserRef.current.fftSize = 256; // Frecuencias para visualizador de espectro
+    }
+    
+    if (audioRef.current && !isConnectedRef.current && audioCtxRef.current && analyserRef.current) {
+      const source = audioCtxRef.current.createMediaElementSource(audioRef.current);
+      source.connect(analyserRef.current);
+      analyserRef.current.connect(audioCtxRef.current.destination);
+      isConnectedRef.current = true;
+    }
+  };
 
   useImperativeHandle(ref, () => ({
     seekTo: (time: number) => {
@@ -34,7 +58,8 @@ export const AudioEngine = forwardRef<AudioEngineRef, AudioEngineProps>(({
         audioRef.current.currentTime = time;
         onTimeUpdate(time);
       }
-    }
+    },
+    getAnalyser: () => analyserRef.current
   }));
 
   /** 
@@ -43,6 +68,11 @@ export const AudioEngine = forwardRef<AudioEngineRef, AudioEngineProps>(({
   useEffect(() => {
     if (audioRef.current) {
       if (isPlaying) {
+        initWebAudio();
+        // Asegurarse de que el contexto esté activo (browser autoplay policies)
+        if (audioCtxRef.current?.state === 'suspended') {
+          audioCtxRef.current.resume();
+        }
         audioRef.current.play().catch(e => console.warn('Audio play failed:', e));
       } else {
         audioRef.current.pause();
@@ -58,6 +88,7 @@ export const AudioEngine = forwardRef<AudioEngineRef, AudioEngineProps>(({
 
   return (
     <audio 
+      crossOrigin="anonymous" /* Necessario para Web Audio API en algunos entornos locales */
       ref={audioRef} 
       src={audioUrl}
       onTimeUpdate={handleTimeUpdate}

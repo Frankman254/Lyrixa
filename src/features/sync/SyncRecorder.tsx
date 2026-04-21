@@ -1,165 +1,214 @@
-import { useEffect, useCallback, useState } from 'react';
+import { useEffect, useCallback, useState, useMemo } from 'react';
 import type { SyncSession } from '../../core/types/sync';
+import type { TimelineSnapshot, TimelineEntry } from '../../core/types/timeline';
+import type { LyricLine } from '../../core/types/lyrics';
+import type { LyricVisualStyle } from '../../core/types/render';
+import { createTimelineEntries, computeTimelineSnapshot } from '../../core/timeline/engine';
+import { LyricsRenderer } from '../lyrics-view/LyricsRenderer';
+import { AudioSpectrum } from './AudioSpectrum';
+import { TrackTimeline } from '../../shared/components/TrackTimeline';
 import './SyncRecorder.css';
 
 interface SyncRecorderProps {
-  /** Toda la información de la sesión actual (letras crudas, sincronizadas, etc.) */
   session: SyncSession;
-  /** Tiempo actual de la canción, inyectado a 60FPS desde AudioEngine */
   audioTime: number;
-  /** Para saber si la música está sonando o pausada */
+  duration: number;
   isPlaying: boolean;
-  /** Función para registrar ('sellar') la línea actual con el tiempo exacto */
-  onStampLine: (time: number) => void;
-  /** Para cancelar el último registro si el usuario cometió un error */
-  onUndoLast: () => void;
-  /** Función para alternar entre reproducir y pausar el audio (Play/Pause) */
+  styleConfig: LyricVisualStyle;
+  analyser: AnalyserNode | null;
   onPlayToggle: () => void;
-  /** Salir del modo grabador */
+  onStampLine: (time: number) => void;
+  onUndoLast: () => void;
+  onSeek: (time: number) => void;
   onExitSync: () => void;
 }
 
-/**
- * SyncRecorder es el corazón de la herramienta de dictado/sincronización.
- * Permite al usuario escuchar la canción y presionar la barra espaciadora
- * cada vez que se canta la siguiente línea de la letra.
- */
-export function SyncRecorder({ 
-  session, 
-  audioTime, 
-  isPlaying, 
+export function SyncRecorder({
+  session,
+  audioTime,
+  duration,
+  isPlaying,
+  styleConfig,
+  analyser,
   onPlayToggle,
-  onStampLine, 
+  onStampLine,
   onUndoLast,
-  onExitSync 
+  onSeek,
+  onExitSync
 }: SyncRecorderProps) {
-  
-  // Estado simple para mostrar un mensaje de "Copiado exitoso"
+
   const [copied, setCopied] = useState(false);
 
-  // Derivar líneas pendientes:
-  // "pendingLine" es el texto de la línea que el usuario tiene que sincronizar ahora mismo.
   const pendingLine = session.rawLines[session.pendingLineIndex];
-  // Si nuestro índice ya superó la cantidad de líneas, ¡terminamos!
   const isFinished = session.pendingLineIndex >= session.rawLines.length;
 
-  /**
-   * EFECTO GLOBAL: Escuchar la barra espaciadora.
-   * Agregamos un "event listener" al objeto superior (window) para que el
-   * usuario pueda presionar Espacio sin importar dónde tenga el foco (click).
-   */
+  // Build live timeline entries from synced lines for the preview renderer
+  const liveEntries: TimelineEntry<LyricLine>[] = useMemo(() => {
+    const lines: LyricLine[] = session.syncedLines.map(sl => ({
+      text: sl.text,
+      startTime: sl.startTime
+    }));
+    return createTimelineEntries(lines, (l) => l.startTime, (_, i) => `live-${i}`);
+  }, [session.syncedLines]);
+
+  const [liveSnapshot, setLiveSnapshot] = useState<TimelineSnapshot<LyricLine>>({
+    currentTime: 0,
+    activeIndex: -1,
+    previousIndex: -1,
+    activeEntry: null,
+    nextEntry: null,
+    progress: 0,
+    phase: 'idle'
+  });
+
+  useEffect(() => {
+    setLiveSnapshot(prev => computeTimelineSnapshot(liveEntries, audioTime, prev));
+  }, [audioTime, liveEntries]);
+
+  // Spacebar global listener
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.code === 'Space') {
-        // Previene que la página haga "scroll down" que es el comportamiento por defecto del Espacio en el navegador
         e.preventDefault();
-        
-        // Sólo permitimos el "sello" si la canción está reproduciendo y aún hay líneas pendientes
         if (isPlaying && !isFinished) {
           onStampLine(audioTime);
         }
       }
     };
-
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown); // Limpieza al desmontar
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isPlaying, isFinished, audioTime, onStampLine]);
 
-  /**
-   * Exportación a formato LRC universal.
-   * El formato LRC se ve así: [03:12.45]Línea de canción
-   */
+  // LRC Export
   const exportLRC = useCallback(() => {
-    // Cabeceras estándar de un archivo LRC
     let lrcString = `[ti:${session.trackName}]\n`;
     lrcString += `[by:Lyrixa Sync]\n\n`;
-
-    // Por cada línea sincronizada, calculamos los minutos y segundos para el formato LRC
     session.syncedLines.forEach(line => {
-      const mins = Math.floor(line.startTime / 60); // Minutos enteros
-      // Segundos sobrantes. toFixed(2) da 2 decimales para precisión (ej: 12.50)
-      // padStart(5, '0') asegura el formato "00.00" -> ej: "05.10"
+      const mins = Math.floor(line.startTime / 60);
       const secs = (line.startTime % 60).toFixed(2).padStart(5, '0');
-      
-      // Agregamos la línea text formateada
       lrcString += `[${mins.toString().padStart(2, '0')}:${secs}]${line.text}\n`;
     });
-
-    // Usar la API del portapapeles (clipboard) nativa para copiar automáticamente el resultado
     navigator.clipboard.writeText(lrcString).then(() => {
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000); // Regresamos el botón a su estado normal tras 2 segs
+      setTimeout(() => setCopied(false), 2000);
     });
   }, [session]);
 
+  const formatTime = (t: number) => {
+    const m = Math.floor(t / 60);
+    const s = Math.floor(t % 60);
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  };
+
   return (
-    <div className="sync-recorder-wrapper glass-panel">
-      
-      <div className="sync-header">
-        <h2>Sync Editor</h2>
-        <div className="sync-actions">
-          <button className="sync-btn primary" onClick={onPlayToggle}>
-            {isPlaying ? '⏸ Pause Audio' : '▶ Play Audio'}
+    <div className="sync-workspace">
+
+      {/* ══════════ TOP BAR ══════════ */}
+      <header className="sync-topbar">
+        <div className="topbar-left">
+          <h2>Lyrixa Sync Studio</h2>
+          <span className="topbar-track">{session.trackName}</span>
+        </div>
+        <div className="topbar-center">
+          <span className="topbar-time">{formatTime(audioTime)}</span>
+          <span className="topbar-separator">/</span>
+          <span className="topbar-duration">{formatTime(duration)}</span>
+        </div>
+        <div className="topbar-right">
+          <button className="tb-btn" onClick={onPlayToggle}>
+            {isPlaying ? '⏸ Pause' : '▶ Play'}
           </button>
-          <button className="sync-btn" onClick={onUndoLast} disabled={session.syncedLines.length === 0}>
-            Undo Last Stamp
+          <button className="tb-btn" onClick={onUndoLast} disabled={session.syncedLines.length === 0}>
+            ↩ Undo
           </button>
-          <button className="sync-btn primary" onClick={exportLRC}>
-            {copied ? 'Copied to Clipboard!' : 'Export LRC'}
+          <button className="tb-btn accent" onClick={exportLRC}>
+            {copied ? '✓ Copied!' : '⬇ Export LRC'}
           </button>
-          <button className="sync-btn danger" onClick={onExitSync}>
-            Exit Sync
+          <button className="tb-btn danger" onClick={onExitSync}>
+            ✕ Exit
           </button>
         </div>
-      </div>
+      </header>
 
-      <div className="sync-body">
-        
-        {/* Past synced lines (preview) */}
-        <div className="synced-history">
-          {session.syncedLines.map((line, idx) => (
-            <div key={idx} className="history-line">
-              <span className="time-tag">[{line.startTime.toFixed(2)}s]</span>
-              <span className="text">{line.text}</span>
-            </div>
-          ))}
-          {/* Auto scroll anchor imitation */}
-          <div className="history-fade-out" />
+      {/* ══════════ MAIN SPLIT ══════════ */}
+      <div className="sync-split">
+
+        {/* LEFT: Live Preview */}
+        <div className="sync-panel preview-panel">
+          <div className="panel-label">LIVE PREVIEW</div>
+          <div className="preview-viewport">
+            {liveEntries.length > 0 ? (
+              <LyricsRenderer
+                entries={liveEntries}
+                snapshot={liveSnapshot}
+                styleConfig={styleConfig}
+              />
+            ) : (
+              <div className="preview-empty">
+                <p>Start stamping lines to see the live preview here</p>
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* The active target */}
-        <div className="sync-target-area">
-          {!isFinished ? (
-            <>
-              <div className="target-label">Next line to stamp:</div>
-              <div className="target-line">{pendingLine || "(Empty Line / Instrumental)"}</div>
-              
-              <button 
-                className={`stamp-btn ${isPlaying ? 'pulse' : ''}`}
-                onClick={() => isPlaying && onStampLine(audioTime)}
-                disabled={!isPlaying}
-              >
-                {isPlaying ? 'STAMP (Spacebar)' : 'Play audio to stamp'}
-              </button>
-            </>
-          ) : (
-            <div className="finished-state">
-              <h3>All lines synced!</h3>
-              <p>You can export the LRC now or switch to the Player to preview.</p>
-            </div>
-          )}
-        </div>
+        {/* RIGHT: Console (Spectrum + Stamp) */}
+        <div className="sync-panel console-panel">
 
-        {/* Upcoming lines preview */}
-        <div className="upcoming-preview">
-          {session.rawLines.slice(session.pendingLineIndex + 1, session.pendingLineIndex + 4).map((line, idx) => (
-            <div key={idx} className="upcoming-line">{line || "(Empty line / Instrumental)"}</div>
-          ))}
-          {session.rawLines.length > session.pendingLineIndex + 4 && (
-            <div className="upcoming-line faded">... {session.rawLines.length - (session.pendingLineIndex + 4)} more</div>
-          )}
-        </div>
+          {/* Spectrum Visualizer */}
+          <div className="console-spectrum">
+            <AudioSpectrum analyser={analyser} isPlaying={isPlaying} />
+          </div>
 
+          {/* Timeline with markers */}
+          <div className="console-timeline">
+            <TrackTimeline
+              entries={liveEntries}
+              currentTime={audioTime}
+              duration={duration}
+              onSeek={onSeek}
+            />
+          </div>
+
+          {/* Stamp Area */}
+          <div className="console-stamp">
+            {!isFinished ? (
+              <>
+                <div className="stamp-progress-label">
+                  Paragraph {session.pendingLineIndex + 1} of {session.rawLines.length}
+                </div>
+                <div className="stamp-target-text">{pendingLine || '(Instrumental)'}</div>
+                <button
+                  className={`stamp-btn ${isPlaying ? 'pulse' : ''}`}
+                  onClick={() => isPlaying && onStampLine(audioTime)}
+                  disabled={!isPlaying}
+                >
+                  {isPlaying ? 'STAMP — Spacebar' : 'Press Play first'}
+                </button>
+                <div className="stamp-upcoming">
+                  {session.rawLines.slice(session.pendingLineIndex + 1, session.pendingLineIndex + 3).map((line, idx) => (
+                    <div key={idx} className="upcoming-line">{line}</div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="stamp-finished">
+                <h3>✓ All {session.rawLines.length} paragraphs synced</h3>
+                <p>Export your LRC or switch to Player to preview the result.</p>
+              </div>
+            )}
+          </div>
+
+          {/* Synced History Log */}
+          <div className="console-history">
+            {session.syncedLines.map((line, idx) => (
+              <div key={idx} className="history-row">
+                <span className="history-time">[{formatTime(line.startTime)}]</span>
+                <span className="history-text">{line.text.length > 60 ? line.text.substring(0, 60) + '…' : line.text}</span>
+              </div>
+            ))}
+          </div>
+
+        </div>
       </div>
     </div>
   );
