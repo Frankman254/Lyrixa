@@ -1,0 +1,70 @@
+.clip-lyrics-stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.clip-lyric {
+  position: absolute;
+  padding: 12px 28px;
+  color: var(--lyric-color-active, #ffffff);
+  font-size: var(--lyric-font-size, 2.5rem);
+  font-weight: var(--lyric-font-weight, 800);
+  letter-spacing: var(--lyric-letter-spacing, -1px);
+  text-align: var(--lyric-alignment, center);
+  line-height: var(--lyric-line-spacing, 1.2);
+  text-shadow:
+    0 0 calc(18px * var(--lyric-shadow-intensity, 0.5)) var(--lyric-glow, rgba(255,255,255,0.5)),
+    0 2px 6px rgba(0, 0, 0, 0.65);
+  animation: clip-lyric-in 320ms ease-out;
+  max-width: 80%;
+  pointer-events: none;
+}
+
+/* ── Positions ───────────────────────────────────────── */
+.pos-center { left: 50%; top: 50%; transform: translate(-50%, -50%); }
+.pos-top { left: 50%; top: 12%; transform: translate(-50%, 0); }
+.pos-bottom { left: 50%; bottom: 12%; transform: translate(-50%, 0); }
+.pos-top-left { left: 8%; top: 10%; }
+.pos-top-right { right: 8%; top: 10%; text-align: right; }
+.pos-bottom-left { left: 8%; bottom: 10%; }
+.pos-bottom-right { right: 8%; bottom: 10%; text-align: right; }
+
+/* ── Transitions (enter) ─────────────────────────────── */
+.in-fade { animation: clip-lyric-fade-in 280ms ease-out; }
+.in-slide-up { animation: clip-lyric-slide-up 320ms ease-out; }
+.in-slide-down { animation: clip-lyric-slide-down 320ms ease-out; }
+.in-zoom-in { animation: clip-lyric-zoom-in 320ms ease-out; }
+.in-zoom-out { animation: clip-lyric-zoom-out 320ms ease-out; }
+.in-blur-in { animation: clip-lyric-blur-in 360ms ease-out; }
+.in-none { animation: none; }
+
+@keyframes clip-lyric-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes clip-lyric-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes clip-lyric-slide-up {
+  from { opacity: 0; transform: translate(-50%, 30px); }
+  to { opacity: 1; }
+}
+@keyframes clip-lyric-slide-down {
+  from { opacity: 0; transform: translate(-50%, -30px); }
+  to { opacity: 1; }
+}
+@keyframes clip-lyric-zoom-in {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(0.7); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+@keyframes clip-lyric-zoom-out {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(1.3); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+@keyframes clip-lyric-blur-in {
+  from { opacity: 0; filter: blur(var(--lyric-blur, 2px)); }
+  to { opacity: 1; filter: blur(0); }
+}

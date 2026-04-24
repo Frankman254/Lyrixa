@@ -45,6 +45,7 @@ export function EditorControls({
             <option value="editor">Editor Mode</option>
             <option value="overlay-preview">Overlay Preview</option>
             <option value="sync-recorder">Sync Recorder</option>
+            <option value="timeline-editor">Timeline Editor</option>
           </select>
           <button className="editor-btn" onClick={onToggleTrack}>
             Track: {trackName}

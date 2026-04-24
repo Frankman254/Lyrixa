@@ -1,4 +1,4 @@
-export type RenderMode = 'player' | 'editor' | 'overlay-preview' | 'sync-recorder';
+export type RenderMode = 'player' | 'editor' | 'overlay-preview' | 'sync-recorder' | 'timeline-editor';
 
 export interface LyricVisualStyle {
   textColor: string;
