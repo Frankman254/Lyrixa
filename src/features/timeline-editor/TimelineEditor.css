@@ -174,13 +174,18 @@
 }
 
 /* ── Ruler ───────────────────────────────────────────── */
-.tl-ruler-wrap {
+.tl-ruler-row {
   position: sticky;
   top: 0;
   z-index: 4;
   background: #12141c;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.tl-ruler-wrap {
+  position: relative;
   cursor: pointer;
+  background: #12141c;
 }
 
 .tl-ruler {
@@ -217,16 +222,38 @@
 }
 
 /* ── Waveform ────────────────────────────────────────── */
-.tl-waveform-wrap {
+.tl-audio-track {
   background:
     linear-gradient(180deg, #0b0e15 0%, #0e121b 50%, #0b0e15 100%);
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.tl-audio-lane {
   position: relative;
+  cursor: default;
+  user-select: none;
+  background: transparent;
+  overflow: hidden;
 }
 
 .tl-waveform {
   position: relative;
   pointer-events: none;
+}
+
+.tl-vocal-bands {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.tl-vocal-band {
+  position: absolute;
+  top: 8%;
+  bottom: 8%;
+  border-left: 1px solid rgba(95, 200, 142, 0.45);
+  border-right: 1px solid rgba(95, 200, 142, 0.45);
+  border-radius: 2px;
 }
 
 /* ── Tracks ──────────────────────────────────────────── */
@@ -267,8 +294,8 @@
   position: sticky;
   left: 0;
   z-index: 3;
-  width: 160px;
-  min-width: 160px;
+  width: 168px;
+  min-width: 168px;
   padding: 10px 12px;
   background: #11141d;
   border-left: 3px solid #2e7afb;
@@ -278,6 +305,35 @@
   justify-content: space-between;
   gap: 6px;
   box-shadow: 4px 0 8px rgba(0, 0, 0, 0.25);
+}
+
+.tl-track-header.variant-thin {
+  padding: 4px 12px;
+  background: #12141c;
+  border-left-color: rgba(255, 255, 255, 0.12);
+}
+
+.tl-track-header.variant-spacer {
+  background: #12141c;
+  border-left-color: transparent;
+}
+
+.tl-track-header.variant-audio {
+  background: linear-gradient(180deg, #11141d 0%, #0d101a 100%);
+}
+
+.tl-track-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  font-size: 0.6rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #8a91a8;
+  border-radius: 4px;
+  vertical-align: middle;
 }
 
 .tl-track-title {

@@ -1,13 +1,14 @@
+import type { AudioChannelRole } from '../../core/types/audio';
+
 /**
- * IndexedDB-backed storage for the active project's audio file.
+ * IndexedDB-backed storage for project audio files.
  *
  * Audio blobs are too large for localStorage. localStorage holds the lightweight
- * project JSON (lyrics, clips, layers, style) and references the audio by
- * project id. The blob itself lives here.
+ * project JSON (lyrics, clips, layers, style); the actual files live here.
  *
- * Each record is keyed by the LyrixaProject's `id`. There is currently one
- * audio per project. The schema has room to grow (multiple stems, alternate
- * masters) by adding stores in onupgradeneeded with a higher DB_VERSION.
+ * Records are keyed by `${projectId}:${role}` so a project can hold a master
+ * track and an optional vocals stem side by side. Bare-projectId keys from
+ * the previous schema are still readable as `master` via a legacy fallback.
  */
 
 const DB_NAME = 'lyrixa';
@@ -18,8 +19,11 @@ export interface StoredAudio {
   blob: Blob;
   fileName: string;
   duration: number;
-  /** When the file was put into IDB. Useful for future cleanup of orphaned blobs. */
   storedAt: number;
+}
+
+function audioKey(projectId: string, role: AudioChannelRole): string {
+  return `${projectId}:${role}`;
 }
 
 function isAvailable(): boolean {
@@ -61,6 +65,7 @@ function withStore<T>(
 
 export async function putAudio(
   projectId: string,
+  role: AudioChannelRole,
   file: Blob,
   fileName: string,
   duration: number
@@ -71,26 +76,61 @@ export async function putAudio(
     duration,
     storedAt: Date.now()
   };
-  await withStore('readwrite', store => store.put(record, projectId));
+  await withStore('readwrite', store => store.put(record, audioKey(projectId, role)));
 }
 
-export async function getAudio(projectId: string): Promise<StoredAudio | null> {
+export async function getAudio(
+  projectId: string,
+  role: AudioChannelRole
+): Promise<StoredAudio | null> {
   try {
     const result = await withStore<StoredAudio | undefined>('readonly', store =>
-      store.get(projectId) as IDBRequest<StoredAudio | undefined>
+      store.get(audioKey(projectId, role)) as IDBRequest<StoredAudio | undefined>
     );
-    return result ?? null;
+    if (result) return result;
+
+    // Legacy fallback: pre-role records were stored under the bare project id.
+    if (role === 'master') {
+      const legacy = await withStore<StoredAudio | undefined>('readonly', store =>
+        store.get(projectId) as IDBRequest<StoredAudio | undefined>
+      );
+      if (legacy) {
+        // Re-key under the new compound key so the fallback only fires once.
+        try {
+          await withStore('readwrite', store => store.put(legacy, audioKey(projectId, 'master')));
+          await withStore('readwrite', store => store.delete(projectId));
+        } catch {
+          /* if migration write fails the next read just hits the fallback again */
+        }
+        return legacy;
+      }
+    }
+    return null;
   } catch {
     return null;
   }
 }
 
-export async function deleteAudio(projectId: string): Promise<void> {
+export async function deleteAudio(
+  projectId: string,
+  role: AudioChannelRole
+): Promise<void> {
   try {
-    await withStore('readwrite', store => store.delete(projectId));
+    await withStore('readwrite', store => store.delete(audioKey(projectId, role)));
+    if (role === 'master') {
+      // Also tidy any legacy bare-id record left behind.
+      await withStore('readwrite', store => store.delete(projectId));
+    }
   } catch {
     /* swallow — caller doesn't care if the record didn't exist */
   }
+}
+
+export async function deleteAllProjectAudio(projectId: string): Promise<void> {
+  await Promise.all([
+    deleteAudio(projectId, 'master'),
+    deleteAudio(projectId, 'vocals')
+  ]);
 }
 
 export function audioStorageAvailable(): boolean {

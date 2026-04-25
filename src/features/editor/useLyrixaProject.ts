@@ -1,26 +1,37 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { LyrixaProject, LyrixaTrack } from '../../core/types/project';
+import type { LyrixaProject } from '../../core/types/project';
 import type { LyricClip } from '../../core/types/clip';
-import { MIN_CLIP_DURATION } from '../../core/types/clip';
 import type { LyricLayer } from '../../core/types/layer';
 import type { LyricVisualStyle, RenderMode } from '../../core/types/render';
+import type {
+  AudioChannel,
+  AudioChannelRole
+} from '../../core/types/audio';
 import { MAIN_LAYER_ID } from '../../core/types/layer';
 import { normalizeLyricsText } from '../../core/lyrics/normalize';
 import type { NormalizeLyricsOptions } from '../../core/lyrics/normalize';
 import { createClipsFromNormalizedLyrics } from '../../core/timeline/clipsFromLyrics';
+import type { ClipDurationStrategy } from '../../core/timeline/durationStrategies';
+import { detectVocalActivity } from '../../core/audio/vocalActivity';
 import {
   createEmptyProject,
   loadProject,
   saveProject
 } from './projectPersistence';
-import { putAudio, getAudio, deleteAudio } from './audioBlobStorage';
+import {
+  putAudio,
+  getAudio,
+  deleteAudio,
+  deleteAllProjectAudio
+} from './audioBlobStorage';
+import { extractPeaksFromBlob } from './peakExtraction';
 
 const AUTOSAVE_DEBOUNCE_MS = 400;
 
 export type SaveStatus = 'idle' | 'pending' | 'saved';
 
 export interface ApplyLyricsOptions {
-  /** Default duration (seconds) assigned to each clip when timing can't be preserved. */
+  /** Default duration in seconds. Used by `fixed` and as fallback. */
   defaultDuration?: number;
   /** When true, reuse existing clip timing for lines at the same index. */
   preserveExistingTiming?: boolean;
@@ -28,6 +39,10 @@ export interface ApplyLyricsOptions {
   layerId?: string;
   /** Normalization options forwarded to normalizeLyricsText. */
   normalizeOptions?: NormalizeLyricsOptions;
+  /** How clip durations are decided. Default: `fixed`. */
+  strategy?: ClipDurationStrategy;
+  minDuration?: number;
+  maxDuration?: number;
 }
 
 export interface UseLyrixaProjectResult {
@@ -36,11 +51,21 @@ export interface UseLyrixaProjectResult {
   audioNeedsReload: boolean;
 
   setProjectName: (name: string) => void;
-  loadAudioFile: (file: File) => Promise<void>;
-  removeAudio: () => Promise<void>;
+  loadAudioFile: (file: File, role?: AudioChannelRole) => Promise<void>;
+  removeAudio: (role?: AudioChannelRole) => Promise<void>;
 
   setRawLyricsText: (text: string) => void;
   applyLyrics: (rawText: string, options?: ApplyLyricsOptions) => void;
+  /**
+   * Re-run clip generation against the existing rawLyricsText using the
+   * vocals stem's detected activity. Caller passes a layer id to target.
+   * No-op when the vocals stem or its activity is missing.
+   */
+  regenerateFromVocals: (options?: {
+    layerId?: string;
+    minDuration?: number;
+    maxDuration?: number;
+  }) => void;
 
   setClips: (next: LyricClip[]) => void;
   updateClip: (clipId: string, patch: Partial<LyricClip>) => void;
@@ -48,14 +73,16 @@ export interface UseLyrixaProjectResult {
   setStyleConfig: (next: LyricVisualStyle) => void;
   setCurrentTime: (time: number) => void;
   setRenderMode: (mode: RenderMode) => void;
-  setDuration: (seconds: number) => void;
+  setMasterDuration: (seconds: number) => void;
 
   resetProject: () => Promise<void>;
 }
 
 /**
- * Single source of truth for the editor. Owns the LyrixaProject, persists
- * lightweight JSON to localStorage, and the audio blob to IndexedDB.
+ * Single source of truth for the editor.
+ *
+ * Owns the LyrixaProject in memory, persists JSON to localStorage, and
+ * persists audio blobs (master + vocals) to IndexedDB.
  */
 export function useLyrixaProject(): UseLyrixaProjectResult {
   const [hydrated] = useState(() => loadProject());
@@ -71,45 +98,55 @@ export function useLyrixaProject(): UseLyrixaProjectResult {
     projectIdRef.current = project.id;
   }, [project.id]);
 
-  // Track the latest objectUrl so we can revoke it on unmount without going stale.
-  const objectUrlRef = useRef<string | null>(null);
+  // Track latest objectUrls so we can revoke them on unmount.
+  const objectUrlsRef = useRef<{ master: string | null; vocals: string | null }>({
+    master: null,
+    vocals: null
+  });
   useEffect(() => {
-    objectUrlRef.current = project.track?.objectUrl ?? null;
-  }, [project.track?.objectUrl]);
+    objectUrlsRef.current = {
+      master: project.audioTracks.master?.objectUrl ?? null,
+      vocals: project.audioTracks.vocals?.objectUrl ?? null
+    };
+  }, [project.audioTracks.master?.objectUrl, project.audioTracks.vocals?.objectUrl]);
 
-  // Try to restore the audio blob from IndexedDB on mount.
+  // Restore audio blobs from IndexedDB on mount, one role at a time.
   useEffect(() => {
     let cancelled = false;
-    if (!hydrated.project.track) return;
+    const initial = hydrated.project;
 
-    getAudio(hydrated.project.id)
-      .then(stored => {
-        if (cancelled) return;
-        if (!stored) {
-          // Project metadata exists but no blob is on disk → must be reloaded.
-          setAudioNeedsReload(true);
-          return;
-        }
-        const url = URL.createObjectURL(stored.blob);
-        setProject(p => {
-          if (!p.track) return p;
-          if (p.track.objectUrl) URL.revokeObjectURL(p.track.objectUrl);
-          return {
-            ...p,
-            track: {
-              ...p.track,
-              objectUrl: url,
-              duration: stored.duration || p.track.duration,
-              fileName: stored.fileName || p.track.fileName
-            }
-          };
-        });
-        setAudioNeedsReload(false);
-      })
-      .catch(err => {
-        console.warn('[Lyrixa] Audio restore failed:', err);
-        if (!cancelled) setAudioNeedsReload(true);
+    const restore = async (role: AudioChannelRole, channel: AudioChannel | null | undefined) => {
+      if (!channel) return;
+      const stored = await getAudio(initial.id, role).catch(() => null);
+      if (cancelled) return;
+      if (!stored) {
+        if (role === 'master') setAudioNeedsReload(true);
+        return;
+      }
+      const url = URL.createObjectURL(stored.blob);
+      setProject(p => {
+        const current = p.audioTracks[role];
+        if (!current) return p;
+        if (current.objectUrl) URL.revokeObjectURL(current.objectUrl);
+        const updated: AudioChannel = {
+          ...current,
+          objectUrl: url,
+          duration: stored.duration || current.duration,
+          fileName: stored.fileName || current.fileName
+        };
+        return {
+          ...p,
+          audioTracks: { ...p.audioTracks, [role]: updated }
+        };
       });
+      // Re-extract peaks if missing — keeps mock fallback honest.
+      if (!channel.waveformPeaks || channel.waveformPeaks.length === 0) {
+        extractAndApplyPeaks(stored.blob, role);
+      }
+    };
+
+    restore('master', initial.audioTracks.master);
+    restore('vocals', initial.audioTracks.vocals);
 
     return () => {
       cancelled = true;
@@ -117,14 +154,16 @@ export function useLyrixaProject(): UseLyrixaProjectResult {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Revoke the active ObjectURL when the shell unmounts.
+  // Revoke all ObjectURLs when the shell unmounts.
   useEffect(() => {
     return () => {
-      if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
+      const { master, vocals } = objectUrlsRef.current;
+      if (master) URL.revokeObjectURL(master);
+      if (vocals) URL.revokeObjectURL(vocals);
     };
   }, []);
 
-  // Debounced autosave (lightweight JSON only — no playback ticks here).
+  // Debounced autosave (lightweight JSON only).
   useEffect(() => {
     if (skipNextSaveRef.current) {
       skipNextSaveRef.current = false;
@@ -156,43 +195,95 @@ export function useLyrixaProject(): UseLyrixaProjectResult {
     setProject(p => ({ ...p, name }));
   }, []);
 
-  const loadAudioFile = useCallback(async (file: File) => {
+  /**
+   * Apply newly-decoded peaks to the right channel. For vocals, also
+   * computes the activity segment list so the strategy picker can use it.
+   */
+  const applyChannelPeaks = useCallback(
+    (role: AudioChannelRole, peaks: import('../../core/types/audio').AudioPeak[]) => {
+      setProject(p => {
+        const current = p.audioTracks[role];
+        if (!current) return p;
+        const next: AudioChannel = { ...current, waveformPeaks: peaks };
+        if (role === 'vocals') {
+          next.vocalActivity = detectVocalActivity(peaks);
+        }
+        return {
+          ...p,
+          audioTracks: { ...p.audioTracks, [role]: next }
+        };
+      });
+    },
+    []
+  );
+
+  const extractAndApplyPeaks = useCallback(
+    (blob: Blob, role: AudioChannelRole) => {
+      // Fire and forget — decoding is async but UI must not block on it.
+      extractPeaksFromBlob(blob, { peaksPerSecond: 25 })
+        .then(peaks => {
+          if (peaks && peaks.length > 0) applyChannelPeaks(role, peaks);
+        })
+        .catch(() => {/* mock waveform stays in place */});
+    },
+    [applyChannelPeaks]
+  );
+
+  const loadAudioFile = useCallback(async (file: File, role: AudioChannelRole = 'master') => {
     const objectUrl = URL.createObjectURL(file);
     const duration = await readAudioDuration(file).catch(() => 0);
 
     setProject(p => {
-      if (p.track?.objectUrl) URL.revokeObjectURL(p.track.objectUrl);
-      const track: LyrixaTrack = {
+      const previous = p.audioTracks[role];
+      if (previous?.objectUrl) URL.revokeObjectURL(previous.objectUrl);
+      const channel: AudioChannel = {
         fileName: file.name,
         objectUrl,
         duration,
-        waveformPeaks: undefined
+        waveformPeaks: undefined,
+        vocalActivity: undefined
       };
-      return { ...p, track };
+      return {
+        ...p,
+        audioTracks: { ...p.audioTracks, [role]: channel }
+      };
     });
-    setAudioNeedsReload(false);
+    if (role === 'master') setAudioNeedsReload(false);
 
     try {
-      await putAudio(projectIdRef.current, file, file.name, duration);
+      await putAudio(projectIdRef.current, role, file, file.name, duration);
     } catch (err) {
-      console.warn('[Lyrixa] Could not persist audio blob to IndexedDB:', err);
+      console.warn(`[Lyrixa] Could not persist ${role} audio blob:`, err);
     }
-  }, []);
 
-  const removeAudio = useCallback(async () => {
+    extractAndApplyPeaks(file, role);
+  }, [extractAndApplyPeaks]);
+
+  const removeAudio = useCallback(async (role: AudioChannelRole = 'master') => {
     setProject(p => {
-      if (p.track?.objectUrl) URL.revokeObjectURL(p.track.objectUrl);
-      return { ...p, track: null };
+      const previous = p.audioTracks[role];
+      if (previous?.objectUrl) URL.revokeObjectURL(previous.objectUrl);
+      return {
+        ...p,
+        audioTracks: { ...p.audioTracks, [role]: null }
+      };
     });
-    setAudioNeedsReload(false);
-    await deleteAudio(projectIdRef.current);
+    if (role === 'master') setAudioNeedsReload(false);
+    await deleteAudio(projectIdRef.current, role);
   }, []);
 
-  const setDuration = useCallback((seconds: number) => {
+  const setMasterDuration = useCallback((seconds: number) => {
     setProject(p => {
-      if (!p.track) return p;
-      if (p.track.duration === seconds) return p;
-      return { ...p, track: { ...p.track, duration: seconds } };
+      const master = p.audioTracks.master;
+      if (!master) return p;
+      if (master.duration === seconds) return p;
+      return {
+        ...p,
+        audioTracks: {
+          ...p.audioTracks,
+          master: { ...master, duration: seconds }
+        }
+      };
     });
   }, []);
 
@@ -205,7 +296,10 @@ export function useLyrixaProject(): UseLyrixaProjectResult {
       defaultDuration = 2.5,
       preserveExistingTiming = true,
       layerId = MAIN_LAYER_ID,
-      normalizeOptions
+      normalizeOptions,
+      strategy = 'fixed',
+      minDuration = 1.0,
+      maxDuration = 6.0
     } = options;
 
     const { lines } = normalizeLyricsText(rawText, normalizeOptions);
@@ -222,61 +316,37 @@ export function useLyrixaProject(): UseLyrixaProjectResult {
         };
       }
 
-      const trackDuration = p.track?.duration;
+      const trackDuration = p.audioTracks.master?.duration;
+      const vocalActivity = p.audioTracks.vocals?.vocalActivity;
       const idPrefix = `clip-${Date.now()}`;
 
-      // Fresh layout when there's nothing to preserve, or the user opted out.
       const existingLayerClips = p.clips
         .filter(c => c.layerId === layerId)
         .sort((a, b) => a.startTime - b.startTime);
 
-      let nextClips: LyricClip[];
+      const fresh = createClipsFromNormalizedLyrics(lines, {
+        layerId,
+        defaultDuration,
+        minDuration,
+        maxDuration,
+        trackDuration,
+        strategy,
+        vocalActivity,
+        idPrefix
+      });
 
-      if (!preserveExistingTiming || existingLayerClips.length === 0) {
-        nextClips = createClipsFromNormalizedLyrics(lines, {
-          layerId,
-          defaultDuration,
-          trackDuration,
-          idPrefix
-        });
-      } else {
-        // Preserve timing for indexes that overlap; append new ones sequentially
-        // after the LAST clip we have placed in this layer (using the most
-        // recently generated clip, not stale `existingLayerClips`).
-        nextClips = [];
-        let cursor = existingLayerClips[existingLayerClips.length - 1]!.endTime;
+      let nextClips: LyricClip[] = fresh;
 
-        for (let i = 0; i < lines.length; i++) {
-          const text = lines[i] ?? '';
-          const reused = existingLayerClips[i];
+      if (preserveExistingTiming && existingLayerClips.length > 0 && strategy !== 'vocal-energy') {
+        // Reuse existing timing wherever an old clip exists at the same index;
+        // append fresh clips for new indexes.
+        nextClips = fresh.map((generated, index) => {
+          const reused = existingLayerClips[index];
           if (reused) {
-            nextClips.push({ ...reused, text, muted: text.length === 0 });
-            continue;
+            return { ...reused, text: generated.text, muted: generated.muted };
           }
-          let clipStart = cursor;
-          let clipEnd = clipStart + defaultDuration;
-          if (trackDuration != null && clipEnd > trackDuration) {
-            clipEnd = trackDuration;
-            if (clipEnd - clipStart < MIN_CLIP_DURATION) {
-              clipStart = Math.max(0, clipEnd - MIN_CLIP_DURATION);
-            }
-          }
-          if (clipEnd - clipStart < MIN_CLIP_DURATION) {
-            clipEnd = clipStart + MIN_CLIP_DURATION;
-          }
-          nextClips.push({
-            id: `${idPrefix}-${i}`,
-            text,
-            startTime: clipStart,
-            endTime: clipEnd,
-            layerId,
-            transitionIn: 'fade',
-            transitionOut: 'fade',
-            position: 'center',
-            muted: text.length === 0
-          });
-          cursor = clipEnd;
-        }
+          return generated;
+        });
       }
 
       return {
@@ -285,6 +355,28 @@ export function useLyrixaProject(): UseLyrixaProjectResult {
         normalizedLyrics: lines,
         clips: [...otherClips, ...nextClips]
       };
+    });
+  }, []);
+
+  const regenerateFromVocals = useCallback((opts: { layerId?: string; minDuration?: number; maxDuration?: number } = {}) => {
+    const { layerId = MAIN_LAYER_ID, minDuration = 1.0, maxDuration = 6.0 } = opts;
+    setProject(p => {
+      const vocals = p.audioTracks.vocals;
+      if (!vocals?.vocalActivity || vocals.vocalActivity.length === 0) return p;
+      if (p.normalizedLyrics.length === 0) return p;
+
+      const fresh = createClipsFromNormalizedLyrics(p.normalizedLyrics, {
+        layerId,
+        strategy: 'vocal-energy',
+        vocalActivity: vocals.vocalActivity,
+        trackDuration: p.audioTracks.master?.duration,
+        minDuration,
+        maxDuration,
+        idPrefix: `clip-vox-${Date.now()}`
+      });
+
+      const otherClips = p.clips.filter(c => c.layerId !== layerId);
+      return { ...p, clips: [...otherClips, ...fresh] };
     });
   }, []);
 
@@ -318,11 +410,14 @@ export function useLyrixaProject(): UseLyrixaProjectResult {
   const resetProject = useCallback(async () => {
     const oldId = projectIdRef.current;
     setProject(p => {
-      if (p.track?.objectUrl) URL.revokeObjectURL(p.track.objectUrl);
+      const m = p.audioTracks.master?.objectUrl;
+      const v = p.audioTracks.vocals?.objectUrl;
+      if (m) URL.revokeObjectURL(m);
+      if (v) URL.revokeObjectURL(v);
       return createEmptyProject();
     });
     setAudioNeedsReload(false);
-    await deleteAudio(oldId);
+    await deleteAllProjectAudio(oldId);
   }, []);
 
   return {
@@ -334,13 +429,14 @@ export function useLyrixaProject(): UseLyrixaProjectResult {
     removeAudio,
     setRawLyricsText,
     applyLyrics,
+    regenerateFromVocals,
     setClips,
     updateClip,
     setLayers,
     setStyleConfig,
     setCurrentTime,
     setRenderMode,
-    setDuration,
+    setMasterDuration,
     resetProject
   };
 }

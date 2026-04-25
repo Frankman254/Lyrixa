@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { LyricClip as LyricClipModel } from '../../core/types/clip';
 import type { LyricLayer } from '../../core/types/layer';
+import type { AudioPeak, AudioChannel } from '../../core/types/audio';
 import {
   moveClip,
   resizeClipStart,
@@ -9,13 +10,13 @@ import {
   formatTimecode
 } from '../../core/timeline/clips';
 import { resolveDroppedLayerId } from '../../core/timeline/clipsFromLyrics';
-import { AudioWaveformTrack } from './AudioWaveformTrack';
-import type { AudioPeak } from './AudioWaveformTrack';
 import { LyricTrack } from './LyricTrack';
 import { TimelineRuler } from './TimelineRuler';
 import { TimelinePlayhead } from './TimelinePlayhead';
+import { TimelineTrackHeader } from './TimelineTrackHeader';
+import { TimelineAudioTrack } from './TimelineAudioTrack';
 import type { DragMode } from './LyricClip';
-import { clampZoom, clientXToTime } from './timelineMath';
+import { clampZoom, clientXToTime, TRACK_HEADER_WIDTH } from './timelineMath';
 import './TimelineEditor.css';
 
 interface TimelineEditorProps {
@@ -25,6 +26,11 @@ interface TimelineEditorProps {
   duration: number;
   isPlaying: boolean;
   trackName: string;
+  /** Master audio channel — drives the primary waveform. */
+  masterChannel?: AudioChannel | null;
+  /** Optional vocals channel — shown as a second audio row when present. */
+  vocalsChannel?: AudioChannel | null;
+  /** Backwards-compat: if no masterChannel is provided, use this peak array. */
   peaks?: AudioPeak[];
   /** When true, the timeline's own chrome (title, track chip, exit button) is hidden. */
   embedded?: boolean;
@@ -44,7 +50,8 @@ interface DragState {
 }
 
 const TRACK_HEIGHT = 64;
-const WAVEFORM_HEIGHT = 96;
+const MASTER_WAVEFORM_HEIGHT = 96;
+const VOCALS_WAVEFORM_HEIGHT = 72;
 const RULER_HEIGHT = 28;
 
 export function TimelineEditor({
@@ -54,6 +61,8 @@ export function TimelineEditor({
   duration,
   isPlaying,
   trackName,
+  masterChannel,
+  vocalsChannel,
   peaks,
   embedded = false,
   onClipsChange,
@@ -100,8 +109,8 @@ export function TimelineEditor({
 
   const effectiveDuration = Math.max(duration, 30);
   const laneWidth = effectiveDuration * pxPerSecond;
-  const totalTracksHeight = layers.length * TRACK_HEIGHT;
-  const playheadHeight = WAVEFORM_HEIGHT + totalTracksHeight + RULER_HEIGHT;
+  const headerWidth = TRACK_HEADER_WIDTH;
+  const totalLaneContainerWidth = laneWidth + headerWidth;
 
   const sortedLayers = useMemo(
     () => [...layers].sort((a, b) => a.order - b.order),
@@ -121,18 +130,24 @@ export function TimelineEditor({
     return map;
   }, [clips, layers]);
 
-  // Auto-follow playhead while playing
+  const audioRowHeights =
+    (masterChannel ? MASTER_WAVEFORM_HEIGHT : MASTER_WAVEFORM_HEIGHT) +
+    (vocalsChannel ? VOCALS_WAVEFORM_HEIGHT : 0);
+  const totalTracksHeight = layers.length * TRACK_HEIGHT;
+  const playheadHeight = RULER_HEIGHT + audioRowHeights + totalTracksHeight;
+
+  // Auto-follow playhead while playing.
   useEffect(() => {
     if (!isPlaying) return;
     const el = scrollRef.current;
     if (!el) return;
-    const playheadPx = currentTime * pxPerSecond;
+    const playheadPx = headerWidth + currentTime * pxPerSecond;
     const viewportStart = el.scrollLeft;
     const viewportEnd = viewportStart + el.clientWidth;
-    if (playheadPx < viewportStart + 40 || playheadPx > viewportEnd - 80) {
+    if (playheadPx < viewportStart + headerWidth + 40 || playheadPx > viewportEnd - 80) {
       el.scrollLeft = Math.max(0, playheadPx - el.clientWidth / 2);
     }
-  }, [currentTime, pxPerSecond, isPlaying]);
+  }, [currentTime, pxPerSecond, isPlaying, headerWidth]);
 
   const zoomIn = () => setPxPerSecond(p => clampZoom(p * 1.4));
   const zoomOut = () => setPxPerSecond(p => clampZoom(p / 1.4));
@@ -142,7 +157,8 @@ export function TimelineEditor({
     if (!rect) return;
     const time = clientXToTime(e.clientX, rect, {
       pxPerSecond,
-      scrollLeft: scrollRef.current?.scrollLeft ?? 0
+      scrollLeft: scrollRef.current?.scrollLeft ?? 0,
+      headerOffset: headerWidth
     });
     onSeek(Math.max(0, Math.min(effectiveDuration, time)));
   };
@@ -223,7 +239,6 @@ export function TimelineEditor({
     const state = dragStateRef.current;
     if (!state || state.pointerId !== e.pointerId) return;
 
-    // Commit a vertical layer change on drop, if one was hovered.
     if (state.mode === 'move' && hoveredLayerId) {
       const current = clipsRef.current.find(c => c.id === state.clipId);
       if (current) {
@@ -251,13 +266,13 @@ export function TimelineEditor({
   }, [hoveredLayerId, onClipsChange]);
 
   const handleLaneBackgroundClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    // Click on empty lane area → seek + deselect
     if ((e.target as HTMLElement).closest('.tl-clip')) return;
     const rect = laneContainerRef.current?.getBoundingClientRect();
     if (!rect) return;
     const time = clientXToTime(e.clientX, rect, {
       pxPerSecond,
-      scrollLeft: scrollRef.current?.scrollLeft ?? 0
+      scrollLeft: scrollRef.current?.scrollLeft ?? 0,
+      headerOffset: headerWidth
     });
     onSeek(Math.max(0, Math.min(effectiveDuration, time)));
     setSelectedClipId(null);
@@ -285,6 +300,9 @@ export function TimelineEditor({
       clips.map(c => (c.id === selectedClip.id ? { ...c, ...patch } : c))
     );
   };
+
+  const masterPeaks = masterChannel?.waveformPeaks ?? peaks;
+  const masterIsMock = !masterPeaks || masterPeaks.length === 0;
 
   return (
     <div className="timeline-editor">
@@ -339,25 +357,50 @@ export function TimelineEditor({
         <div
           className="tl-lane-container"
           ref={laneContainerRef}
-          style={{ width: `${laneWidth}px` }}
+          style={{ width: `${totalLaneContainerWidth}px` }}
         >
-          <div
-            className="tl-ruler-wrap"
-            style={{ height: `${RULER_HEIGHT}px` }}
-            onClick={handleRulerClick}
-          >
-            <TimelineRuler duration={effectiveDuration} pxPerSecond={pxPerSecond} />
+          {/* Ruler row uses the same header column so its ticks line up with clips. */}
+          <div className="tl-track tl-ruler-row" style={{ height: `${RULER_HEIGHT}px` }}>
+            <TimelineTrackHeader title="Time" variant="thin" />
+            <div
+              className="tl-ruler-wrap"
+              style={{ width: `${laneWidth}px`, height: `${RULER_HEIGHT}px` }}
+              onClick={handleRulerClick}
+            >
+              <TimelineRuler duration={effectiveDuration} pxPerSecond={pxPerSecond} />
+            </div>
           </div>
 
-          <div className="tl-waveform-wrap">
-            <AudioWaveformTrack
+          {/* Master audio row. Always rendered so x-alignment is stable. */}
+          <TimelineAudioTrack
+            title="Pista de audio"
+            color="#53c2f0"
+            duration={effectiveDuration}
+            pxPerSecond={pxPerSecond}
+            height={MASTER_WAVEFORM_HEIGHT}
+            peaks={masterPeaks}
+            badge={masterChannel ? 'master' : undefined}
+            mockFallback={masterIsMock}
+          />
+
+          {/* Optional vocals row. */}
+          {vocalsChannel && (
+            <TimelineAudioTrack
+              title="Vocals"
+              color="#5fc88e"
               duration={effectiveDuration}
               pxPerSecond={pxPerSecond}
-              peaks={peaks}
-              height={WAVEFORM_HEIGHT}
-              seed={trackName || 'lyrixa'}
+              height={VOCALS_WAVEFORM_HEIGHT}
+              peaks={vocalsChannel.waveformPeaks}
+              vocalActivity={vocalsChannel.vocalActivity}
+              badge={
+                vocalsChannel.vocalActivity?.length
+                  ? `${vocalsChannel.vocalActivity.length} segments`
+                  : 'analyzing…'
+              }
+              mockFallback={!vocalsChannel.waveformPeaks?.length}
             />
-          </div>
+          )}
 
           <div className="tl-tracks" onClick={handleLaneBackgroundClick}>
             {sortedLayers.map(layer => (
@@ -383,6 +426,7 @@ export function TimelineEditor({
             currentTime={currentTime}
             pxPerSecond={pxPerSecond}
             height={playheadHeight}
+            offsetLeft={headerWidth}
           />
         </div>
       </div>

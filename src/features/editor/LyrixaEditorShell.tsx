@@ -8,6 +8,7 @@ import { LyricsImportPanel } from './LyricsImportPanel';
 import { MiniPreview } from './MiniPreview';
 import { useLyrixaProject } from './useLyrixaProject';
 import type { SaveStatus } from './useLyrixaProject';
+import type { AudioChannelRole } from '../../core/types/audio';
 import './LyrixaEditorShell.css';
 
 const SAVE_LABEL: Record<SaveStatus, string> = {
@@ -25,15 +26,17 @@ export function LyrixaEditorShell() {
     loadAudioFile,
     removeAudio,
     applyLyrics,
+    regenerateFromVocals,
     setClips,
     setLayers,
     setCurrentTime,
-    setDuration,
+    setMasterDuration,
     resetProject
   } = useLyrixaProject();
 
   const audioEngineRef = useRef<AudioEngineRef>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const masterFileInputRef = useRef<HTMLInputElement>(null);
+  const vocalsFileInputRef = useRef<HTMLInputElement>(null);
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
@@ -47,18 +50,19 @@ export function LyrixaEditorShell() {
   const [playbackTime, setPlaybackTime] = useState(project.currentTime ?? 0);
   const rafRef = useRef<number | null>(null);
 
+  const masterChannel = project.audioTracks.master;
+  const vocalsChannel = project.audioTracks.vocals;
+
   useEffect(() => {
     setDraftName(project.name);
   }, [project.name]);
 
-  // Sync playback cursor when project hydrates with a stored currentTime.
   useEffect(() => {
     setPlaybackTime(project.currentTime ?? 0);
-    // Only re-run when the underlying project id changes (new/reset).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project.id]);
 
-  // rAF loop: read audio.currentTime directly and push to playhead.
+  // rAF loop for the playhead.
   useEffect(() => {
     if (!isPlaying) {
       if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
@@ -77,26 +81,27 @@ export function LyrixaEditorShell() {
     };
   }, [isPlaying]);
 
-  // On pause, persist the last playback position so a refresh resumes here.
+  // Persist last position only on pause transitions.
   useEffect(() => {
     if (isPlaying) return;
     setCurrentTime(playbackTime);
-    // Intentionally only on pause transition.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPlaying]);
 
-  const handleFilePicker = () => fileInputRef.current?.click();
+  const openMasterPicker = () => masterFileInputRef.current?.click();
+  const openVocalsPicker = () => vocalsFileInputRef.current?.click();
 
-  const handleAudioFileSelected = async (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file) return;
-    try {
-      await loadAudioFile(file);
-    } catch (err) {
-      console.error('[Lyrixa] Failed to load audio file:', err);
-    }
-  };
+  const handleAudioFileSelected = (role: AudioChannelRole) =>
+    async (e: ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      e.target.value = '';
+      if (!file) return;
+      try {
+        await loadAudioFile(file, role);
+      } catch (err) {
+        console.error(`[Lyrixa] Failed to load ${role} audio file:`, err);
+      }
+    };
 
   const handleSeek = useCallback((time: number) => {
     setPlaybackTime(time);
@@ -105,7 +110,7 @@ export function LyrixaEditorShell() {
   }, [setCurrentTime]);
 
   const handlePlayToggle = () => {
-    if (!project.track?.objectUrl) return;
+    if (!masterChannel?.objectUrl) return;
     setIsPlaying(p => !p);
   };
 
@@ -119,8 +124,9 @@ export function LyrixaEditorShell() {
     setNameEditing(false);
   };
 
-  const effectiveDuration = project.track?.duration ?? 60;
+  const effectiveDuration = masterChannel?.duration ?? 60;
   const showMini = miniPreviewVisible && !previewOpen;
+  const vocalsAnalysisReady = !!vocalsChannel?.vocalActivity?.length;
 
   return (
     <div className="lyrixa-shell">
@@ -154,24 +160,56 @@ export function LyrixaEditorShell() {
         </div>
 
         <div className="ls-topbar-section ls-actions">
-          <button className="ls-btn" onClick={handleFilePicker}>
-            {project.track ? '↻ Replace audio' : '＋ Load audio'}
+          <button className="ls-btn" onClick={openMasterPicker}>
+            {masterChannel ? '↻ Replace audio' : '＋ Load audio'}
           </button>
+          <button
+            className={`ls-btn ${vocalsChannel ? 'active' : ''}`}
+            onClick={openVocalsPicker}
+            title="Optional vocals stem for analysis"
+          >
+            {vocalsChannel ? '↻ Replace vocals' : '＋ Load vocals'}
+          </button>
+          {vocalsChannel && (
+            <button
+              className="ls-btn ghost small"
+              onClick={() => removeAudio('vocals')}
+              title="Remove vocals stem"
+            >
+              ✕
+            </button>
+          )}
           <input
-            ref={fileInputRef}
+            ref={masterFileInputRef}
             type="file"
             accept="audio/*,.mp3,.wav,.ogg,.flac,.m4a"
             style={{ display: 'none' }}
-            onChange={handleAudioFileSelected}
+            onChange={handleAudioFileSelected('master')}
+          />
+          <input
+            ref={vocalsFileInputRef}
+            type="file"
+            accept="audio/*,.mp3,.wav,.ogg,.flac,.m4a"
+            style={{ display: 'none' }}
+            onChange={handleAudioFileSelected('vocals')}
           />
           <button className="ls-btn" onClick={() => setImportOpen(true)}>
             ✎ Import lyrics
           </button>
+          {vocalsAnalysisReady && project.normalizedLyrics.length > 0 && (
+            <button
+              className="ls-btn primary"
+              onClick={() => regenerateFromVocals()}
+              title="Use vocal activity to retime existing lyric clips"
+            >
+              ⟲ Generate timings from vocals
+            </button>
+          )}
           <button
             className={`ls-btn ${isPlaying ? 'active' : ''}`}
             onClick={handlePlayToggle}
-            disabled={!project.track?.objectUrl}
-            title={!project.track?.objectUrl ? 'Load audio to play' : undefined}
+            disabled={!masterChannel?.objectUrl}
+            title={!masterChannel?.objectUrl ? 'Load audio to play' : undefined}
           >
             {isPlaying ? '⏸ Pause' : '▶ Play'}
           </button>
@@ -189,6 +227,11 @@ export function LyrixaEditorShell() {
         </div>
 
         <div className="ls-topbar-section ls-meta">
+          {vocalsAnalysisReady && (
+            <span className="ls-vocals-chip" title="Vocal activity detected">
+              ◐ Vocals analysis available
+            </span>
+          )}
           <span className={`ls-save-chip ${saveStatus}`}>{SAVE_LABEL[saveStatus]}</span>
           <button
             className="ls-btn ghost danger"
@@ -206,25 +249,25 @@ export function LyrixaEditorShell() {
         </div>
       </header>
 
-      {audioNeedsReload && project.track && !project.track.objectUrl && (
+      {audioNeedsReload && masterChannel && !masterChannel.objectUrl && (
         <div className="ls-reload-banner">
           <span>
             Audio file needs to be reloaded:{' '}
-            <strong>{project.track.fileName}</strong>. Your lyrics and clips are safe.
+            <strong>{masterChannel.fileName}</strong>. Your lyrics and clips are safe.
           </span>
           <div className="ls-reload-actions">
-            <button className="ls-btn small" onClick={handleFilePicker}>Reload audio</button>
-            <button className="ls-btn ghost small" onClick={removeAudio}>Clear</button>
+            <button className="ls-btn small" onClick={openMasterPicker}>Reload audio</button>
+            <button className="ls-btn ghost small" onClick={() => removeAudio('master')}>Clear</button>
           </div>
         </div>
       )}
 
-      {project.track?.objectUrl && (
+      {masterChannel?.objectUrl && (
         <AudioEngine
           ref={audioEngineRef}
-          audioUrl={project.track.objectUrl}
+          audioUrl={masterChannel.objectUrl}
           isPlaying={isPlaying}
-          onDurationChange={setDuration}
+          onDurationChange={setMasterDuration}
           onEnded={() => setIsPlaying(false)}
         />
       )}
@@ -237,8 +280,9 @@ export function LyrixaEditorShell() {
           currentTime={playbackTime}
           duration={effectiveDuration}
           isPlaying={isPlaying}
-          trackName={project.track?.fileName ?? 'No audio loaded'}
-          peaks={project.track?.waveformPeaks}
+          trackName={masterChannel?.fileName ?? 'No audio loaded'}
+          masterChannel={masterChannel}
+          vocalsChannel={vocalsChannel}
           onClipsChange={setClips}
           onLayersChange={setLayers}
           onSeek={handleSeek}
@@ -256,17 +300,17 @@ export function LyrixaEditorShell() {
           />
         )}
 
-        {!project.track && (
+        {!masterChannel && (
           <EmptyLaneHint
             icon="🎵"
             title="No audio loaded"
             description="Load an MP3, WAV, or other audio file to populate the audio lane."
             actionLabel="Load audio"
-            onAction={handleFilePicker}
+            onAction={openMasterPicker}
           />
         )}
 
-        {project.clips.length === 0 && project.track && (
+        {project.clips.length === 0 && masterChannel && (
           <EmptyLaneHint
             icon="📝"
             title="No lyrics yet"
@@ -281,6 +325,7 @@ export function LyrixaEditorShell() {
         open={importOpen}
         initialText={project.rawLyricsText}
         layers={project.layers}
+        vocalsAvailable={vocalsAnalysisReady}
         onClose={() => setImportOpen(false)}
         onApply={applyLyrics}
       />

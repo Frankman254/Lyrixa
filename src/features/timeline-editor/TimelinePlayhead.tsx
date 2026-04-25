@@ -4,10 +4,17 @@ interface TimelinePlayheadProps {
   currentTime: number;
   pxPerSecond: number;
   height: number;
+  /** Pixel offset of the lane content area (e.g. shared header column width). */
+  offsetLeft?: number;
 }
 
-export function TimelinePlayhead({ currentTime, pxPerSecond, height }: TimelinePlayheadProps) {
-  const left = timeToPx(currentTime, pxPerSecond);
+export function TimelinePlayhead({
+  currentTime,
+  pxPerSecond,
+  height,
+  offsetLeft = 0
+}: TimelinePlayheadProps) {
+  const left = offsetLeft + timeToPx(currentTime, pxPerSecond);
   return (
     <div
       className="tl-playhead"

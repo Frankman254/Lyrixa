@@ -1,18 +1,33 @@
-import type { LyrixaProject } from '../../core/types/project';
+import type { LyrixaProject, LyrixaTrack } from '../../core/types/project';
+import type { AudioChannel, ProjectAudioTracks } from '../../core/types/audio';
+import { createEmptyAudioTracks } from '../../core/types/audio';
 import { createDefaultLayers } from '../../core/types/layer';
 import { DEFAULT_LYRIC_STYLE } from '../../core/types/render';
 
 const STORAGE_KEY = 'lyrixa:project:v1';
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 
 export interface HydratedProject {
   project: LyrixaProject;
-  /** True when audio metadata existed but the ObjectURL is gone (expected after reload). */
+  /**
+   * Always false at hydration time — IndexedDB drives the real value.
+   * Kept on the result for parity with previous callers.
+   */
   audioNeedsReload: boolean;
 }
 
-interface PersistedProject extends Omit<LyrixaProject, 'track'> {
-  track: (Omit<NonNullable<LyrixaProject['track']>, 'objectUrl'>) | null;
+/**
+ * Persisted shape strips ObjectURLs from every audio channel; those URLs
+ * are recreated at runtime from IndexedDB blobs.
+ */
+type PersistedAudioChannel = Omit<AudioChannel, 'objectUrl'>;
+interface PersistedAudioTracks {
+  master: PersistedAudioChannel | null;
+  vocals?: PersistedAudioChannel | null;
+}
+
+interface PersistedProject extends Omit<LyrixaProject, 'audioTracks'> {
+  audioTracks: PersistedAudioTracks;
 }
 
 interface PersistedEnvelope {
@@ -20,11 +35,28 @@ interface PersistedEnvelope {
   project: PersistedProject;
 }
 
+/**
+ * Legacy v1 envelopes carried a single `track` field instead of `audioTracks`.
+ * This shape exists only so the migration code can read it cleanly.
+ */
+interface LegacyV1Project {
+  id: string;
+  name: string;
+  track?: (Omit<LyrixaTrack, 'objectUrl'>) | null;
+  rawLyricsText: string;
+  normalizedLyrics: string[];
+  layers?: LyrixaProject['layers'];
+  clips: LyrixaProject['clips'];
+  styleConfig?: LyrixaProject['styleConfig'];
+  currentTime: number;
+  renderMode: LyrixaProject['renderMode'];
+}
+
 export function createEmptyProject(): LyrixaProject {
   return {
     id: generateId(),
     name: 'Untitled Project',
-    track: null,
+    audioTracks: createEmptyAudioTracks(),
     rawLyricsText: '',
     normalizedLyrics: [],
     layers: createDefaultLayers(),
@@ -42,11 +74,18 @@ function generateId(): string {
   return `p-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function stripObjectUrls(channel: AudioChannel | null | undefined): PersistedAudioChannel | null {
+  if (!channel) return null;
+  const { objectUrl: _omit, ...rest } = channel;
+  void _omit;
+  return rest;
+}
+
 /**
- * Hydrate a project from localStorage. Returns a fresh empty project when:
- *   - storage is unavailable (SSR / private mode)
- *   - nothing has been persisted yet
- *   - the stored envelope is corrupt or from an incompatible version
+ * Hydrate a project from localStorage. Returns a fresh empty project when
+ * storage is unavailable, nothing was persisted, or the envelope is corrupt.
+ *
+ * Handles v1 (legacy `track` field) by migrating it onto `audioTracks.master`.
  */
 export function loadProject(): HydratedProject {
   if (typeof window === 'undefined' || !window.localStorage) {
@@ -57,53 +96,90 @@ export function loadProject(): HydratedProject {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return { project: createEmptyProject(), audioNeedsReload: false };
 
-    const envelope = JSON.parse(raw) as PersistedEnvelope;
-    if (!envelope || envelope.version !== SCHEMA_VERSION || !envelope.project) {
+    const envelope = JSON.parse(raw) as PersistedEnvelope | { version?: number; project?: unknown };
+    if (!envelope || !envelope.project) {
       return { project: createEmptyProject(), audioNeedsReload: false };
     }
 
-    const persistedTrack = envelope.project.track;
-    const project: LyrixaProject = {
-      ...envelope.project,
-      layers: envelope.project.layers?.length
-        ? envelope.project.layers
-        : createDefaultLayers(),
-      styleConfig: envelope.project.styleConfig ?? { ...DEFAULT_LYRIC_STYLE },
-      track: persistedTrack
-        ? { ...persistedTrack, objectUrl: undefined }
-        : null
-    };
+    if (envelope.version === SCHEMA_VERSION) {
+      const v2 = envelope as PersistedEnvelope;
+      return {
+        project: rehydrateV2(v2.project),
+        audioNeedsReload: false
+      };
+    }
 
-    return {
-      project,
-      // Optimistically false. The IndexedDB driver decides for real after it
-      // tries to restore the audio blob; the hook flips this when the lookup
-      // misses.
-      audioNeedsReload: false
-    };
+    // v1 migration path.
+    if (envelope.version === 1 || envelope.version == null) {
+      const v1 = envelope.project as LegacyV1Project;
+      return {
+        project: migrateV1(v1),
+        audioNeedsReload: false
+      };
+    }
+
+    // Unknown future version — start fresh rather than crash.
+    return { project: createEmptyProject(), audioNeedsReload: false };
   } catch (err) {
     console.warn('[Lyrixa] Failed to hydrate project from localStorage:', err);
     return { project: createEmptyProject(), audioNeedsReload: false };
   }
 }
 
+function rehydrateV2(persisted: PersistedProject): LyrixaProject {
+  return {
+    ...persisted,
+    layers: persisted.layers?.length ? persisted.layers : createDefaultLayers(),
+    styleConfig: persisted.styleConfig ?? { ...DEFAULT_LYRIC_STYLE },
+    audioTracks: {
+      master: persisted.audioTracks?.master
+        ? { ...persisted.audioTracks.master, objectUrl: undefined }
+        : null,
+      vocals: persisted.audioTracks?.vocals
+        ? { ...persisted.audioTracks.vocals, objectUrl: undefined }
+        : null
+    }
+  };
+}
+
+function migrateV1(legacy: LegacyV1Project): LyrixaProject {
+  const audioTracks: ProjectAudioTracks = {
+    master: legacy.track
+      ? {
+          fileName: legacy.track.fileName,
+          duration: legacy.track.duration,
+          waveformPeaks: legacy.track.waveformPeaks
+        }
+      : null,
+    vocals: null
+  };
+  return {
+    id: legacy.id,
+    name: legacy.name,
+    audioTracks,
+    rawLyricsText: legacy.rawLyricsText ?? '',
+    normalizedLyrics: legacy.normalizedLyrics ?? [],
+    layers: legacy.layers?.length ? legacy.layers : createDefaultLayers(),
+    clips: legacy.clips ?? [],
+    styleConfig: legacy.styleConfig ?? { ...DEFAULT_LYRIC_STYLE },
+    currentTime: legacy.currentTime ?? 0,
+    renderMode: legacy.renderMode ?? 'editor'
+  };
+}
+
 /**
- * Persist the current project. ObjectURLs are stripped because they're
- * only valid for the lifetime of the current page. Audio bytes live in
- * IndexedDB (see audioBlobStorage.ts); this function only writes JSON.
+ * Persist the current project. ObjectURLs are stripped because they only
+ * live for the current page; audio bytes go to IndexedDB instead.
  */
 export function saveProject(project: LyrixaProject): void {
   if (typeof window === 'undefined' || !window.localStorage) return;
 
   const persisted: PersistedProject = {
     ...project,
-    track: project.track
-      ? {
-          fileName: project.track.fileName,
-          duration: project.track.duration,
-          waveformPeaks: project.track.waveformPeaks
-        }
-      : null
+    audioTracks: {
+      master: stripObjectUrls(project.audioTracks.master),
+      vocals: stripObjectUrls(project.audioTracks.vocals)
+    }
   };
 
   const envelope: PersistedEnvelope = {

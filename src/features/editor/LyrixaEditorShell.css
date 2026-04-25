@@ -123,6 +123,21 @@
 }
 
 /* ── Save chip ───────────────────────────────────────── */
+.ls-vocals-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(95, 200, 142, 0.12);
+  border: 1px solid rgba(95, 200, 142, 0.32);
+  color: #8ee7b6;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 .ls-save-chip {
   font-size: 0.7rem;
   font-weight: 600;
