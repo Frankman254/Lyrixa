@@ -245,6 +245,24 @@
 
 .tl-track.hidden .tl-track-lane { opacity: 0.35; }
 
+.tl-track.drop-target .tl-track-lane {
+  background:
+    linear-gradient(to bottom, rgba(46, 122, 251, 0.18), rgba(46, 122, 251, 0.05)),
+    repeating-linear-gradient(
+      to right,
+      rgba(255, 255, 255, 0.04) 0px,
+      rgba(255, 255, 255, 0.04) 1px,
+      transparent 1px,
+      transparent 40px
+    );
+  box-shadow: inset 0 0 0 1px rgba(46, 122, 251, 0.55);
+}
+
+.tl-track.drop-target .tl-track-header {
+  background: rgba(46, 122, 251, 0.12);
+  border-left-color: #3b8bff !important;
+}
+
 .tl-track-header {
   position: sticky;
   left: 0;

@@ -8,6 +8,7 @@ import {
   pxToTime,
   formatTimecode
 } from '../../core/timeline/clips';
+import { resolveDroppedLayerId } from '../../core/timeline/clipsFromLyrics';
 import { AudioWaveformTrack } from './AudioWaveformTrack';
 import type { AudioPeak } from './AudioWaveformTrack';
 import { LyricTrack } from './LyricTrack';
@@ -64,15 +65,38 @@ export function TimelineEditor({
   const [pxPerSecond, setPxPerSecond] = useState(60);
   const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
   const [snapSeconds, setSnapSeconds] = useState(0);
+  const [hoveredLayerId, setHoveredLayerId] = useState<string | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const laneContainerRef = useRef<HTMLDivElement>(null);
   const dragStateRef = useRef<DragState | null>(null);
   const clipsRef = useRef<LyricClipModel[]>(clips);
+  const layersRef = useRef<LyricLayer[]>(layers);
+  const laneRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
   useEffect(() => {
     clipsRef.current = clips;
   }, [clips]);
+
+  useEffect(() => {
+    layersRef.current = layers;
+  }, [layers]);
+
+  const setLaneRef = useCallback(
+    (layerId: string) => (el: HTMLDivElement | null) => {
+      if (el) laneRefs.current.set(layerId, el);
+      else laneRefs.current.delete(layerId);
+    },
+    []
+  );
+
+  const findLayerAtY = useCallback((clientY: number): string | null => {
+    for (const [layerId, el] of laneRefs.current) {
+      const rect = el.getBoundingClientRect();
+      if (clientY >= rect.top && clientY <= rect.bottom) return layerId;
+    }
+    return null;
+  }, []);
 
   const effectiveDuration = Math.max(duration, 30);
   const laneWidth = effectiveDuration * pxPerSecond;
@@ -173,20 +197,58 @@ export function TimelineEditor({
 
       const next = clipsRef.current.map(c => (c.id === updated.id ? updated : c));
       onClipsChange(next);
+
+      // Vertical drag-target detection — only for body moves of unlocked clips.
+      if (state.mode === 'move' && !base.locked) {
+        const layerAtY = findLayerAtY(e.clientY);
+        const targetLayer = layerAtY
+          ? layersRef.current.find(l => l.id === layerAtY) ?? null
+          : null;
+        if (
+          layerAtY &&
+          layerAtY !== base.layerId &&
+          targetLayer &&
+          !targetLayer.locked
+        ) {
+          setHoveredLayerId(layerAtY);
+        } else {
+          setHoveredLayerId(null);
+        }
+      }
     },
-    [pxPerSecond, effectiveDuration, snapSeconds, onClipsChange]
+    [pxPerSecond, effectiveDuration, snapSeconds, onClipsChange, findLayerAtY]
   );
 
   const handlePointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     const state = dragStateRef.current;
     if (!state || state.pointerId !== e.pointerId) return;
+
+    // Commit a vertical layer change on drop, if one was hovered.
+    if (state.mode === 'move' && hoveredLayerId) {
+      const current = clipsRef.current.find(c => c.id === state.clipId);
+      if (current) {
+        const layerIndex = new Map(
+          layersRef.current.map(l => [l.id, { locked: l.locked }] as const)
+        );
+        const nextLayerId = resolveDroppedLayerId(current, hoveredLayerId, layerIndex);
+        if (nextLayerId !== current.layerId) {
+          onClipsChange(
+            clipsRef.current.map(c =>
+              c.id === current.id ? { ...c, layerId: nextLayerId } : c
+            )
+          );
+        }
+      }
+    }
+
+    setHoveredLayerId(null);
     dragStateRef.current = null;
     try {
       laneContainerRef.current?.releasePointerCapture(e.pointerId);
     } catch {
       /* ignore */
     }
-  }, []);
+  }, [hoveredLayerId, onClipsChange]);
 
   const handleLaneBackgroundClick = (e: React.MouseEvent<HTMLDivElement>) => {
     // Click on empty lane area → seek + deselect
@@ -307,6 +369,8 @@ export function TimelineEditor({
                 duration={effectiveDuration}
                 trackHeight={TRACK_HEIGHT}
                 selectedClipId={selectedClipId}
+                isDropTarget={hoveredLayerId === layer.id}
+                laneRef={setLaneRef(layer.id)}
                 onSelectClip={setSelectedClipId}
                 onDragStart={handleDragStart}
                 onLayerToggleVisible={toggleLayerVisible}

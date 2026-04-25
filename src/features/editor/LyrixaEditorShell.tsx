@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
 import { AudioEngine } from '../player/AudioEngine';
 import type { AudioEngineRef } from '../player/AudioEngine';
 import { TimelineEditor } from '../timeline-editor/TimelineEditor';
 import { ClipLyricsRenderer } from '../lyrics-view/ClipLyricsRenderer';
 import { LyricsImportPanel } from './LyricsImportPanel';
+import { MiniPreview } from './MiniPreview';
 import { useLyrixaProject } from './useLyrixaProject';
 import type { SaveStatus } from './useLyrixaProject';
 import './LyrixaEditorShell.css';
@@ -37,30 +38,57 @@ export function LyrixaEditorShell() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [miniPreviewVisible, setMiniPreviewVisible] = useState(true);
   const [nameEditing, setNameEditing] = useState(false);
   const [draftName, setDraftName] = useState(project.name);
+
+  // Transient playback time. Updated at ~60fps via rAF while playing,
+  // and by user-driven seeks otherwise. Never persisted on its own ticks.
+  const [playbackTime, setPlaybackTime] = useState(project.currentTime ?? 0);
+  const rafRef = useRef<number | null>(null);
 
   useEffect(() => {
     setDraftName(project.name);
   }, [project.name]);
 
-  // Auto-open the import panel on a fresh empty project so users see how to start.
+  // Sync playback cursor when project hydrates with a stored currentTime.
   useEffect(() => {
-    if (
-      !project.track &&
-      project.clips.length === 0 &&
-      project.rawLyricsText.length === 0
-    ) {
-      // Keep it closed by default — the editor surfaces empty-state prompts
-      // on the lanes themselves. Users open import explicitly.
+    setPlaybackTime(project.currentTime ?? 0);
+    // Only re-run when the underlying project id changes (new/reset).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project.id]);
+
+  // rAF loop: read audio.currentTime directly and push to playhead.
+  useEffect(() => {
+    if (!isPlaying) {
+      if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+      return;
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    const tick = () => {
+      const t = audioEngineRef.current?.getCurrentTime() ?? 0;
+      setPlaybackTime(t);
+      rafRef.current = requestAnimationFrame(tick);
+    };
+    rafRef.current = requestAnimationFrame(tick);
+    return () => {
+      if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    };
+  }, [isPlaying]);
+
+  // On pause, persist the last playback position so a refresh resumes here.
+  useEffect(() => {
+    if (isPlaying) return;
+    setCurrentTime(playbackTime);
+    // Intentionally only on pause transition.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPlaying]);
 
   const handleFilePicker = () => fileInputRef.current?.click();
 
   const handleAudioFileSelected = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    // Reset the input value so selecting the same file twice still fires change.
     e.target.value = '';
     if (!file) return;
     try {
@@ -70,12 +98,11 @@ export function LyrixaEditorShell() {
     }
   };
 
-  const handleSeek = (time: number) => {
+  const handleSeek = useCallback((time: number) => {
+    setPlaybackTime(time);
     setCurrentTime(time);
-    if (project.track?.objectUrl) {
-      audioEngineRef.current?.seekTo(time);
-    }
-  };
+    audioEngineRef.current?.seekTo(time);
+  }, [setCurrentTime]);
 
   const handlePlayToggle = () => {
     if (!project.track?.objectUrl) return;
@@ -93,6 +120,7 @@ export function LyrixaEditorShell() {
   };
 
   const effectiveDuration = project.track?.duration ?? 60;
+  const showMini = miniPreviewVisible && !previewOpen;
 
   return (
     <div className="lyrixa-shell">
@@ -153,6 +181,11 @@ export function LyrixaEditorShell() {
           >
             {previewOpen ? '🅧 Close preview' : '◉ Preview'}
           </button>
+          {!miniPreviewVisible && !previewOpen && (
+            <button className="ls-btn" onClick={() => setMiniPreviewVisible(true)}>
+              ◳ Mini preview
+            </button>
+          )}
         </div>
 
         <div className="ls-topbar-section ls-meta">
@@ -163,6 +196,7 @@ export function LyrixaEditorShell() {
               if (window.confirm('Discard the current project and start a new one?')) {
                 resetProject();
                 setIsPlaying(false);
+                setPlaybackTime(0);
               }
             }}
             title="Reset project"
@@ -190,7 +224,6 @@ export function LyrixaEditorShell() {
           ref={audioEngineRef}
           audioUrl={project.track.objectUrl}
           isPlaying={isPlaying}
-          onTimeUpdate={setCurrentTime}
           onDurationChange={setDuration}
           onEnded={() => setIsPlaying(false)}
         />
@@ -201,7 +234,7 @@ export function LyrixaEditorShell() {
           embedded
           clips={project.clips}
           layers={project.layers}
-          currentTime={project.currentTime}
+          currentTime={playbackTime}
           duration={effectiveDuration}
           isPlaying={isPlaying}
           trackName={project.track?.fileName ?? 'No audio loaded'}
@@ -211,6 +244,17 @@ export function LyrixaEditorShell() {
           onSeek={handleSeek}
           onPlayToggle={handlePlayToggle}
         />
+
+        {showMini && (
+          <MiniPreview
+            clips={project.clips}
+            layers={project.layers}
+            currentTime={playbackTime}
+            styleConfig={project.styleConfig}
+            onExpand={() => setPreviewOpen(true)}
+            onClose={() => setMiniPreviewVisible(false)}
+          />
+        )}
 
         {!project.track && (
           <EmptyLaneHint
@@ -247,7 +291,7 @@ export function LyrixaEditorShell() {
             <ClipLyricsRenderer
               clips={project.clips}
               layers={project.layers}
-              currentTime={project.currentTime}
+              currentTime={playbackTime}
               styleConfig={project.styleConfig}
             />
             <button

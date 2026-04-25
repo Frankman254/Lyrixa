@@ -10,6 +10,9 @@ interface LyricTrackProps {
   duration: number;
   trackHeight: number;
   selectedClipId: string | null;
+  /** True when a drag is currently hovering this lane and a drop here is legal. */
+  isDropTarget?: boolean;
+  laneRef?: (el: HTMLDivElement | null) => void;
   onSelectClip: (clipId: string) => void;
   onDragStart: (clipId: string, mode: DragMode, pointerId: number, clientX: number) => void;
   onLayerToggleVisible: (layerId: string) => void;
@@ -23,15 +26,23 @@ export function LyricTrack({
   duration,
   trackHeight,
   selectedClipId,
+  isDropTarget = false,
+  laneRef,
   onSelectClip,
   onDragStart,
   onLayerToggleVisible,
   onLayerToggleLocked
 }: LyricTrackProps) {
   const totalWidth = Math.max(duration, 1) * pxPerSecond;
+  const trackClass = [
+    'tl-track',
+    layer.locked ? 'locked' : '',
+    layer.visible ? '' : 'hidden',
+    isDropTarget ? 'drop-target' : ''
+  ].filter(Boolean).join(' ');
 
   return (
-    <div className={`tl-track ${layer.locked ? 'locked' : ''} ${layer.visible ? '' : 'hidden'}`}>
+    <div className={trackClass}>
       <div className="tl-track-header" style={{ borderLeftColor: layer.color }}>
         <div className="tl-track-title">
           <span className="tl-track-swatch" style={{ background: layer.color }} />
@@ -57,6 +68,8 @@ export function LyricTrack({
 
       <div
         className="tl-track-lane"
+        ref={laneRef}
+        data-layer-id={layer.id}
         style={{ width: `${totalWidth}px`, height: `${trackHeight}px` }}
       >
         {clips.map(clip => (

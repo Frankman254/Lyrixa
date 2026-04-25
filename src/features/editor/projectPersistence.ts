@@ -76,7 +76,10 @@ export function loadProject(): HydratedProject {
 
     return {
       project,
-      audioNeedsReload: Boolean(persistedTrack)
+      // Optimistically false. The IndexedDB driver decides for real after it
+      // tries to restore the audio blob; the hook flips this when the lookup
+      // misses.
+      audioNeedsReload: false
     };
   } catch (err) {
     console.warn('[Lyrixa] Failed to hydrate project from localStorage:', err);
@@ -86,11 +89,8 @@ export function loadProject(): HydratedProject {
 
 /**
  * Persist the current project. ObjectURLs are stripped because they're
- * only valid for the lifetime of the current page.
- *
- * Future direction: large binaries (audio bytes, decoded peaks) should move
- * to IndexedDB via a dedicated driver. This function would delegate the
- * waveformPeaks blob to that driver and keep JSON metadata in localStorage.
+ * only valid for the lifetime of the current page. Audio bytes live in
+ * IndexedDB (see audioBlobStorage.ts); this function only writes JSON.
  */
 export function saveProject(project: LyrixaProject): void {
   if (typeof window === 'undefined' || !window.localStorage) return;
