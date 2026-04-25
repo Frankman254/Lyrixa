@@ -6,14 +6,28 @@ import { timeToPx, formatTimecode } from '../../core/timeline/clips';
 
 type DragMode = 'move' | 'resize-start' | 'resize-end';
 
+export interface ClipPointerModifiers {
+  /** Shift / Cmd / Ctrl was held — caller should toggle selection instead of replacing it. */
+  toggle: boolean;
+}
+
 interface LyricClipProps {
   clip: LyricClipModel;
   pxPerSecond: number;
   layerColor: string;
   selected: boolean;
   locked: boolean;
-  onSelect: (clipId: string) => void;
-  onDragStart: (clipId: string, mode: DragMode, pointerId: number, clientX: number) => void;
+  /**
+   * Single entry point for both selection and drag-start. The parent decides
+   * whether to toggle selection (modifiers.toggle) or begin a drag.
+   */
+  onPointerDown: (
+    clipId: string,
+    mode: DragMode,
+    pointerId: number,
+    clientX: number,
+    modifiers: ClipPointerModifiers
+  ) => void;
 }
 
 export function LyricClip({
@@ -22,8 +36,7 @@ export function LyricClip({
   layerColor,
   selected,
   locked,
-  onSelect,
-  onDragStart
+  onPointerDown
 }: LyricClipProps) {
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -34,10 +47,12 @@ export function LyricClip({
     (e: ReactPointerEvent<HTMLDivElement>, mode: DragMode) => {
       if (locked || clip.locked) return;
       e.stopPropagation();
-      onSelect(clip.id);
-      onDragStart(clip.id, mode, e.pointerId, e.clientX);
+      const modifiers: ClipPointerModifiers = {
+        toggle: e.shiftKey || e.metaKey || e.ctrlKey
+      };
+      onPointerDown(clip.id, mode, e.pointerId, e.clientX, modifiers);
     },
-    [clip.id, clip.locked, locked, onSelect, onDragStart]
+    [clip.id, clip.locked, locked, onPointerDown]
   );
 
   let classes = 'tl-clip';

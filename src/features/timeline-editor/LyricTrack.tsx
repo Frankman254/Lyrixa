@@ -1,7 +1,7 @@
 import type { LyricLayer } from '../../core/types/layer';
 import type { LyricClip as LyricClipModel } from '../../core/types/clip';
 import { LyricClip } from './LyricClip';
-import type { DragMode } from './LyricClip';
+import type { ClipPointerModifiers, DragMode } from './LyricClip';
 
 interface LyricTrackProps {
   layer: LyricLayer;
@@ -9,12 +9,17 @@ interface LyricTrackProps {
   pxPerSecond: number;
   duration: number;
   trackHeight: number;
-  selectedClipId: string | null;
+  selectedClipIds: ReadonlySet<string>;
   /** True when a drag is currently hovering this lane and a drop here is legal. */
   isDropTarget?: boolean;
   laneRef?: (el: HTMLDivElement | null) => void;
-  onSelectClip: (clipId: string) => void;
-  onDragStart: (clipId: string, mode: DragMode, pointerId: number, clientX: number) => void;
+  onClipPointerDown: (
+    clipId: string,
+    mode: DragMode,
+    pointerId: number,
+    clientX: number,
+    modifiers: ClipPointerModifiers
+  ) => void;
   onLayerToggleVisible: (layerId: string) => void;
   onLayerToggleLocked: (layerId: string) => void;
 }
@@ -25,11 +30,10 @@ export function LyricTrack({
   pxPerSecond,
   duration,
   trackHeight,
-  selectedClipId,
+  selectedClipIds,
   isDropTarget = false,
   laneRef,
-  onSelectClip,
-  onDragStart,
+  onClipPointerDown,
   onLayerToggleVisible,
   onLayerToggleLocked
 }: LyricTrackProps) {
@@ -78,10 +82,9 @@ export function LyricTrack({
             clip={clip}
             pxPerSecond={pxPerSecond}
             layerColor={layer.color}
-            selected={clip.id === selectedClipId}
+            selected={selectedClipIds.has(clip.id)}
             locked={layer.locked}
-            onSelect={onSelectClip}
-            onDragStart={onDragStart}
+            onPointerDown={onClipPointerDown}
           />
         ))}
       </div>

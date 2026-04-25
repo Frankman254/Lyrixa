@@ -140,6 +140,94 @@
   font-size: 0.75rem;
 }
 
+/* ── Selection toolbar ───────────────────────────────── */
+.tl-selection-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 16px;
+  background: linear-gradient(to bottom, #10131a, #0c0e15);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  flex-wrap: wrap;
+  font-size: 0.75rem;
+  color: #c9d0e2;
+  z-index: 4;
+}
+
+.tl-sel-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.tl-sel-label {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #6b7186;
+  margin-right: 2px;
+}
+
+.tl-sel-stats {
+  flex: 1;
+  font-size: 0.78rem;
+  color: #c9d0e2;
+}
+
+.tl-sel-stats .muted {
+  color: #5a5f74;
+}
+
+.tl-sel-mono {
+  font-family: 'JetBrains Mono', 'Menlo', monospace;
+  color: #ffffff;
+}
+
+.tl-sel-offset {
+  flex-wrap: wrap;
+}
+
+.tl-sel-offset-input {
+  width: 64px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #e6e9f2;
+  border-radius: 4px;
+  padding: 4px 6px;
+  font-family: 'JetBrains Mono', 'Menlo', monospace;
+  font-size: 0.75rem;
+}
+
+.tl-sel-offset-input:focus {
+  outline: none;
+  border-color: rgba(46, 122, 251, 0.55);
+  box-shadow: 0 0 0 2px rgba(46, 122, 251, 0.18);
+}
+
+.tl-btn.primary {
+  background: linear-gradient(180deg, #3b8bff, #2466d9);
+  border-color: #3b8bff;
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.tl-btn.primary:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+
+.tl-btn.ghost {
+  background: transparent;
+}
+
+.tl-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 /* ── Scroll / lane container ─────────────────────────── */
 .tl-scroll {
   flex: 1;
@@ -420,10 +508,20 @@
 
 .tl-clip.selected {
   border-color: #ffffff;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--clip-color, #2e7afb) 95%, #ffffff 12%) 0%,
+    color-mix(in srgb, var(--clip-color, #2e7afb) 70%, #000000 8%) 100%
+  );
   box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.9),
-    0 0 20px color-mix(in srgb, var(--clip-color, #2e7afb) 70%, transparent);
+    0 0 0 2px rgba(255, 255, 255, 0.95),
+    0 0 24px color-mix(in srgb, var(--clip-color, #2e7afb) 80%, transparent),
+    0 4px 12px rgba(0, 0, 0, 0.5);
   z-index: 2;
+}
+
+.tl-clip.selected .tl-clip-text {
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7), 0 0 6px rgba(255, 255, 255, 0.35);
 }
 
 .tl-clip.muted {

@@ -10,12 +10,18 @@ import {
   formatTimecode
 } from '../../core/timeline/clips';
 import { resolveDroppedLayerId } from '../../core/timeline/clipsFromLyrics';
+import {
+  shiftClips,
+  getSelectableClips,
+  getClipsAfterTime,
+  getSelectionBounds
+} from '../../core/timeline/clipSelection';
 import { LyricTrack } from './LyricTrack';
 import { TimelineRuler } from './TimelineRuler';
 import { TimelinePlayhead } from './TimelinePlayhead';
 import { TimelineTrackHeader } from './TimelineTrackHeader';
 import { TimelineAudioTrack } from './TimelineAudioTrack';
-import type { DragMode } from './LyricClip';
+import type { ClipPointerModifiers, DragMode } from './LyricClip';
 import { clampZoom, clientXToTime, TRACK_HEADER_WIDTH } from './timelineMath';
 import './TimelineEditor.css';
 
@@ -26,13 +32,9 @@ interface TimelineEditorProps {
   duration: number;
   isPlaying: boolean;
   trackName: string;
-  /** Master audio channel — drives the primary waveform. */
   masterChannel?: AudioChannel | null;
-  /** Optional vocals channel — shown as a second audio row when present. */
   vocalsChannel?: AudioChannel | null;
-  /** Backwards-compat: if no masterChannel is provided, use this peak array. */
   peaks?: AudioPeak[];
-  /** When true, the timeline's own chrome (title, track chip, exit button) is hidden. */
   embedded?: boolean;
   onClipsChange: (next: LyricClipModel[]) => void;
   onLayersChange: (next: LyricLayer[]) => void;
@@ -42,17 +44,21 @@ interface TimelineEditorProps {
 }
 
 interface DragState {
-  clipId: string;
+  primaryClipId: string;
   mode: DragMode;
   pointerId: number;
   initialClientX: number;
-  initialClip: LyricClipModel;
+  /** Snapshot of every clip in the active selection at drag start. */
+  initialClips: LyricClipModel[];
 }
 
 const TRACK_HEIGHT = 64;
 const MASTER_WAVEFORM_HEIGHT = 96;
 const VOCALS_WAVEFORM_HEIGHT = 72;
 const RULER_HEIGHT = 28;
+
+const NUDGE_STEPS = [-1, -0.5, -0.1, 0.1, 0.5, 1];
+const OFFSET_STEPS = [-1, -0.5, -0.1, 0.1, 0.5, 1];
 
 export function TimelineEditor({
   clips,
@@ -72,9 +78,10 @@ export function TimelineEditor({
   onExit
 }: TimelineEditorProps) {
   const [pxPerSecond, setPxPerSecond] = useState(60);
-  const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
+  const [selectedClipIds, setSelectedClipIds] = useState<Set<string>>(() => new Set());
   const [snapSeconds, setSnapSeconds] = useState(0);
   const [hoveredLayerId, setHoveredLayerId] = useState<string | null>(null);
+  const [offsetInput, setOffsetInput] = useState<string>('0');
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const laneContainerRef = useRef<HTMLDivElement>(null);
@@ -82,14 +89,13 @@ export function TimelineEditor({
   const clipsRef = useRef<LyricClipModel[]>(clips);
   const layersRef = useRef<LyricLayer[]>(layers);
   const laneRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const selectedIdsRef = useRef<Set<string>>(selectedClipIds);
+  const snapRef = useRef(snapSeconds);
 
-  useEffect(() => {
-    clipsRef.current = clips;
-  }, [clips]);
-
-  useEffect(() => {
-    layersRef.current = layers;
-  }, [layers]);
+  useEffect(() => { clipsRef.current = clips; }, [clips]);
+  useEffect(() => { layersRef.current = layers; }, [layers]);
+  useEffect(() => { selectedIdsRef.current = selectedClipIds; }, [selectedClipIds]);
+  useEffect(() => { snapRef.current = snapSeconds; }, [snapSeconds]);
 
   const setLaneRef = useCallback(
     (layerId: string) => (el: HTMLDivElement | null) => {
@@ -131,10 +137,14 @@ export function TimelineEditor({
   }, [clips, layers]);
 
   const audioRowHeights =
-    (masterChannel ? MASTER_WAVEFORM_HEIGHT : MASTER_WAVEFORM_HEIGHT) +
-    (vocalsChannel ? VOCALS_WAVEFORM_HEIGHT : 0);
+    MASTER_WAVEFORM_HEIGHT + (vocalsChannel ? VOCALS_WAVEFORM_HEIGHT : 0);
   const totalTracksHeight = layers.length * TRACK_HEIGHT;
   const playheadHeight = RULER_HEIGHT + audioRowHeights + totalTracksHeight;
+
+  const selectionBounds = useMemo(
+    () => getSelectionBounds(clips, selectedClipIds),
+    [clips, selectedClipIds]
+  );
 
   // Auto-follow playhead while playing.
   useEffect(() => {
@@ -171,17 +181,111 @@ export function TimelineEditor({
     }
   };
 
-  const handleDragStart = useCallback(
-    (clipId: string, mode: DragMode, pointerId: number, clientX: number) => {
+  // ── Selection actions ──────────────────────────────────────────
+  const selectAll = useCallback(() => {
+    const ids = getSelectableClips(clipsRef.current, layersRef.current).map(c => c.id);
+    setSelectedClipIds(new Set(ids));
+  }, []);
+
+  const selectAfterPlayhead = useCallback(() => {
+    const ids = getClipsAfterTime(
+      clipsRef.current,
+      currentTime,
+      layersRef.current
+    ).map(c => c.id);
+    setSelectedClipIds(new Set(ids));
+  }, [currentTime]);
+
+  const clearSelection = useCallback(() => {
+    setSelectedClipIds(new Set());
+  }, []);
+
+  const nudgeSelected = useCallback(
+    (delta: number) => {
+      const ids = Array.from(selectedIdsRef.current);
+      if (ids.length === 0 || delta === 0) return;
+      const next = shiftClips(clipsRef.current, ids, delta, {
+        trackDuration: effectiveDuration,
+        respectLocked: true,
+        layers: layersRef.current
+      });
+      onClipsChange(next);
+    },
+    [effectiveDuration, onClipsChange]
+  );
+
+  const offsetAllUnlocked = useCallback(
+    (delta: number) => {
+      if (delta === 0) return;
+      const ids = getSelectableClips(
+        clipsRef.current,
+        layersRef.current,
+        { requireVisible: false }
+      ).map(c => c.id);
+      if (ids.length === 0) return;
+      const next = shiftClips(clipsRef.current, ids, delta, {
+        trackDuration: effectiveDuration,
+        respectLocked: true,
+        layers: layersRef.current
+      });
+      onClipsChange(next);
+    },
+    [effectiveDuration, onClipsChange]
+  );
+
+  // ── Pointer-down on a clip: handles both selection and drag-start ──
+  const handleClipPointerDown = useCallback(
+    (
+      clipId: string,
+      mode: DragMode,
+      pointerId: number,
+      clientX: number,
+      modifiers: ClipPointerModifiers
+    ) => {
       const clip = clipsRef.current.find(c => c.id === clipId);
       if (!clip) return;
+
+      if (modifiers.toggle && mode === 'move') {
+        // Toggle selection only — no drag.
+        setSelectedClipIds(prev => {
+          const next = new Set(prev);
+          if (next.has(clipId)) next.delete(clipId);
+          else next.add(clipId);
+          return next;
+        });
+        return;
+      }
+
+      // Decide the effective selection at the moment of drag-start.
+      let effective: Set<string>;
+      if (mode === 'move') {
+        effective = selectedIdsRef.current.has(clipId)
+          ? new Set(selectedIdsRef.current)
+          : new Set([clipId]);
+      } else {
+        // Resize handles always operate on the single clip.
+        effective = new Set([clipId]);
+      }
+
+      if (
+        effective.size !== selectedIdsRef.current.size ||
+        Array.from(effective).some(id => !selectedIdsRef.current.has(id))
+      ) {
+        setSelectedClipIds(effective);
+      }
+
+      const initial = clipsRef.current
+        .filter(c => effective.has(c.id))
+        .map(c => ({ ...c }));
+
       dragStateRef.current = {
-        clipId,
+        primaryClipId: clipId,
         mode,
         pointerId,
         initialClientX: clientX,
-        initialClip: clip
+        initialClips: initial
       };
+
       try {
         laneContainerRef.current?.setPointerCapture(pointerId);
       } catch {
@@ -197,12 +301,50 @@ export function TimelineEditor({
       if (!state || state.pointerId !== e.pointerId) return;
       const deltaPx = e.clientX - state.initialClientX;
       const deltaSec = pxToTime(deltaPx, pxPerSecond);
-      const base = state.initialClip;
 
-      let updated: LyricClipModel;
       if (state.mode === 'move') {
-        updated = moveClip(base, deltaSec, { trackDuration: effectiveDuration, snap: snapSeconds });
-      } else if (state.mode === 'resize-start') {
+        // Group move via shiftClips against the snapshot — no drift.
+        const baseline = clipsRef.current.map(c => {
+          const init = state.initialClips.find(i => i.id === c.id);
+          return init ? init : c;
+        });
+        const ids = state.initialClips.map(c => c.id);
+        const shifted = shiftClips(baseline, ids, deltaSec, {
+          trackDuration: effectiveDuration,
+          respectLocked: true,
+          layers: layersRef.current
+        });
+        onClipsChange(shifted);
+
+        // Single-clip vertical-layer hover only when dragging exactly one clip.
+        if (state.initialClips.length === 1) {
+          const base = state.initialClips[0]!;
+          if (!base.locked) {
+            const layerAtY = findLayerAtY(e.clientY);
+            const targetLayer = layerAtY
+              ? layersRef.current.find(l => l.id === layerAtY) ?? null
+              : null;
+            if (
+              layerAtY &&
+              layerAtY !== base.layerId &&
+              targetLayer &&
+              !targetLayer.locked
+            ) {
+              setHoveredLayerId(layerAtY);
+            } else {
+              setHoveredLayerId(null);
+            }
+          }
+        } else if (hoveredLayerId !== null) {
+          setHoveredLayerId(null);
+        }
+        return;
+      }
+
+      // Resize paths — single clip only.
+      const base = state.initialClips[0]!;
+      let updated: LyricClipModel;
+      if (state.mode === 'resize-start') {
         updated = resizeClipStart(base, base.startTime + deltaSec, { snap: snapSeconds });
       } else {
         updated = resizeClipEnd(base, base.endTime + deltaSec, {
@@ -210,37 +352,22 @@ export function TimelineEditor({
           snap: snapSeconds
         });
       }
-
-      const next = clipsRef.current.map(c => (c.id === updated.id ? updated : c));
-      onClipsChange(next);
-
-      // Vertical drag-target detection — only for body moves of unlocked clips.
-      if (state.mode === 'move' && !base.locked) {
-        const layerAtY = findLayerAtY(e.clientY);
-        const targetLayer = layerAtY
-          ? layersRef.current.find(l => l.id === layerAtY) ?? null
-          : null;
-        if (
-          layerAtY &&
-          layerAtY !== base.layerId &&
-          targetLayer &&
-          !targetLayer.locked
-        ) {
-          setHoveredLayerId(layerAtY);
-        } else {
-          setHoveredLayerId(null);
-        }
-      }
+      // Preserve any other clips that may have been edited mid-drag.
+      onClipsChange(
+        clipsRef.current.map(c => (c.id === updated.id ? updated : c))
+      );
+      // Keep moveClip available for future strict-snap moves of single clips.
+      void moveClip;
     },
-    [pxPerSecond, effectiveDuration, snapSeconds, onClipsChange, findLayerAtY]
+    [pxPerSecond, effectiveDuration, snapSeconds, onClipsChange, findLayerAtY, hoveredLayerId]
   );
 
   const handlePointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     const state = dragStateRef.current;
     if (!state || state.pointerId !== e.pointerId) return;
 
-    if (state.mode === 'move' && hoveredLayerId) {
-      const current = clipsRef.current.find(c => c.id === state.clipId);
+    if (state.mode === 'move' && state.initialClips.length === 1 && hoveredLayerId) {
+      const current = clipsRef.current.find(c => c.id === state.primaryClipId);
       if (current) {
         const layerIndex = new Map(
           layersRef.current.map(l => [l.id, { locked: l.locked }] as const)
@@ -275,7 +402,7 @@ export function TimelineEditor({
       headerOffset: headerWidth
     });
     onSeek(Math.max(0, Math.min(effectiveDuration, time)));
-    setSelectedClipId(null);
+    setSelectedClipIds(new Set());
   };
 
   const toggleLayerVisible = (layerId: string) => {
@@ -290,9 +417,12 @@ export function TimelineEditor({
     );
   };
 
-  const selectedClip = selectedClipId
-    ? clips.find(c => c.id === selectedClipId) ?? null
-    : null;
+  // Inspector only when exactly one clip is selected.
+  const selectedClip = useMemo(() => {
+    if (selectedClipIds.size !== 1) return null;
+    const onlyId = selectedClipIds.values().next().value as string | undefined;
+    return onlyId ? clips.find(c => c.id === onlyId) ?? null : null;
+  }, [selectedClipIds, clips]);
 
   const updateSelectedClip = (patch: Partial<LyricClipModel>) => {
     if (!selectedClip) return;
@@ -301,8 +431,62 @@ export function TimelineEditor({
     );
   };
 
+  // ── Keyboard shortcuts ─────────────────────────────────────────
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target) {
+        const tag = target.tagName;
+        const editable =
+          tag === 'INPUT' ||
+          tag === 'TEXTAREA' ||
+          tag === 'SELECT' ||
+          (target as HTMLElement).isContentEditable;
+        if (editable) return;
+      }
+
+      const meta = e.metaKey || e.ctrlKey;
+
+      if (meta && e.key.toLowerCase() === 'a') {
+        e.preventDefault();
+        selectAll();
+        return;
+      }
+      if (e.key === 'Escape') {
+        if (selectedIdsRef.current.size === 0) return;
+        e.preventDefault();
+        clearSelection();
+        return;
+      }
+
+      if (selectedIdsRef.current.size === 0) return;
+
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        e.preventDefault();
+        const sign = e.key === 'ArrowLeft' ? -1 : 1;
+        let magnitude: number;
+        if (e.altKey) magnitude = 1;
+        else if (e.shiftKey) magnitude = 0.5;
+        else magnitude = snapRef.current > 0 ? snapRef.current : 0.1;
+        nudgeSelected(sign * magnitude);
+      }
+    };
+
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [selectAll, clearSelection, nudgeSelected]);
+
+  // ── Lyrics Offset ──────────────────────────────────────────────
+  const applyOffsetInput = () => {
+    const value = parseFloat(offsetInput);
+    if (!Number.isFinite(value) || value === 0) return;
+    offsetAllUnlocked(value);
+    setOffsetInput('0');
+  };
+
   const masterPeaks = masterChannel?.waveformPeaks ?? peaks;
   const masterIsMock = !masterPeaks || masterPeaks.length === 0;
+  const hasSelection = selectedClipIds.size > 0;
 
   return (
     <div className="timeline-editor">
@@ -346,6 +530,90 @@ export function TimelineEditor({
         </div>
       </header>
 
+      {/* Selection toolbar — bulk shifting & alignment. */}
+      <div className="tl-selection-bar" role="toolbar" aria-label="Clip selection">
+        <div className="tl-sel-group">
+          <button className="tl-btn small" onClick={selectAll}>Select all</button>
+          <button className="tl-btn small" onClick={selectAfterPlayhead}>
+            After playhead
+          </button>
+          <button
+            className="tl-btn small ghost"
+            onClick={clearSelection}
+            disabled={!hasSelection}
+          >
+            Clear
+          </button>
+        </div>
+
+        <div className="tl-sel-stats">
+          {selectionBounds ? (
+            <>
+              <strong>{selectionBounds.count}</strong> clip{selectionBounds.count === 1 ? '' : 's'}
+              {' · '}
+              <span className="tl-sel-mono">
+                {formatTimecode(selectionBounds.startTime, true)}
+                {' → '}
+                {formatTimecode(selectionBounds.endTime, true)}
+              </span>
+              {' · span '}
+              <span className="tl-sel-mono">
+                {selectionBounds.span.toFixed(2)}s
+              </span>
+            </>
+          ) : (
+            <span className="muted">No selection</span>
+          )}
+        </div>
+
+        <div className="tl-sel-group" aria-label="Nudge selected">
+          <span className="tl-sel-label">Nudge</span>
+          {NUDGE_STEPS.map(step => (
+            <button
+              key={`nudge-${step}`}
+              className="tl-btn small"
+              onClick={() => nudgeSelected(step)}
+              disabled={!hasSelection}
+              title={`Shift selected clips by ${step > 0 ? '+' : ''}${step}s`}
+            >
+              {step > 0 ? `+${step}` : `${step}`}
+            </button>
+          ))}
+        </div>
+
+        <div className="tl-sel-group tl-sel-offset" aria-label="Lyrics offset">
+          <span className="tl-sel-label">Lyrics offset</span>
+          <input
+            type="number"
+            step="0.05"
+            value={offsetInput}
+            onChange={(e) => setOffsetInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') applyOffsetInput();
+            }}
+            className="tl-sel-offset-input"
+            aria-label="Lyrics offset seconds"
+          />
+          <button
+            className="tl-btn small primary"
+            onClick={applyOffsetInput}
+            title="Shift all unlocked clips by the value above"
+          >
+            Apply
+          </button>
+          {OFFSET_STEPS.map(step => (
+            <button
+              key={`offset-${step}`}
+              className="tl-btn small"
+              onClick={() => offsetAllUnlocked(step)}
+              title={`Shift all unlocked clips by ${step > 0 ? '+' : ''}${step}s`}
+            >
+              {step > 0 ? `+${step}` : `${step}`}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div
         className="tl-scroll"
         ref={scrollRef}
@@ -359,7 +627,6 @@ export function TimelineEditor({
           ref={laneContainerRef}
           style={{ width: `${totalLaneContainerWidth}px` }}
         >
-          {/* Ruler row uses the same header column so its ticks line up with clips. */}
           <div className="tl-track tl-ruler-row" style={{ height: `${RULER_HEIGHT}px` }}>
             <TimelineTrackHeader title="Time" variant="thin" />
             <div
@@ -371,7 +638,6 @@ export function TimelineEditor({
             </div>
           </div>
 
-          {/* Master audio row. Always rendered so x-alignment is stable. */}
           <TimelineAudioTrack
             title="Pista de audio"
             color="#53c2f0"
@@ -383,7 +649,6 @@ export function TimelineEditor({
             mockFallback={masterIsMock}
           />
 
-          {/* Optional vocals row. */}
           {vocalsChannel && (
             <TimelineAudioTrack
               title="Vocals"
@@ -411,11 +676,10 @@ export function TimelineEditor({
                 pxPerSecond={pxPerSecond}
                 duration={effectiveDuration}
                 trackHeight={TRACK_HEIGHT}
-                selectedClipId={selectedClipId}
+                selectedClipIds={selectedClipIds}
                 isDropTarget={hoveredLayerId === layer.id}
                 laneRef={setLaneRef(layer.id)}
-                onSelectClip={setSelectedClipId}
-                onDragStart={handleDragStart}
+                onClipPointerDown={handleClipPointerDown}
                 onLayerToggleVisible={toggleLayerVisible}
                 onLayerToggleLocked={toggleLayerLocked}
               />
