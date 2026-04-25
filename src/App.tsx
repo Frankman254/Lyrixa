@@ -1,11 +1,7 @@
-import { PlayerContainer } from './features/player/PlayerContainer'
+import { LyrixaEditorShell } from './features/editor/LyrixaEditorShell'
 
 function App() {
-  return (
-    <>
-      <PlayerContainer />
-    </>
-  )
+  return <LyrixaEditorShell />
 }
 
 export default App

@@ -25,11 +25,13 @@ interface TimelineEditorProps {
   isPlaying: boolean;
   trackName: string;
   peaks?: AudioPeak[];
+  /** When true, the timeline's own chrome (title, track chip, exit button) is hidden. */
+  embedded?: boolean;
   onClipsChange: (next: LyricClipModel[]) => void;
   onLayersChange: (next: LyricLayer[]) => void;
   onSeek: (time: number) => void;
   onPlayToggle: () => void;
-  onExit: () => void;
+  onExit?: () => void;
 }
 
 interface DragState {
@@ -52,6 +54,7 @@ export function TimelineEditor({
   isPlaying,
   trackName,
   peaks,
+  embedded = false,
   onClipsChange,
   onLayersChange,
   onSeek,
@@ -224,10 +227,12 @@ export function TimelineEditor({
   return (
     <div className="timeline-editor">
       <header className="tl-topbar">
-        <div className="tl-topbar-left">
-          <h2>Timeline Editor</h2>
-          <span className="tl-track-chip">{trackName}</span>
-        </div>
+        {!embedded && (
+          <div className="tl-topbar-left">
+            <h2>Timeline Editor</h2>
+            <span className="tl-track-chip">{trackName}</span>
+          </div>
+        )}
         <div className="tl-topbar-center">
           <span className="tl-time">{formatTimecode(currentTime, true)}</span>
           <span className="tl-time-sep">/</span>
@@ -255,7 +260,9 @@ export function TimelineEditor({
               <option value={1}>1s</option>
             </select>
           </label>
-          <button className="tl-btn danger" onClick={onExit}>✕ Exit</button>
+          {onExit && (
+            <button className="tl-btn danger" onClick={onExit}>✕ Exit</button>
+          )}
         </div>
       </header>
 

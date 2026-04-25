@@ -1,9 +1,7 @@
 import { useMemo, useRef, useEffect } from 'react';
+import type { AudioPeak } from '../../core/types/audio';
 
-export interface AudioPeak {
-  time: number;
-  amplitude: number;
-}
+export type { AudioPeak };
 
 interface AudioWaveformTrackProps {
   duration: number;
