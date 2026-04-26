@@ -81,7 +81,7 @@ export function ClipLyricsRenderer({
         if (clip.muted || clip.text.trim().length === 0) return false;
         const clipAnimation = resolveLyricAnimation(
           animationConfig,
-          layer.animation,
+          layer.animationDefaults ?? layer.animation,
           {
             ...clip.animationOverride,
             transitionIn: clip.transitionIn,
@@ -105,20 +105,20 @@ export function ClipLyricsRenderer({
           ? Math.max(0, Math.min(1, (currentTime - clip.startTime) / duration))
           : 0;
         const zIndex   = layer?.renderSettings?.zIndex;
-        const style = resolveLyricStyle(styleConfig, layer?.style, clip.styleOverride);
+        const style = resolveLyricStyle(styleConfig, layer?.styleDefaults ?? layer?.style, clip.styleOverride);
         const animation = resolveLyricAnimation(
           animationConfig,
-          layer?.animation,
+          layer?.animationDefaults ?? layer?.animation,
           {
             ...clip.animationOverride,
             transitionIn: clip.transitionIn,
             transitionOut: clip.transitionOut
           }
         );
-        const fx = resolveLyricFx(fxConfig, layer?.fx, clip.fxOverride);
+        const fx = resolveLyricFx(fxConfig, layer?.fxDefaults ?? layer?.fx, clip.fxOverride);
         const progressIndicator = resolveClipProgressIndicator(
           progressIndicatorConfig,
-          layer?.progressIndicator,
+          layer?.progressIndicatorDefaults ?? layer?.progressIndicator,
           clip.progressIndicatorOverride
         );
         const isExiting = currentTime > clip.endTime;

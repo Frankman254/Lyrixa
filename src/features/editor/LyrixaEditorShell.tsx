@@ -6,9 +6,19 @@ import { TimelineEditor } from '../timeline-editor/TimelineEditor';
 import { ClipLyricsRenderer } from '../lyrics-view/ClipLyricsRenderer';
 import { LyricsImportPanel } from './LyricsImportPanel';
 import { FloatingPreview } from './FloatingPreview';
+import { FloatingPanel } from '../../shared/components/FloatingPanel';
 import { useLyrixaProject } from './useLyrixaProject';
 import type { SaveStatus } from './useLyrixaProject';
 import type { AudioChannelRole, AudioBandMode } from '../../core/types/audio';
+import type {
+  ClipProgressIndicatorConfig,
+  LyricActiveAnimationPreset,
+  LyricAnimationConfig,
+  LyricFxConfig,
+  LyricFxPreset,
+  LyricVisualStyle
+} from '../../core/types/render';
+import { createProjectExportEnvelope, parseProjectExportEnvelope } from '../../core/project/serialization';
 import { extractBandPeaksFromBlob } from './peakExtraction';
 import './LyrixaEditorShell.css';
 
@@ -31,18 +41,25 @@ export function LyrixaEditorShell() {
     regenerateFromVocals,
     setClips,
     setLayers,
+    setStyleConfig,
+    setAnimationConfig,
+    setFxConfig,
+    setProgressIndicatorConfig,
     setCurrentTime,
     setMasterDuration,
+    importProject,
     resetProject
   } = useLyrixaProject();
 
   const audioEngineRef = useRef<AudioEngineRef>(null);
   const masterFileInputRef = useRef<HTMLInputElement>(null);
   const vocalsFileInputRef = useRef<HTMLInputElement>(null);
+  const projectImportInputRef = useRef<HTMLInputElement>(null);
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [globalPanelOpen, setGlobalPanelOpen] = useState(false);
   const [miniPreviewVisible, setMiniPreviewVisible] = useState(true);
   const [nameEditing, setNameEditing] = useState(false);
   const [draftName, setDraftName] = useState(project.name);
@@ -92,6 +109,7 @@ export function LyrixaEditorShell() {
 
   const openMasterPicker = () => masterFileInputRef.current?.click();
   const openVocalsPicker = () => vocalsFileInputRef.current?.click();
+  const openProjectImportPicker = () => projectImportInputRef.current?.click();
 
   const handleAudioFileSelected = (role: AudioChannelRole) =>
     async (e: ChangeEvent<HTMLInputElement>) => {
@@ -135,9 +153,47 @@ export function LyrixaEditorShell() {
     [getAudioBlob]
   );
 
+  const handleExportProject = useCallback(() => {
+    const envelope = createProjectExportEnvelope(project, {
+      bandMode: safeGetLocalStorage('lyrixa_band_mode') ?? undefined
+    });
+    const blob = new Blob([JSON.stringify(envelope, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const safeName = project.name.trim().replace(/[^a-z0-9-_]+/gi, '-').replace(/^-+|-+$/g, '') || 'lyrixa-project';
+    link.href = url;
+    link.download = `${safeName}.lyrixa.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }, [project]);
+
+  const handleProjectFileSelected = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    try {
+      const envelope = JSON.parse(await file.text());
+      const imported = parseProjectExportEnvelope(envelope);
+      const bandMode = envelope?.project?.uiPreferences?.bandMode;
+      if (typeof bandMode === 'string') {
+        try { window.localStorage.setItem('lyrixa_band_mode', bandMode); } catch { /* ignore */ }
+      }
+      importProject(imported);
+      setIsPlaying(false);
+      setPlaybackTime(imported.currentTime ?? 0);
+      setMiniPreviewVisible(true);
+    } catch (err) {
+      console.error('[Lyrixa] Failed to import project:', err);
+      window.alert(err instanceof Error ? err.message : 'Could not import Lyrixa project.');
+    }
+  };
+
   const effectiveDuration = masterChannel?.duration ?? 60;
   const showMini = miniPreviewVisible && !previewOpen;
   const vocalsAnalysisReady = !!vocalsChannel?.vocalActivity?.length;
+  const vocalsNeedsReload = !!vocalsChannel && !vocalsChannel.objectUrl;
 
   return (
     <div className="lyrixa-shell">
@@ -212,8 +268,27 @@ export function LyrixaEditorShell() {
             style={{ display: 'none' }}
             onChange={handleAudioFileSelected('vocals')}
           />
+          <input
+            ref={projectImportInputRef}
+            type="file"
+            accept=".lyrixa.json,application/json"
+            style={{ display: 'none' }}
+            onChange={handleProjectFileSelected}
+          />
           <button className="ls-btn" onClick={() => setImportOpen(true)}>
-            ✎ Import lyrics
+            Import lyrics
+          </button>
+          <button className="ls-btn" onClick={handleExportProject}>
+            Export Project
+          </button>
+          <button className="ls-btn" onClick={openProjectImportPicker}>
+            Import Project
+          </button>
+          <button
+            className={`ls-btn ${globalPanelOpen ? 'active' : ''}`}
+            onClick={() => setGlobalPanelOpen(value => !value)}
+          >
+            Global Style
           </button>
           {vocalsAnalysisReady && project.normalizedLyrics.length > 0 && (
             <button
@@ -277,6 +352,19 @@ export function LyrixaEditorShell() {
           <div className="ls-reload-actions">
             <button className="ls-btn small" onClick={openMasterPicker}>Reload audio</button>
             <button className="ls-btn ghost small" onClick={() => removeAudio('master')}>Clear</button>
+          </div>
+        </div>
+      )}
+
+      {vocalsNeedsReload && (
+        <div className="ls-reload-banner">
+          <span>
+            Vocals stem needs to be reloaded:{' '}
+            <strong>{vocalsChannel.fileName}</strong>.
+          </span>
+          <div className="ls-reload-actions">
+            <button className="ls-btn small" onClick={openVocalsPicker}>Reload vocals stem</button>
+            <button className="ls-btn ghost small" onClick={() => removeAudio('vocals')}>Clear</button>
           </div>
         </div>
       )}
@@ -354,6 +442,27 @@ export function LyrixaEditorShell() {
         onApply={applyLyrics}
       />
 
+      {globalPanelOpen && (
+        <FloatingPanel
+          storageKey="lyrixa_global_style_panel_pos"
+          defaultPosition={{ x: Math.max(24, window.innerWidth - 340), y: 96 }}
+          width={310}
+          title="Global style"
+          onClose={() => setGlobalPanelOpen(false)}
+        >
+          <GlobalStylePanel
+            styleConfig={project.styleConfig}
+            animationConfig={project.animationConfig}
+            fxConfig={project.fxConfig}
+            progressIndicatorConfig={project.progressIndicatorConfig}
+            onStyleChange={setStyleConfig}
+            onAnimationChange={setAnimationConfig}
+            onFxChange={setFxConfig}
+            onProgressChange={setProgressIndicatorConfig}
+          />
+        </FloatingPanel>
+      )}
+
       {previewOpen && (
         <div className="ls-preview-overlay" onClick={() => setPreviewOpen(false)}>
           <div className="ls-preview-stage" onClick={(e) => e.stopPropagation()}>
@@ -398,4 +507,72 @@ function EmptyLaneHint({ icon, title, description, actionLabel, onAction }: Empt
       <button className="ls-btn primary small" onClick={onAction}>{actionLabel}</button>
     </div>
   );
+}
+
+function GlobalStylePanel({
+  styleConfig,
+  animationConfig,
+  fxConfig,
+  progressIndicatorConfig,
+  onStyleChange,
+  onAnimationChange,
+  onFxChange,
+  onProgressChange
+}: {
+  styleConfig: LyricVisualStyle;
+  animationConfig: LyricAnimationConfig;
+  fxConfig: LyricFxConfig;
+  progressIndicatorConfig: ClipProgressIndicatorConfig;
+  onStyleChange: (next: LyricVisualStyle) => void;
+  onAnimationChange: (next: LyricAnimationConfig) => void;
+  onFxChange: (next: LyricFxConfig) => void;
+  onProgressChange: (next: ClipProgressIndicatorConfig) => void;
+}) {
+  return (
+    <div className="ls-global-panel">
+      <details open className="inspector-section">
+        <summary>Style</summary>
+        <div className="inspector-section-body">
+          <div className="inspector-grid">
+            <label>Font size<input className="form-control form-input" type="number" step="0.1" min={0.5} value={parseFloat(styleConfig.fontSize) || 2.5} onChange={(e) => onStyleChange({ ...styleConfig, fontSize: `${e.target.value}rem` })} /></label>
+            <label>Text color<input className="form-color" type="color" value={toColorInput(styleConfig.textColor)} onChange={(e) => onStyleChange({ ...styleConfig, textColor: e.target.value, activeTextColor: e.target.value })} /></label>
+          </div>
+          <label>Opacity<input className="form-range" type="range" min={0} max={1} step={0.05} value={styleConfig.opacity} onChange={(e) => onStyleChange({ ...styleConfig, opacity: parseFloat(e.target.value) })} /></label>
+          <label>Glow intensity<input className="form-range" type="range" min={0} max={2} step={0.05} value={styleConfig.glowIntensity} onChange={(e) => onStyleChange({ ...styleConfig, glowIntensity: parseFloat(e.target.value) })} /></label>
+          <label>Blur amount<input className="form-range" type="range" min={0} max={16} step={0.5} value={styleConfig.blurAmount} onChange={(e) => onStyleChange({ ...styleConfig, blurAmount: parseFloat(e.target.value) })} /></label>
+        </div>
+      </details>
+      <details className="inspector-section">
+        <summary>Animation</summary>
+        <div className="inspector-section-body">
+          <label>Default active<select className="form-control form-select" value={animationConfig.activeAnimation} onChange={(e) => onAnimationChange({ ...animationConfig, activeAnimation: e.target.value as LyricActiveAnimationPreset })}>{['none', 'pulse', 'glow-pulse', 'breathing', 'shake-light', 'wave', 'flicker'].map(value => <option key={value} value={value}>{value}</option>)}</select></label>
+          <label>Exit linger<input className="form-control form-input" type="number" min={0} step={50} value={animationConfig.exitLingerMs} onChange={(e) => onAnimationChange({ ...animationConfig, exitLingerMs: parseInt(e.target.value, 10) || 0 })} /></label>
+        </div>
+      </details>
+      <details className="inspector-section">
+        <summary>FX</summary>
+        <div className="inspector-section-body">
+          <label>Default FX<select className="form-control form-select" value={fxConfig.preset} onChange={(e) => {
+            const preset = e.target.value as LyricFxPreset;
+            onFxChange({ ...fxConfig, preset, enabled: preset !== 'none' });
+          }}>{['none', 'neon-glow', 'rgb-shift', 'glitch', 'scanline', 'blur-flicker', 'shadow-trail', 'energy-pulse'].map(value => <option key={value} value={value}>{value}</option>)}</select></label>
+          <label>Intensity<input className="form-range" type="range" min={0} max={2} step={0.05} value={fxConfig.intensity} onChange={(e) => onFxChange({ ...fxConfig, intensity: parseFloat(e.target.value), enabled: fxConfig.preset !== 'none' })} /></label>
+          <label className="tl-inline-check"><input type="checkbox" checked={progressIndicatorConfig.enabled} onChange={(e) => onProgressChange({ ...progressIndicatorConfig, enabled: e.target.checked })} />Show progress dot by default</label>
+        </div>
+      </details>
+    </div>
+  );
+}
+
+function safeGetLocalStorage(key: string): string | null {
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function toColorInput(color: string): string {
+  if (/^#[0-9a-f]{6}$/i.test(color)) return color;
+  return '#ffffff';
 }

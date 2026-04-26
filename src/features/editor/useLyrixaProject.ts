@@ -2,7 +2,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { LyrixaProject } from '../../core/types/project';
 import type { LyricClip } from '../../core/types/clip';
 import type { LyricLayer } from '../../core/types/layer';
-import type { LyricVisualStyle, RenderMode } from '../../core/types/render';
+import type {
+  ClipProgressIndicatorConfig,
+  LyricAnimationConfig,
+  LyricFxConfig,
+  LyricVisualStyle,
+  RenderMode
+} from '../../core/types/render';
 import type {
   AudioChannel,
   AudioChannelRole
@@ -73,9 +79,13 @@ export interface UseLyrixaProjectResult {
   updateClip: (clipId: string, patch: Partial<LyricClip>) => void;
   setLayers: (next: LyricLayer[]) => void;
   setStyleConfig: (next: LyricVisualStyle) => void;
+  setAnimationConfig: (next: LyricAnimationConfig) => void;
+  setFxConfig: (next: LyricFxConfig) => void;
+  setProgressIndicatorConfig: (next: ClipProgressIndicatorConfig) => void;
   setCurrentTime: (time: number) => void;
   setRenderMode: (mode: RenderMode) => void;
   setMasterDuration: (seconds: number) => void;
+  importProject: (next: LyrixaProject) => void;
 
   resetProject: () => Promise<void>;
 }
@@ -407,6 +417,18 @@ export function useLyrixaProject(): UseLyrixaProjectResult {
     setProject(p => ({ ...p, styleConfig: next }));
   }, []);
 
+  const setAnimationConfig = useCallback((next: LyricAnimationConfig) => {
+    setProject(p => ({ ...p, animationConfig: next }));
+  }, []);
+
+  const setFxConfig = useCallback((next: LyricFxConfig) => {
+    setProject(p => ({ ...p, fxConfig: next }));
+  }, []);
+
+  const setProgressIndicatorConfig = useCallback((next: ClipProgressIndicatorConfig) => {
+    setProject(p => ({ ...p, progressIndicatorConfig: next }));
+  }, []);
+
   const setCurrentTime = useCallback((time: number) => {
     setProject(p => (p.currentTime === time ? p : { ...p, currentTime: time }));
   }, []);
@@ -434,6 +456,18 @@ export function useLyrixaProject(): UseLyrixaProjectResult {
     await deleteAllProjectAudio(oldId);
   }, []);
 
+  const importProject = useCallback((next: LyrixaProject) => {
+    blobsRef.current = { master: null, vocals: null };
+    setProject(p => {
+      const m = p.audioTracks.master?.objectUrl;
+      const v = p.audioTracks.vocals?.objectUrl;
+      if (m) URL.revokeObjectURL(m);
+      if (v) URL.revokeObjectURL(v);
+      return next;
+    });
+    setAudioNeedsReload(!!next.audioTracks.master);
+  }, []);
+
   return {
     project,
     saveStatus,
@@ -449,9 +483,13 @@ export function useLyrixaProject(): UseLyrixaProjectResult {
     updateClip,
     setLayers,
     setStyleConfig,
+    setAnimationConfig,
+    setFxConfig,
+    setProgressIndicatorConfig,
     setCurrentTime,
     setRenderMode,
     setMasterDuration,
+    importProject,
     resetProject
   };
 }

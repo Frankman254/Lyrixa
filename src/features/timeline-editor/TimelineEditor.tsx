@@ -172,6 +172,7 @@ export function TimelineEditor({
 }: TimelineEditorProps) {
   const [pxPerSecond, setPxPerSecond] = useState(60);
   const [selectedClipIds, setSelectedClipIds] = useState<Set<string>>(() => new Set());
+  const [selectedLayerId, setSelectedLayerId] = useState<string | null>(null);
   const [snapSeconds, setSnapSeconds] = useState(0);
   const [hoveredLayerId, setHoveredLayerId] = useState<string | null>(null);
   const [offsetInput, setOffsetInput] = useState<string>('0');
@@ -228,6 +229,11 @@ export function TimelineEditor({
     () => [...layers].sort((a, b) => a.order - b.order),
     [layers]
   );
+
+  useEffect(() => {
+    if (selectedLayerId && layers.some(layer => layer.id === selectedLayerId)) return;
+    setSelectedLayerId(sortedLayers[0]?.id ?? null);
+  }, [layers, selectedLayerId, sortedLayers]);
 
   const clipsByLayer = useMemo(() => {
     const map = new Map<string, LyricClipModel[]>();
@@ -362,6 +368,7 @@ export function TimelineEditor({
     ) => {
       const clip = clipsRef.current.find(c => c.id === clipId);
       if (!clip) return;
+      setSelectedLayerId(clip.layerId);
 
       if (modifiers.toggle && mode === 'move') {
         // Toggle selection only — no drag.
@@ -548,9 +555,14 @@ export function TimelineEditor({
     return onlyId ? clips.find(c => c.id === onlyId) ?? null : null;
   }, [selectedClipIds, clips]);
 
-  const selectedLayer = useMemo(
+  const selectedClipLayer = useMemo(
     () => selectedClip ? layers.find(l => l.id === selectedClip.layerId) ?? null : null,
     [layers, selectedClip]
+  );
+
+  const selectedLayer = useMemo(
+    () => selectedLayerId ? layers.find(l => l.id === selectedLayerId) ?? null : null,
+    [layers, selectedLayerId]
   );
 
   const updateSelectedClip = (patch: Partial<LyricClipModel>) => {
@@ -588,7 +600,7 @@ export function TimelineEditor({
   const updateLayerStyle = (patch: NonNullable<LyricLayer['style']>) => {
     if (!selectedLayer) return;
     updateSelectedLayer({
-      style: { ...(selectedLayer.style ?? {}), ...patch }
+      styleDefaults: { ...(selectedLayer.styleDefaults ?? selectedLayer.style ?? {}), ...patch }
     });
   };
 
@@ -602,7 +614,7 @@ export function TimelineEditor({
   const updateLayerAnimation = (patch: NonNullable<LyricLayer['animation']>) => {
     if (!selectedLayer) return;
     updateSelectedLayer({
-      animation: { ...(selectedLayer.animation ?? {}), ...patch }
+      animationDefaults: { ...(selectedLayer.animationDefaults ?? selectedLayer.animation ?? {}), ...patch }
     });
   };
 
@@ -740,28 +752,28 @@ export function TimelineEditor({
     : (bandPeaks ?? masterPeaks);
   const hasSelection = selectedClipIds.size > 0;
   const inspectorStyle = selectedClip
-    ? resolveLyricStyle(DEFAULT_LYRIC_STYLE, selectedLayer?.style, selectedClip.styleOverride)
+    ? resolveLyricStyle(DEFAULT_LYRIC_STYLE, selectedClipLayer?.styleDefaults ?? selectedClipLayer?.style, selectedClip.styleOverride)
     : DEFAULT_LYRIC_STYLE;
   const inspectorLayerStyle = selectedLayer
-    ? resolveLyricStyle(DEFAULT_LYRIC_STYLE, selectedLayer.style)
+    ? resolveLyricStyle(DEFAULT_LYRIC_STYLE, selectedLayer.styleDefaults ?? selectedLayer.style)
     : DEFAULT_LYRIC_STYLE;
   const inspectorAnimation = selectedClip
-    ? resolveLyricAnimation(DEFAULT_LYRIC_ANIMATION, selectedLayer?.animation, {
+    ? resolveLyricAnimation(DEFAULT_LYRIC_ANIMATION, selectedClipLayer?.animationDefaults ?? selectedClipLayer?.animation, {
         ...selectedClip.animationOverride,
         transitionIn: selectedClip.transitionIn,
         transitionOut: selectedClip.transitionOut
       })
     : DEFAULT_LYRIC_ANIMATION;
   const inspectorFx = selectedClip
-    ? resolveLyricFx(DEFAULT_LYRIC_FX, selectedLayer?.fx, selectedClip.fxOverride)
+    ? resolveLyricFx(DEFAULT_LYRIC_FX, selectedClipLayer?.fxDefaults ?? selectedClipLayer?.fx, selectedClip.fxOverride)
     : DEFAULT_LYRIC_FX;
   const inspectorLayerFx = selectedLayer
-    ? resolveLyricFx(DEFAULT_LYRIC_FX, selectedLayer.fx)
+    ? resolveLyricFx(DEFAULT_LYRIC_FX, selectedLayer.fxDefaults ?? selectedLayer.fx)
     : DEFAULT_LYRIC_FX;
   const inspectorProgress = selectedClip
     ? resolveClipProgressIndicator(
         DEFAULT_CLIP_PROGRESS_INDICATOR,
-        selectedLayer?.progressIndicator,
+        selectedClipLayer?.progressIndicatorDefaults ?? selectedClipLayer?.progressIndicator,
         selectedClip.progressIndicatorOverride
       )
     : DEFAULT_CLIP_PROGRESS_INDICATOR;
@@ -999,12 +1011,14 @@ export function TimelineEditor({
                 duration={effectiveDuration}
                 trackHeight={TRACK_HEIGHT}
                 selectedClipIds={selectedClipIds}
+                selectedLayer={selectedLayerId === layer.id}
                 isDropTarget={hoveredLayerId === layer.id}
                 laneRef={setLaneRef(layer.id)}
                 onClipPointerDown={handleClipPointerDown}
                 onLayerToggleVisible={toggleLayerVisible}
                 onLayerToggleLocked={toggleLayerLocked}
                 onLayerPositionChange={handleLayerPositionChange}
+                onLayerSelect={setSelectedLayerId}
               />
             ))}
           </div>
@@ -1027,96 +1041,49 @@ export function TimelineEditor({
           onClose={() => setSelectedClipIds(new Set())}
         >
           <div className="tl-inspector-body">
+            <InspectorSection title="Text" defaultOpen>
+              <label>Text<textarea className="form-control form-input" rows={2} value={selectedClip.text} onChange={(e) => updateSelectedClip({ text: e.target.value })} /></label>
+            </InspectorSection>
+
             <InspectorSection title="Timing" defaultOpen>
-              <label>
-                Text
-                <textarea
-                  rows={2}
-                  value={selectedClip.text}
-                  onChange={(e) => updateSelectedClip({ text: e.target.value })}
-                />
-              </label>
               <div className="tl-inspector-row">
                 <label>
                   Start
-                  <input
-                    type="number"
-                    step="0.01"
-                    min={0}
-                    value={Number(selectedClip.startTime.toFixed(2))}
-                    onChange={(e) => {
-                      const next = parseFloat(e.target.value);
-                      if (!Number.isFinite(next)) return;
-                      updateSelectedClip({
-                        startTime: Math.max(0, Math.min(selectedClip.endTime - 0.25, next))
-                      });
-                    }}
-                  />
+                  <input className="form-control form-input" type="number" step="0.01" min={0} value={Number(selectedClip.startTime.toFixed(2))} onChange={(e) => {
+                    const next = parseFloat(e.target.value);
+                    if (!Number.isFinite(next)) return;
+                    updateSelectedClip({ startTime: Math.max(0, Math.min(selectedClip.endTime - 0.25, next)) });
+                  }} />
                 </label>
                 <label>
                   End
-                  <input
-                    type="number"
-                    step="0.01"
-                    min={0}
-                    value={Number(selectedClip.endTime.toFixed(2))}
-                    onChange={(e) => {
-                      const next = parseFloat(e.target.value);
-                      if (!Number.isFinite(next)) return;
-                      updateSelectedClip({
-                        endTime: Math.max(selectedClip.startTime + 0.25, next)
-                      });
-                    }}
-                  />
+                  <input className="form-control form-input" type="number" step="0.01" min={0} value={Number(selectedClip.endTime.toFixed(2))} onChange={(e) => {
+                    const next = parseFloat(e.target.value);
+                    if (!Number.isFinite(next)) return;
+                    updateSelectedClip({ endTime: Math.max(selectedClip.startTime + 0.25, next) });
+                  }} />
                 </label>
               </div>
             </InspectorSection>
 
             <InspectorSection title="Layer" defaultOpen>
               <label>
-                Clip layer
-                <select
-                  value={selectedClip.layerId}
-                  onChange={(e) => updateSelectedClip({ layerId: e.target.value })}
-                >
+                Assigned layer
+                <select className="form-control form-select" value={selectedClip.layerId} onChange={(e) => {
+                  updateSelectedClip({ layerId: e.target.value });
+                  setSelectedLayerId(e.target.value);
+                }}>
                   {layers.map(l => (
                     <option key={l.id} value={l.id}>{l.name}</option>
                   ))}
                 </select>
               </label>
-              {selectedLayer && (
-                <div className="tl-inspector-row">
-                  <label>
-                    Layer type
-                    <select
-                      value={selectedLayer.layerType}
-                      onChange={(e) => updateSelectedLayer({ layerType: e.target.value as LyricLayerType })}
-                    >
-                      {LAYER_TYPE_OPTIONS.map(o => (
-                        <option key={o.value} value={o.value}>{o.label}</option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    Z-index
-                    <input
-                      type="number"
-                      step="1"
-                      value={selectedLayer.renderSettings?.zIndex ?? 0}
-                      onChange={(e) => {
-                        const next = parseInt(e.target.value, 10);
-                        if (Number.isFinite(next)) updateSelectedLayerRenderSettings({ zIndex: next });
-                      }}
-                    />
-                  </label>
-                </div>
-              )}
+            </InspectorSection>
+
+            <InspectorSection title="Position">
               <label>
                 Position override
-                <select
-                  value={selectedClip.position ?? 'center'}
-                  onChange={(e) => updateSelectedClip({ position: e.target.value as ClipPositionPreset })}
-                >
+                <select className="form-control form-select" value={selectedClip.position ?? 'center'} onChange={(e) => updateSelectedClip({ position: e.target.value as ClipPositionPreset })}>
                   <option value="center">Layer default</option>
                   <option value="top">Top</option>
                   <option value="bottom">Bottom</option>
@@ -1128,111 +1095,31 @@ export function TimelineEditor({
               </label>
             </InspectorSection>
 
-            <InspectorSection title="Style" defaultOpen>
-              <div className="tl-inspector-row">
-                <label>
-                  Font size
-                  <input
-                    type="number"
-                    step="0.1"
-                    min={0.5}
-                    value={parseFloat(inspectorStyle.fontSize) || 2.5}
-                    onChange={(e) => updateClipStyleOverride({ fontSize: `${e.target.value}rem` })}
-                  />
-                </label>
-                <label>
-                  Layer size
-                  <input
-                    type="number"
-                    step="0.1"
-                    min={0.5}
-                    value={parseFloat(inspectorLayerStyle.fontSize) || 2.5}
-                    onChange={(e) => updateLayerStyle({ fontSize: `${e.target.value}rem` })}
-                  />
-                </label>
-              </div>
-              <div className="tl-inspector-row">
-                <label>
-                  Text color
-                  <input
-                    type="color"
-                    value={toColorInput(inspectorStyle.textColor)}
-                    onChange={(e) => updateClipStyleOverride({ textColor: e.target.value, activeTextColor: e.target.value })}
-                  />
-                </label>
-                <label>
-                  Layer color
-                  <input
-                    type="color"
-                    value={toColorInput(inspectorLayerStyle.textColor)}
-                    onChange={(e) => updateLayerStyle({ textColor: e.target.value, activeTextColor: e.target.value })}
-                  />
-                </label>
-              </div>
-              <label>
-                Opacity
-                <input
-                  type="range"
-                  min={0}
-                  max={1}
-                  step={0.05}
-                  value={inspectorStyle.opacity}
-                  onChange={(e) => updateClipStyleOverride({ opacity: parseFloat(e.target.value) })}
-                />
-              </label>
-              <label>
-                Glow intensity
-                <input
-                  type="range"
-                  min={0}
-                  max={2}
-                  step={0.05}
-                  value={inspectorStyle.glowIntensity}
-                  onChange={(e) => updateClipStyleOverride({ glowIntensity: parseFloat(e.target.value) })}
-                />
-              </label>
-              <label>
-                Blur amount
-                <input
-                  type="range"
-                  min={0}
-                  max={16}
-                  step={0.5}
-                  value={inspectorStyle.blurAmount}
-                  onChange={(e) => updateClipStyleOverride({ blurAmount: parseFloat(e.target.value) })}
-                />
-              </label>
-              <div className="tl-inspector-row">
-                <label>
-                  Outline width
-                  <input
-                    type="number"
-                    min={0}
-                    max={8}
-                    step={0.25}
-                    value={inspectorStyle.strokeWidth}
-                    onChange={(e) => updateClipStyleOverride({ strokeWidth: parseFloat(e.target.value) || 0 })}
-                  />
-                </label>
-                <label>
-                  Outline color
-                  <input
-                    type="color"
-                    value={toColorInput(inspectorStyle.strokeColor)}
-                    onChange={(e) => updateClipStyleOverride({ strokeColor: e.target.value })}
-                  />
-                </label>
-              </div>
+            <InspectorSection title="Style">
+              <label className="tl-inline-check"><input type="checkbox" checked={!!selectedClip.styleOverride} onChange={(e) => updateSelectedClip({ styleOverride: e.target.checked ? {} : undefined })} />Override layer style</label>
+              {selectedClip.styleOverride && (
+                <>
+                  <div className="tl-inspector-row">
+                    <label>Font size<input className="form-control form-input" type="number" step="0.1" min={0.5} value={parseFloat(inspectorStyle.fontSize) || 2.5} onChange={(e) => updateClipStyleOverride({ fontSize: `${e.target.value}rem` })} /></label>
+                    <label>Text color<input className="form-color" type="color" value={toColorInput(inspectorStyle.textColor)} onChange={(e) => updateClipStyleOverride({ textColor: e.target.value, activeTextColor: e.target.value })} /></label>
+                  </div>
+                  <label>Opacity<input className="form-range" type="range" min={0} max={1} step={0.05} value={inspectorStyle.opacity} onChange={(e) => updateClipStyleOverride({ opacity: parseFloat(e.target.value) })} /></label>
+                  <label>Glow intensity<input className="form-range" type="range" min={0} max={2} step={0.05} value={inspectorStyle.glowIntensity} onChange={(e) => updateClipStyleOverride({ glowIntensity: parseFloat(e.target.value) })} /></label>
+                  <label>Blur amount<input className="form-range" type="range" min={0} max={16} step={0.5} value={inspectorStyle.blurAmount} onChange={(e) => updateClipStyleOverride({ blurAmount: parseFloat(e.target.value) })} /></label>
+                  <div className="tl-inspector-row">
+                    <label>Outline width<input className="form-control form-input" type="number" min={0} max={8} step={0.25} value={inspectorStyle.strokeWidth} onChange={(e) => updateClipStyleOverride({ strokeWidth: parseFloat(e.target.value) || 0 })} /></label>
+                    <label>Outline color<input className="form-color" type="color" value={toColorInput(inspectorStyle.strokeColor)} onChange={(e) => updateClipStyleOverride({ strokeColor: e.target.value })} /></label>
+                  </div>
+                </>
+              )}
             </InspectorSection>
 
             <InspectorSection title="Animation">
+              <label className="tl-inline-check"><input type="checkbox" checked={!!selectedClip.animationOverride} onChange={(e) => updateSelectedClip({ animationOverride: e.target.checked ? {} : undefined })} />Override layer animation</label>
               <div className="tl-inspector-row">
                 <label>
                   In
-                  <select
-                    value={selectedClip.transitionIn}
-                    onChange={(e) => updateSelectedClip({ transitionIn: e.target.value as LyricClipModel['transitionIn'] })}
-                  >
+                  <select className="form-control form-select" value={selectedClip.transitionIn} onChange={(e) => updateSelectedClip({ transitionIn: e.target.value as LyricClipModel['transitionIn'] })}>
                     {TRANSITION_OPTIONS.map(o => (
                       <option key={o.value} value={o.value}>{o.label}</option>
                     ))}
@@ -1240,99 +1127,33 @@ export function TimelineEditor({
                 </label>
                 <label>
                   Out
-                  <select
-                    value={selectedClip.transitionOut}
-                    onChange={(e) => updateSelectedClip({ transitionOut: e.target.value as LyricClipModel['transitionOut'] })}
-                  >
+                  <select className="form-control form-select" value={selectedClip.transitionOut} onChange={(e) => updateSelectedClip({ transitionOut: e.target.value as LyricClipModel['transitionOut'] })}>
                     {TRANSITION_OPTIONS.map(o => (
                       <option key={o.value} value={o.value}>{o.label}</option>
                     ))}
                   </select>
                 </label>
               </div>
-              <label>
-                Active animation
-                <select
-                  value={inspectorAnimation.activeAnimation}
-                  onChange={(e) => updateClipAnimationOverride({ activeAnimation: e.target.value as LyricActiveAnimationPreset })}
-                >
-                  {ACTIVE_ANIMATION_OPTIONS.map(o => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Layer active animation
-                <select
-                  value={resolveLyricAnimation(DEFAULT_LYRIC_ANIMATION, selectedLayer?.animation).activeAnimation}
-                  onChange={(e) => updateLayerAnimation({ activeAnimation: e.target.value as LyricActiveAnimationPreset })}
-                >
-                  {ACTIVE_ANIMATION_OPTIONS.map(o => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
-                  ))}
-                </select>
-              </label>
+              {selectedClip.animationOverride && (
+                <label>Active animation<select className="form-control form-select" value={inspectorAnimation.activeAnimation} onChange={(e) => updateClipAnimationOverride({ activeAnimation: e.target.value as LyricActiveAnimationPreset })}>{ACTIVE_ANIMATION_OPTIONS.map(o => (<option key={o.value} value={o.value}>{o.label}</option>))}</select></label>
+              )}
             </InspectorSection>
 
             <InspectorSection title="FX">
-              <label>
-                FX preset
-                <select
-                  value={inspectorFx.preset}
-                  onChange={(e) => {
+              <label className="tl-inline-check"><input type="checkbox" checked={!!selectedClip.fxOverride} onChange={(e) => updateSelectedClip({ fxOverride: e.target.checked ? {} : undefined })} />Override layer FX</label>
+              {selectedClip.fxOverride && (
+                <>
+                  <label>FX preset<select className="form-control form-select" value={inspectorFx.preset} onChange={(e) => {
                     const preset = e.target.value as LyricFxPreset;
                     updateClipFxOverride({ preset, enabled: preset !== 'none' });
-                  }}
-                >
-                  {FX_OPTIONS.map(o => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Layer FX preset
-                <select
-                  value={inspectorLayerFx.preset}
-                  onChange={(e) => {
-                    const preset = e.target.value as LyricFxPreset;
-                    updateSelectedLayer({ fx: { ...(selectedLayer?.fx ?? {}), preset, enabled: preset !== 'none' } });
-                  }}
-                >
-                  {FX_OPTIONS.map(o => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                FX intensity
-                <input
-                  type="range"
-                  min={0}
-                  max={2}
-                  step={0.05}
-                  value={inspectorFx.intensity}
-                  onChange={(e) => updateClipFxOverride({ intensity: parseFloat(e.target.value), enabled: inspectorFx.preset !== 'none' })}
-                />
-              </label>
-              <label>
-                Layer FX intensity
-                <input
-                  type="range"
-                  min={0}
-                  max={2}
-                  step={0.05}
-                  value={inspectorLayerFx.intensity}
-                  onChange={(e) => updateSelectedLayer({ fx: { ...(selectedLayer?.fx ?? {}), intensity: parseFloat(e.target.value), enabled: inspectorLayerFx.preset !== 'none' } })}
-                />
-              </label>
-              <label className="tl-inline-check">
-                <input
-                  type="checkbox"
-                  checked={inspectorProgress.enabled}
-                  onChange={(e) => updateClipProgressOverride({ enabled: e.target.checked })}
-                />
-                Show clip progress dot
-              </label>
+                  }}>{FX_OPTIONS.map(o => (<option key={o.value} value={o.value}>{o.label}</option>))}</select></label>
+                  <label>FX intensity<input className="form-range" type="range" min={0} max={2} step={0.05} value={inspectorFx.intensity} onChange={(e) => updateClipFxOverride({ intensity: parseFloat(e.target.value), enabled: inspectorFx.preset !== 'none' })} /></label>
+                </>
+              )}
+              <label className="tl-inline-check"><input type="checkbox" checked={!!selectedClip.progressIndicatorOverride} onChange={(e) => updateSelectedClip({ progressIndicatorOverride: e.target.checked ? { enabled: true } : undefined })} />Override progress dot</label>
+              {selectedClip.progressIndicatorOverride && (
+                <label className="tl-inline-check"><input type="checkbox" checked={inspectorProgress.enabled} onChange={(e) => updateClipProgressOverride({ enabled: e.target.checked })} />Show clip progress dot</label>
+              )}
             </InspectorSection>
 
             <InspectorSection title="Advanced">
@@ -1365,6 +1186,73 @@ export function TimelineEditor({
               >
                 Clear clip overrides
               </button>
+            </InspectorSection>
+          </div>
+        </FloatingPanel>
+      )}
+
+      {selectedLayer && (
+        <FloatingPanel
+          storageKey="lyrixa_layer_inspector_pos"
+          defaultPosition={{ x: window.innerWidth - 620, y: 120 }}
+          width={300}
+          title="Layer inspector"
+          onClose={() => setSelectedLayerId(null)}
+        >
+          <div className="tl-inspector-body">
+            <InspectorSection title="Layer" defaultOpen>
+              <label>Layer type<select className="form-control form-select" value={selectedLayer.layerType} onChange={(e) => updateSelectedLayer({ layerType: e.target.value as LyricLayerType })}>{LAYER_TYPE_OPTIONS.map(o => (<option key={o.value} value={o.value}>{o.label}</option>))}</select></label>
+              <div className="tl-inspector-row">
+                <label className="tl-inline-check"><input type="checkbox" checked={selectedLayer.visible} onChange={(e) => updateSelectedLayer({ visible: e.target.checked })} />Visible</label>
+                <label className="tl-inline-check"><input type="checkbox" checked={selectedLayer.locked} onChange={(e) => updateSelectedLayer({ locked: e.target.checked })} />Locked</label>
+              </div>
+              <label>Z-index<input className="form-control form-input" type="number" step="1" value={selectedLayer.renderSettings?.zIndex ?? 0} onChange={(e) => {
+                const next = parseInt(e.target.value, 10);
+                if (Number.isFinite(next)) updateSelectedLayerRenderSettings({ zIndex: next });
+              }} /></label>
+            </InspectorSection>
+
+            <InspectorSection title="Position" defaultOpen>
+              <label>Default position<select className="form-control form-select" value={selectedLayer.renderSettings?.positionPreset ?? 'center'} onChange={(e) => updateSelectedLayerRenderSettings({ positionPreset: e.target.value as ClipPositionPreset })}>
+                <option value="center">Center</option>
+                <option value="top">Top</option>
+                <option value="bottom">Bottom</option>
+                <option value="top-left">Top left</option>
+                <option value="top-right">Top right</option>
+                <option value="bottom-left">Bottom left</option>
+                <option value="bottom-right">Bottom right</option>
+              </select></label>
+            </InspectorSection>
+
+            <InspectorSection title="Style" defaultOpen>
+              <div className="tl-inspector-row">
+                <label>Font size<input className="form-control form-input" type="number" step="0.1" min={0.5} value={parseFloat(inspectorLayerStyle.fontSize) || 2.5} onChange={(e) => updateLayerStyle({ fontSize: `${e.target.value}rem` })} /></label>
+                <label>Text color<input className="form-color" type="color" value={toColorInput(inspectorLayerStyle.textColor)} onChange={(e) => updateLayerStyle({ textColor: e.target.value, activeTextColor: e.target.value })} /></label>
+              </div>
+              <label>Opacity<input className="form-range" type="range" min={0} max={1} step={0.05} value={inspectorLayerStyle.opacity} onChange={(e) => updateLayerStyle({ opacity: parseFloat(e.target.value) })} /></label>
+              <label>Glow intensity<input className="form-range" type="range" min={0} max={2} step={0.05} value={inspectorLayerStyle.glowIntensity} onChange={(e) => updateLayerStyle({ glowIntensity: parseFloat(e.target.value) })} /></label>
+              <label>Blur amount<input className="form-range" type="range" min={0} max={16} step={0.5} value={inspectorLayerStyle.blurAmount} onChange={(e) => updateLayerStyle({ blurAmount: parseFloat(e.target.value) })} /></label>
+              <div className="tl-inspector-row">
+                <label>Outline width<input className="form-control form-input" type="number" min={0} max={8} step={0.25} value={inspectorLayerStyle.strokeWidth} onChange={(e) => updateLayerStyle({ strokeWidth: parseFloat(e.target.value) || 0 })} /></label>
+                <label>Outline color<input className="form-color" type="color" value={toColorInput(inspectorLayerStyle.strokeColor)} onChange={(e) => updateLayerStyle({ strokeColor: e.target.value })} /></label>
+              </div>
+            </InspectorSection>
+
+            <InspectorSection title="Animation">
+              <label>Default active animation<select className="form-control form-select" value={resolveLyricAnimation(DEFAULT_LYRIC_ANIMATION, selectedLayer.animationDefaults ?? selectedLayer.animation).activeAnimation} onChange={(e) => updateLayerAnimation({ activeAnimation: e.target.value as LyricActiveAnimationPreset })}>{ACTIVE_ANIMATION_OPTIONS.map(o => (<option key={o.value} value={o.value}>{o.label}</option>))}</select></label>
+              <div className="tl-inspector-row">
+                <label>In<select className="form-control form-select" value={resolveLyricAnimation(DEFAULT_LYRIC_ANIMATION, selectedLayer.animationDefaults ?? selectedLayer.animation).transitionIn} onChange={(e) => updateLayerAnimation({ transitionIn: e.target.value as LyricTransitionPreset })}>{TRANSITION_OPTIONS.map(o => (<option key={o.value} value={o.value}>{o.label}</option>))}</select></label>
+                <label>Out<select className="form-control form-select" value={resolveLyricAnimation(DEFAULT_LYRIC_ANIMATION, selectedLayer.animationDefaults ?? selectedLayer.animation).transitionOut} onChange={(e) => updateLayerAnimation({ transitionOut: e.target.value as LyricTransitionPreset })}>{TRANSITION_OPTIONS.map(o => (<option key={o.value} value={o.value}>{o.label}</option>))}</select></label>
+              </div>
+            </InspectorSection>
+
+            <InspectorSection title="FX">
+              <label>Default FX<select className="form-control form-select" value={inspectorLayerFx.preset} onChange={(e) => {
+                const preset = e.target.value as LyricFxPreset;
+                updateSelectedLayer({ fxDefaults: { ...(selectedLayer.fxDefaults ?? selectedLayer.fx ?? {}), preset, enabled: preset !== 'none' } });
+              }}>{FX_OPTIONS.map(o => (<option key={o.value} value={o.value}>{o.label}</option>))}</select></label>
+              <label>FX intensity<input className="form-range" type="range" min={0} max={2} step={0.05} value={inspectorLayerFx.intensity} onChange={(e) => updateSelectedLayer({ fxDefaults: { ...(selectedLayer.fxDefaults ?? selectedLayer.fx ?? {}), intensity: parseFloat(e.target.value), enabled: inspectorLayerFx.preset !== 'none' } })} /></label>
+              <label className="tl-inline-check"><input type="checkbox" checked={resolveClipProgressIndicator(DEFAULT_CLIP_PROGRESS_INDICATOR, selectedLayer.progressIndicatorDefaults ?? selectedLayer.progressIndicator).enabled} onChange={(e) => updateSelectedLayer({ progressIndicatorDefaults: { ...(selectedLayer.progressIndicatorDefaults ?? selectedLayer.progressIndicator ?? {}), enabled: e.target.checked } })} />Show progress dot by default</label>
             </InspectorSection>
           </div>
         </FloatingPanel>

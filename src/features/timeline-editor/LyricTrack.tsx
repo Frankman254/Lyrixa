@@ -20,6 +20,7 @@ interface LyricTrackProps {
   duration: number;
   trackHeight: number;
   selectedClipIds: ReadonlySet<string>;
+  selectedLayer?: boolean;
   /** True when a drag is currently hovering this lane and a drop here is legal. */
   isDropTarget?: boolean;
   laneRef?: (el: HTMLDivElement | null) => void;
@@ -33,6 +34,7 @@ interface LyricTrackProps {
   onLayerToggleVisible: (layerId: string) => void;
   onLayerToggleLocked: (layerId: string) => void;
   onLayerPositionChange: (layerId: string, preset: ClipPositionPreset) => void;
+  onLayerSelect: (layerId: string) => void;
 }
 
 export function LyricTrack({
@@ -42,26 +44,35 @@ export function LyricTrack({
   duration,
   trackHeight,
   selectedClipIds,
+  selectedLayer = false,
   isDropTarget = false,
   laneRef,
   onClipPointerDown,
   onLayerToggleVisible,
   onLayerToggleLocked,
-  onLayerPositionChange
+  onLayerPositionChange,
+  onLayerSelect
 }: LyricTrackProps) {
   const totalWidth = Math.max(duration, 1) * pxPerSecond;
   const trackClass = [
     'tl-track',
     layer.locked ? 'locked' : '',
     layer.visible ? '' : 'hidden',
-    isDropTarget ? 'drop-target' : ''
+    isDropTarget ? 'drop-target' : '',
+    selectedLayer ? 'selected-layer' : ''
   ].filter(Boolean).join(' ');
 
   const currentPos = layer.renderSettings?.positionPreset ?? 'center';
 
   return (
     <div className={trackClass}>
-      <div className="tl-track-header" style={{ borderLeftColor: layer.color }}>
+      <div
+        className="tl-track-header"
+        style={{ borderLeftColor: layer.color }}
+        onClick={() => onLayerSelect(layer.id)}
+        role="button"
+        tabIndex={0}
+      >
         <div className="tl-track-title">
           <span className="tl-track-swatch" style={{ background: layer.color }} />
           <span className="tl-track-name">{layer.name}</span>

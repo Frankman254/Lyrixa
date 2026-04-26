@@ -2,8 +2,7 @@ import type { LyrixaProject, LyrixaTrack } from '../../core/types/project';
 import type { AudioChannel, ProjectAudioTracks } from '../../core/types/audio';
 import { createEmptyAudioTracks } from '../../core/types/audio';
 import { createDefaultLayers } from '../../core/types/layer';
-import type { LyricLayer } from '../../core/types/layer';
-import type { LyricClip } from '../../core/types/clip';
+import { normalizeClips, normalizeLayers, normalizeProject } from '../../core/project/serialization';
 import {
   DEFAULT_CLIP_PROGRESS_INDICATOR,
   DEFAULT_LYRIC_ANIMATION,
@@ -144,14 +143,8 @@ export function loadProject(): HydratedProject {
 }
 
 function rehydrateV2(persisted: PersistedProject): LyrixaProject {
-  return {
+  return normalizeProject({
     ...persisted,
-    layers: normalizeLayers(persisted.layers),
-    clips: normalizeClips(persisted.clips),
-    styleConfig: resolveLyricStyle(persisted.styleConfig),
-    animationConfig: resolveLyricAnimation(persisted.animationConfig),
-    fxConfig: resolveLyricFx(persisted.fxConfig),
-    progressIndicatorConfig: resolveClipProgressIndicator(persisted.progressIndicatorConfig),
     audioTracks: {
       master: persisted.audioTracks?.master
         ? { ...persisted.audioTracks.master, objectUrl: undefined }
@@ -160,7 +153,7 @@ function rehydrateV2(persisted: PersistedProject): LyrixaProject {
         ? { ...persisted.audioTracks.vocals, objectUrl: undefined }
         : null
     }
-  };
+  });
 }
 
 function migrateV1(legacy: LegacyV1Project): LyrixaProject {
@@ -189,42 +182,6 @@ function migrateV1(legacy: LegacyV1Project): LyrixaProject {
     currentTime: legacy.currentTime ?? 0,
     renderMode: legacy.renderMode ?? 'editor'
   };
-}
-
-function normalizeLayers(layers: LyricLayer[] | undefined): LyricLayer[] {
-  const defaults = createDefaultLayers();
-  const byId = new Map(defaults.map(layer => [layer.id, layer]));
-  const source = layers?.length ? layers : defaults;
-
-  return source.map((layer, index) => {
-    const fallback = byId.get(layer.id);
-    return {
-      ...fallback,
-      ...layer,
-      layerType: layer.layerType ?? fallback?.layerType ?? 'lyrics',
-      order: layer.order ?? fallback?.order ?? index,
-      visible: layer.visible ?? true,
-      locked: layer.locked ?? false,
-      renderSettings: {
-        ...fallback?.renderSettings,
-        ...layer.renderSettings,
-        positionPreset: layer.renderSettings?.positionPreset ?? fallback?.renderSettings?.positionPreset ?? 'center'
-      },
-      style: layer.style ?? fallback?.style,
-      animation: layer.animation ?? fallback?.animation,
-      fx: layer.fx ?? fallback?.fx,
-      progressIndicator: layer.progressIndicator ?? fallback?.progressIndicator
-    };
-  });
-}
-
-function normalizeClips(clips: LyricClip[] | undefined): LyricClip[] {
-  return (clips ?? []).map(clip => ({
-    ...clip,
-    transitionIn: clip.transitionIn ?? DEFAULT_LYRIC_ANIMATION.transitionIn,
-    transitionOut: clip.transitionOut ?? DEFAULT_LYRIC_ANIMATION.transitionOut,
-    position: clip.position ?? 'center'
-  }));
 }
 
 /**

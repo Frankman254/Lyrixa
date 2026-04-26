@@ -46,9 +46,17 @@ export interface LyricLayer {
    */
   renderSettings?: LayerRenderSettings;
   /** Defaults applied to clips on this layer after project-level defaults. */
+  styleDefaults?: Partial<LyricVisualStyle>;
+  animationDefaults?: Partial<LyricAnimationConfig>;
+  fxDefaults?: Partial<LyricFxConfig>;
+  progressIndicatorDefaults?: Partial<ClipProgressIndicatorConfig>;
+  /** @deprecated Use styleDefaults. Kept for older saved projects. */
   style?: Partial<LyricVisualStyle>;
+  /** @deprecated Use animationDefaults. Kept for older saved projects. */
   animation?: Partial<LyricAnimationConfig>;
+  /** @deprecated Use fxDefaults. Kept for older saved projects. */
   fx?: Partial<LyricFxConfig>;
+  /** @deprecated Use progressIndicatorDefaults. Kept for older saved projects. */
   progressIndicator?: Partial<ClipProgressIndicatorConfig>;
 }
 
@@ -67,7 +75,7 @@ export function createDefaultLayers(): LyricLayer[] {
       locked: false,
       order: 0,
       renderSettings: { positionPreset: 'bottom', textAlign: 'center', zIndex: 20 },
-      style: { fontSize: '2.8rem', fontWeight: '800', textColor: '#ffffff' }
+      styleDefaults: { fontSize: '2.8rem', fontWeight: '800', textColor: '#ffffff' }
     },
     {
       id: BACKING_LAYER_ID,
@@ -78,7 +86,7 @@ export function createDefaultLayers(): LyricLayer[] {
       locked: false,
       order: 1,
       renderSettings: { positionPreset: 'top', textAlign: 'center', zIndex: 15 },
-      style: {
+      styleDefaults: {
         fontSize: '1.55rem',
         fontWeight: '700',
         textColor: 'rgba(200, 218, 255, 0.82)',
@@ -95,7 +103,7 @@ export function createDefaultLayers(): LyricLayer[] {
       locked: false,
       order: 2,
       renderSettings: { positionPreset: 'top-right', textAlign: 'right', zIndex: 30 },
-      style: {
+      styleDefaults: {
         fontSize: '1.15rem',
         fontWeight: '900',
         textColor: '#ffd29c',
@@ -105,14 +113,14 @@ export function createDefaultLayers(): LyricLayer[] {
         glowColor: '#ff9d45',
         glowIntensity: 0.9
       },
-      animation: {
+      animationDefaults: {
         transitionIn: 'glitch-in',
         transitionOut: 'glitch-out',
         activeAnimation: 'flicker',
         durationMs: 260,
         exitLingerMs: 520
       },
-      fx: {
+      fxDefaults: {
         enabled: true,
         preset: 'rgb-shift',
         intensity: 0.5,

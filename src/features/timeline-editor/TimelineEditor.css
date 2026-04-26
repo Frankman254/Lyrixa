@@ -382,6 +382,13 @@
   border-left-color: #3b8bff !important;
 }
 
+.tl-track.selected-layer .tl-track-header {
+  background: rgba(46, 122, 251, 0.14);
+  box-shadow:
+    4px 0 8px rgba(0, 0, 0, 0.25),
+    inset 0 0 0 1px rgba(59, 139, 255, 0.22);
+}
+
 .tl-track-header {
   position: sticky;
   left: 0;
@@ -745,4 +752,25 @@
   flex-direction: row;
   align-items: center;
   gap: 8px;
+}
+
+.tl-inspector-body .form-control,
+.tl-inspector-body .form-select,
+.tl-inspector-body .form-input {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.035));
+  border: 1px solid rgba(143, 173, 230, 0.18);
+  color: #e6e9f2;
+  border-radius: 6px;
+}
+
+.tl-inspector-body .form-color {
+  border-radius: 6px;
+  border-color: rgba(143, 173, 230, 0.18);
+}
+
+.tl-inspector-body select option,
+.tl-snap select option,
+.tl-track-pos-select option {
+  background: #11141d;
+  color: #e6e9f2;
 }
