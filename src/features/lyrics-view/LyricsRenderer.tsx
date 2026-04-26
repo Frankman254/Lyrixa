@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import type { TimelineSnapshot, TimelineEntry } from '../../core/types/timeline';
 import type { LyricLine } from '../../core/types/lyrics';
 import type { LyricVisualStyle } from '../../core/types/render';
-import { DEFAULT_LYRIC_STYLE } from '../../core/types/render';
+import { DEFAULT_LYRIC_STYLE, resolveLyricStyle } from '../../core/types/render';
 import './LyricsRenderer.css';
 
 interface LyricsRendererProps {
@@ -29,20 +29,26 @@ export function LyricsRenderer({ entries, snapshot, styleConfig = DEFAULT_LYRIC_
   }, [snapshot.activeIndex]);
 
   const isInstrumental = snapshot.phase === 'instrumental-gap';
+  const resolvedStyle = resolveLyricStyle(styleConfig);
 
   // Construct Custom CSS Properties from Style Config
   const cssVariables = {
-    '--lyric-color-primary': styleConfig.textColor,
-    '--lyric-color-active': styleConfig.activeTextColor,
-    '--lyric-color-secondary': styleConfig.secondaryTextColor,
-    '--lyric-glow': styleConfig.glowColor,
-    '--lyric-shadow-intensity': styleConfig.shadowIntensity,
-    '--lyric-blur': `${styleConfig.blurAmount}px`,
-    '--lyric-font-size': styleConfig.fontSize,
-    '--lyric-font-weight': styleConfig.fontWeight,
-    '--lyric-letter-spacing': styleConfig.letterSpacing,
-    '--lyric-line-spacing': styleConfig.lineSpacing,
-    '--lyric-alignment': styleConfig.alignment,
+    '--lyric-color-primary': resolvedStyle.textColor,
+    '--lyric-color-active': resolvedStyle.activeTextColor,
+    '--lyric-color-secondary': resolvedStyle.secondaryTextColor,
+    '--lyric-glow': resolvedStyle.glowColor,
+    '--lyric-glow-intensity': resolvedStyle.glowIntensity,
+    '--lyric-shadow-intensity': resolvedStyle.shadowIntensity,
+    '--lyric-blur': `${resolvedStyle.blurAmount}px`,
+    '--lyric-font-size': resolvedStyle.fontSize,
+    '--lyric-font-weight': resolvedStyle.fontWeight,
+    '--lyric-font-family': resolvedStyle.fontFamily,
+    '--lyric-letter-spacing': resolvedStyle.letterSpacing,
+    '--lyric-line-spacing': resolvedStyle.lineHeight,
+    '--lyric-alignment': resolvedStyle.alignment,
+    '--lyric-opacity': resolvedStyle.opacity,
+    '--lyric-stroke-color': resolvedStyle.strokeColor,
+    '--lyric-stroke-width': `${resolvedStyle.strokeWidth}px`,
   } as React.CSSProperties;
 
   return (
@@ -66,7 +72,7 @@ export function LyricsRenderer({ entries, snapshot, styleConfig = DEFAULT_LYRIC_
         if (isUpcoming) containerClasses += ' upcoming';
         if (isPast) containerClasses += ' past';
         if (isEmpty) containerClasses += ' empty';
-        if (isActive && styleConfig.backgroundEmphasis && !isInstrumental) containerClasses += ' emphasize-bg';
+        if (isActive && (resolvedStyle.backgroundEmphasis || resolvedStyle.backgroundPill) && !isInstrumental) containerClasses += ' emphasize-bg';
 
         return (
           <div

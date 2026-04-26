@@ -2,10 +2,21 @@ import type { LyrixaProject, LyrixaTrack } from '../../core/types/project';
 import type { AudioChannel, ProjectAudioTracks } from '../../core/types/audio';
 import { createEmptyAudioTracks } from '../../core/types/audio';
 import { createDefaultLayers } from '../../core/types/layer';
-import { DEFAULT_LYRIC_STYLE } from '../../core/types/render';
+import type { LyricLayer } from '../../core/types/layer';
+import type { LyricClip } from '../../core/types/clip';
+import {
+  DEFAULT_CLIP_PROGRESS_INDICATOR,
+  DEFAULT_LYRIC_ANIMATION,
+  DEFAULT_LYRIC_FX,
+  DEFAULT_LYRIC_STYLE,
+  resolveClipProgressIndicator,
+  resolveLyricAnimation,
+  resolveLyricFx,
+  resolveLyricStyle
+} from '../../core/types/render';
 
 const STORAGE_KEY = 'lyrixa:project:v1';
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 export interface HydratedProject {
   project: LyrixaProject;
@@ -48,6 +59,9 @@ interface LegacyV1Project {
   layers?: LyrixaProject['layers'];
   clips: LyrixaProject['clips'];
   styleConfig?: LyrixaProject['styleConfig'];
+  animationConfig?: LyrixaProject['animationConfig'];
+  fxConfig?: LyrixaProject['fxConfig'];
+  progressIndicatorConfig?: LyrixaProject['progressIndicatorConfig'];
   currentTime: number;
   renderMode: LyrixaProject['renderMode'];
 }
@@ -62,6 +76,9 @@ export function createEmptyProject(): LyrixaProject {
     layers: createDefaultLayers(),
     clips: [],
     styleConfig: { ...DEFAULT_LYRIC_STYLE },
+    animationConfig: { ...DEFAULT_LYRIC_ANIMATION },
+    fxConfig: { ...DEFAULT_LYRIC_FX },
+    progressIndicatorConfig: { ...DEFAULT_CLIP_PROGRESS_INDICATOR },
     currentTime: 0,
     renderMode: 'editor'
   };
@@ -101,7 +118,7 @@ export function loadProject(): HydratedProject {
       return { project: createEmptyProject(), audioNeedsReload: false };
     }
 
-    if (envelope.version === SCHEMA_VERSION) {
+    if (envelope.version === SCHEMA_VERSION || envelope.version === 2) {
       const v2 = envelope as PersistedEnvelope;
       return {
         project: rehydrateV2(v2.project),
@@ -129,8 +146,12 @@ export function loadProject(): HydratedProject {
 function rehydrateV2(persisted: PersistedProject): LyrixaProject {
   return {
     ...persisted,
-    layers: persisted.layers?.length ? persisted.layers : createDefaultLayers(),
-    styleConfig: persisted.styleConfig ?? { ...DEFAULT_LYRIC_STYLE },
+    layers: normalizeLayers(persisted.layers),
+    clips: normalizeClips(persisted.clips),
+    styleConfig: resolveLyricStyle(persisted.styleConfig),
+    animationConfig: resolveLyricAnimation(persisted.animationConfig),
+    fxConfig: resolveLyricFx(persisted.fxConfig),
+    progressIndicatorConfig: resolveClipProgressIndicator(persisted.progressIndicatorConfig),
     audioTracks: {
       master: persisted.audioTracks?.master
         ? { ...persisted.audioTracks.master, objectUrl: undefined }
@@ -159,12 +180,51 @@ function migrateV1(legacy: LegacyV1Project): LyrixaProject {
     audioTracks,
     rawLyricsText: legacy.rawLyricsText ?? '',
     normalizedLyrics: legacy.normalizedLyrics ?? [],
-    layers: legacy.layers?.length ? legacy.layers : createDefaultLayers(),
-    clips: legacy.clips ?? [],
-    styleConfig: legacy.styleConfig ?? { ...DEFAULT_LYRIC_STYLE },
+    layers: normalizeLayers(legacy.layers),
+    clips: normalizeClips(legacy.clips),
+    styleConfig: resolveLyricStyle(legacy.styleConfig),
+    animationConfig: resolveLyricAnimation(legacy.animationConfig),
+    fxConfig: resolveLyricFx(legacy.fxConfig),
+    progressIndicatorConfig: resolveClipProgressIndicator(legacy.progressIndicatorConfig),
     currentTime: legacy.currentTime ?? 0,
     renderMode: legacy.renderMode ?? 'editor'
   };
+}
+
+function normalizeLayers(layers: LyricLayer[] | undefined): LyricLayer[] {
+  const defaults = createDefaultLayers();
+  const byId = new Map(defaults.map(layer => [layer.id, layer]));
+  const source = layers?.length ? layers : defaults;
+
+  return source.map((layer, index) => {
+    const fallback = byId.get(layer.id);
+    return {
+      ...fallback,
+      ...layer,
+      layerType: layer.layerType ?? fallback?.layerType ?? 'lyrics',
+      order: layer.order ?? fallback?.order ?? index,
+      visible: layer.visible ?? true,
+      locked: layer.locked ?? false,
+      renderSettings: {
+        ...fallback?.renderSettings,
+        ...layer.renderSettings,
+        positionPreset: layer.renderSettings?.positionPreset ?? fallback?.renderSettings?.positionPreset ?? 'center'
+      },
+      style: layer.style ?? fallback?.style,
+      animation: layer.animation ?? fallback?.animation,
+      fx: layer.fx ?? fallback?.fx,
+      progressIndicator: layer.progressIndicator ?? fallback?.progressIndicator
+    };
+  });
+}
+
+function normalizeClips(clips: LyricClip[] | undefined): LyricClip[] {
+  return (clips ?? []).map(clip => ({
+    ...clip,
+    transitionIn: clip.transitionIn ?? DEFAULT_LYRIC_ANIMATION.transitionIn,
+    transitionOut: clip.transitionOut ?? DEFAULT_LYRIC_ANIMATION.transitionOut,
+    position: clip.position ?? 'center'
+  }));
 }
 
 /**

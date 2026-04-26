@@ -1,4 +1,10 @@
-import type { LyricVisualStyle } from './render';
+import type {
+  ClipProgressIndicatorConfig,
+  LyricAnimationConfig,
+  LyricTransitionPreset,
+  LyricFxConfig,
+  LyricVisualStyle
+} from './render';
 
 /**
  * Named positional presets used by the preview renderer.
@@ -21,14 +27,7 @@ export interface ClipCoordinates {
 }
 
 /** Named transition presets applied on clip enter/exit. */
-export type ClipTransition =
-  | 'none'
-  | 'fade'
-  | 'slide-up'
-  | 'slide-down'
-  | 'zoom-in'
-  | 'zoom-out'
-  | 'blur-in';
+export type ClipTransition = LyricTransitionPreset;
 
 /**
  * Authoring unit of the DAW-style timeline editor.
@@ -53,6 +52,12 @@ export interface LyricClip {
   styleId?: string;
   /** Per-clip overrides applied on top of the shared style. */
   styleOverride?: Partial<LyricVisualStyle>;
+  /** Per-clip animation overrides applied on top of layer/project defaults. */
+  animationOverride?: Partial<LyricAnimationConfig>;
+  /** Per-clip FX overrides applied on top of layer/project defaults. */
+  fxOverride?: Partial<LyricFxConfig>;
+  /** Per-clip progress cursor override. */
+  progressIndicatorOverride?: Partial<ClipProgressIndicatorConfig>;
 
   transitionIn: ClipTransition;
   transitionOut: ClipTransition;

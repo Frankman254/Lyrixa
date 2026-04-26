@@ -1,6 +1,12 @@
 import type { LyricClip } from './clip';
 import type { LyricLayer } from './layer';
-import type { LyricVisualStyle, RenderMode } from './render';
+import type {
+  ClipProgressIndicatorConfig,
+  LyricAnimationConfig,
+  LyricFxConfig,
+  LyricVisualStyle,
+  RenderMode
+} from './render';
 import type { AudioPeak, ProjectAudioTracks } from './audio';
 
 /**
@@ -36,6 +42,9 @@ export interface LyrixaProject {
   layers: LyricLayer[];
   clips: LyricClip[];
   styleConfig: LyricVisualStyle;
+  animationConfig: LyricAnimationConfig;
+  fxConfig: LyricFxConfig;
+  progressIndicatorConfig: ClipProgressIndicatorConfig;
   currentTime: number;
   renderMode: RenderMode;
 }

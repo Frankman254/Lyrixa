@@ -1,7 +1,12 @@
 import { useMemo } from 'react';
 import type { LyricClip } from '../../core/types/clip';
 import type { LyricLayer } from '../../core/types/layer';
-import type { LyricVisualStyle } from '../../core/types/render';
+import type {
+  ClipProgressIndicatorConfig,
+  LyricAnimationConfig,
+  LyricFxConfig,
+  LyricVisualStyle
+} from '../../core/types/render';
 import { ClipLyricsRenderer } from '../lyrics-view/ClipLyricsRenderer';
 
 interface MiniPreviewProps {
@@ -9,6 +14,9 @@ interface MiniPreviewProps {
   layers: LyricLayer[];
   currentTime: number;
   styleConfig: LyricVisualStyle;
+  animationConfig: LyricAnimationConfig;
+  fxConfig: LyricFxConfig;
+  progressIndicatorConfig: ClipProgressIndicatorConfig;
   onExpand: () => void;
   onClose: () => void;
 }
@@ -23,6 +31,9 @@ export function MiniPreview({
   layers,
   currentTime,
   styleConfig,
+  animationConfig,
+  fxConfig,
+  progressIndicatorConfig,
   onExpand,
   onClose
 }: MiniPreviewProps) {
@@ -54,6 +65,9 @@ export function MiniPreview({
           layers={layers}
           currentTime={currentTime}
           styleConfig={miniStyle}
+          animationConfig={animationConfig}
+          fxConfig={fxConfig}
+          progressIndicatorConfig={progressIndicatorConfig}
         />
       </div>
     </div>

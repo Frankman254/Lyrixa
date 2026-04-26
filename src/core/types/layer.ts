@@ -1,4 +1,12 @@
 import type { ClipPositionPreset } from './clip';
+import type {
+  ClipProgressIndicatorConfig,
+  LyricAnimationConfig,
+  LyricFxConfig,
+  LyricVisualStyle
+} from './render';
+
+export type LyricLayerType = 'lyrics' | 'backing' | 'fx' | 'annotation';
 
 /**
  * Controls where a layer's clips appear in the preview renderer.
@@ -22,6 +30,8 @@ export interface LayerRenderSettings {
 export interface LyricLayer {
   id: string;
   name: string;
+  /** Semantic role used by renderers and future clip factories. */
+  layerType: LyricLayerType;
   /** CSS color used for the track background, clip accent, and layer chip */
   color: string;
   /** When false, clips on this layer are hidden in the preview renderer */
@@ -35,6 +45,11 @@ export interface LyricLayer {
    * position field (default: center).
    */
   renderSettings?: LayerRenderSettings;
+  /** Defaults applied to clips on this layer after project-level defaults. */
+  style?: Partial<LyricVisualStyle>;
+  animation?: Partial<LyricAnimationConfig>;
+  fx?: Partial<LyricFxConfig>;
+  progressIndicator?: Partial<ClipProgressIndicatorConfig>;
 }
 
 export const MAIN_LAYER_ID = 'layer-main';
@@ -46,29 +61,64 @@ export function createDefaultLayers(): LyricLayer[] {
     {
       id: MAIN_LAYER_ID,
       name: 'Main Lyrics',
+      layerType: 'lyrics',
       color: '#2e7afb',
       visible: true,
       locked: false,
       order: 0,
-      renderSettings: { positionPreset: 'bottom', textAlign: 'center' }
+      renderSettings: { positionPreset: 'bottom', textAlign: 'center', zIndex: 20 },
+      style: { fontSize: '2.8rem', fontWeight: '800', textColor: '#ffffff' }
     },
     {
       id: BACKING_LAYER_ID,
       name: 'Backing Vocals',
+      layerType: 'backing',
       color: '#8a5cf6',
       visible: true,
       locked: false,
       order: 1,
-      renderSettings: { positionPreset: 'top', textAlign: 'center' }
+      renderSettings: { positionPreset: 'top', textAlign: 'center', zIndex: 15 },
+      style: {
+        fontSize: '1.55rem',
+        fontWeight: '700',
+        textColor: 'rgba(200, 218, 255, 0.82)',
+        opacity: 0.82,
+        glowIntensity: 0.35
+      }
     },
     {
       id: FX_LAYER_ID,
       name: 'FX / Adlibs',
+      layerType: 'fx',
       color: '#f6a25c',
       visible: true,
       locked: false,
       order: 2,
-      renderSettings: { positionPreset: 'top-right', textAlign: 'right' }
+      renderSettings: { positionPreset: 'top-right', textAlign: 'right', zIndex: 30 },
+      style: {
+        fontSize: '1.15rem',
+        fontWeight: '900',
+        textColor: '#ffd29c',
+        opacity: 0.78,
+        textTransform: 'uppercase',
+        letterSpacing: '0.08em',
+        glowColor: '#ff9d45',
+        glowIntensity: 0.9
+      },
+      animation: {
+        transitionIn: 'glitch-in',
+        transitionOut: 'glitch-out',
+        activeAnimation: 'flicker',
+        durationMs: 260,
+        exitLingerMs: 520
+      },
+      fx: {
+        enabled: true,
+        preset: 'rgb-shift',
+        intensity: 0.5,
+        opacity: 0.75,
+        blendMode: 'screen'
+      }
     }
   ];
 }

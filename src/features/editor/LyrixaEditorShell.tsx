@@ -316,6 +316,9 @@ export function LyrixaEditorShell() {
             layers={project.layers}
             currentTime={playbackTime}
             styleConfig={project.styleConfig}
+            animationConfig={project.animationConfig}
+            fxConfig={project.fxConfig}
+            progressIndicatorConfig={project.progressIndicatorConfig}
             onExpand={() => setPreviewOpen(true)}
             onClose={() => setMiniPreviewVisible(false)}
           />
@@ -359,6 +362,9 @@ export function LyrixaEditorShell() {
               layers={project.layers}
               currentTime={playbackTime}
               styleConfig={project.styleConfig}
+              animationConfig={project.animationConfig}
+              fxConfig={project.fxConfig}
+              progressIndicatorConfig={project.progressIndicatorConfig}
             />
             <button
               className="ls-btn ghost ls-preview-close"

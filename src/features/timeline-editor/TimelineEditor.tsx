@@ -1,7 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import type { LyricClip as LyricClipModel, ClipPositionPreset } from '../../core/types/clip';
-import type { LyricLayer } from '../../core/types/layer';
+import type { LyricLayer, LyricLayerType } from '../../core/types/layer';
 import type { AudioPeak, AudioChannel, AudioBandMode } from '../../core/types/audio';
+import type { LyricActiveAnimationPreset, LyricFxPreset, LyricTransitionPreset } from '../../core/types/render';
+import {
+  DEFAULT_CLIP_PROGRESS_INDICATOR,
+  DEFAULT_LYRIC_ANIMATION,
+  DEFAULT_LYRIC_FX,
+  DEFAULT_LYRIC_STYLE,
+  resolveClipProgressIndicator,
+  resolveLyricAnimation,
+  resolveLyricFx,
+  resolveLyricStyle
+} from '../../core/types/render';
 import {
   moveClip,
   resizeClipStart,
@@ -102,6 +114,42 @@ function subtractPeaks(master: AudioPeak[], vocals: AudioPeak[]): AudioPeak[] {
 
 const NUDGE_STEPS = [-1, -0.5, -0.1, 0.1, 0.5, 1];
 const OFFSET_STEPS = [-1, -0.5, -0.1, 0.1, 0.5, 1];
+const LAYER_TYPE_OPTIONS: { value: LyricLayerType; label: string }[] = [
+  { value: 'lyrics', label: 'Lyrics' },
+  { value: 'backing', label: 'Backing' },
+  { value: 'fx', label: 'FX' },
+  { value: 'annotation', label: 'Annotation' }
+];
+const TRANSITION_OPTIONS: { value: LyricTransitionPreset; label: string }[] = [
+  { value: 'none', label: 'None' },
+  { value: 'fade', label: 'Fade in' },
+  { value: 'slide-up', label: 'Slide up' },
+  { value: 'scale-in', label: 'Scale in' },
+  { value: 'blur-in', label: 'Blur in' },
+  { value: 'glitch-in', label: 'Glitch in' },
+  { value: 'fade-out', label: 'Fade out' },
+  { value: 'blur-out', label: 'Blur out' },
+  { value: 'glitch-out', label: 'Glitch out' }
+];
+const ACTIVE_ANIMATION_OPTIONS: { value: LyricActiveAnimationPreset; label: string }[] = [
+  { value: 'none', label: 'None' },
+  { value: 'pulse', label: 'Pulse' },
+  { value: 'glow-pulse', label: 'Glow pulse' },
+  { value: 'breathing', label: 'Breathing' },
+  { value: 'shake-light', label: 'Shake light' },
+  { value: 'wave', label: 'Wave' },
+  { value: 'flicker', label: 'Flicker' }
+];
+const FX_OPTIONS: { value: LyricFxPreset; label: string }[] = [
+  { value: 'none', label: 'None' },
+  { value: 'neon-glow', label: 'Neon glow' },
+  { value: 'rgb-shift', label: 'RGB shift' },
+  { value: 'glitch', label: 'Glitch' },
+  { value: 'scanline', label: 'Scanline' },
+  { value: 'blur-flicker', label: 'Blur flicker' },
+  { value: 'shadow-trail', label: 'Shadow trail' },
+  { value: 'energy-pulse', label: 'Energy pulse' }
+];
 
 export function TimelineEditor({
   clips,
@@ -500,11 +548,76 @@ export function TimelineEditor({
     return onlyId ? clips.find(c => c.id === onlyId) ?? null : null;
   }, [selectedClipIds, clips]);
 
+  const selectedLayer = useMemo(
+    () => selectedClip ? layers.find(l => l.id === selectedClip.layerId) ?? null : null,
+    [layers, selectedClip]
+  );
+
   const updateSelectedClip = (patch: Partial<LyricClipModel>) => {
     if (!selectedClip) return;
     onClipsChange(
       clips.map(c => (c.id === selectedClip.id ? { ...c, ...patch } : c))
     );
+  };
+
+  const updateSelectedLayer = (patch: Partial<LyricLayer>) => {
+    if (!selectedLayer) return;
+    onLayersChange(
+      layers.map(l => (l.id === selectedLayer.id ? { ...l, ...patch } : l))
+    );
+  };
+
+  const updateSelectedLayerRenderSettings = (patch: Partial<NonNullable<LyricLayer['renderSettings']>>) => {
+    if (!selectedLayer) return;
+    updateSelectedLayer({
+      renderSettings: {
+        positionPreset: selectedLayer.renderSettings?.positionPreset ?? 'center',
+        ...selectedLayer.renderSettings,
+        ...patch
+      }
+    });
+  };
+
+  const updateClipStyleOverride = (patch: Partial<NonNullable<LyricClipModel['styleOverride']>>) => {
+    if (!selectedClip) return;
+    updateSelectedClip({
+      styleOverride: { ...(selectedClip.styleOverride ?? {}), ...patch }
+    });
+  };
+
+  const updateLayerStyle = (patch: NonNullable<LyricLayer['style']>) => {
+    if (!selectedLayer) return;
+    updateSelectedLayer({
+      style: { ...(selectedLayer.style ?? {}), ...patch }
+    });
+  };
+
+  const updateClipAnimationOverride = (patch: Partial<NonNullable<LyricClipModel['animationOverride']>>) => {
+    if (!selectedClip) return;
+    updateSelectedClip({
+      animationOverride: { ...(selectedClip.animationOverride ?? {}), ...patch }
+    });
+  };
+
+  const updateLayerAnimation = (patch: NonNullable<LyricLayer['animation']>) => {
+    if (!selectedLayer) return;
+    updateSelectedLayer({
+      animation: { ...(selectedLayer.animation ?? {}), ...patch }
+    });
+  };
+
+  const updateClipFxOverride = (patch: Partial<NonNullable<LyricClipModel['fxOverride']>>) => {
+    if (!selectedClip) return;
+    updateSelectedClip({
+      fxOverride: { ...(selectedClip.fxOverride ?? {}), ...patch }
+    });
+  };
+
+  const updateClipProgressOverride = (patch: Partial<NonNullable<LyricClipModel['progressIndicatorOverride']>>) => {
+    if (!selectedClip) return;
+    updateSelectedClip({
+      progressIndicatorOverride: { ...(selectedClip.progressIndicatorOverride ?? {}), ...patch }
+    });
   };
 
   // ── Keyboard shortcuts ─────────────────────────────────────────
@@ -626,6 +739,32 @@ export function TimelineEditor({
     ? masterPeaks
     : (bandPeaks ?? masterPeaks);
   const hasSelection = selectedClipIds.size > 0;
+  const inspectorStyle = selectedClip
+    ? resolveLyricStyle(DEFAULT_LYRIC_STYLE, selectedLayer?.style, selectedClip.styleOverride)
+    : DEFAULT_LYRIC_STYLE;
+  const inspectorLayerStyle = selectedLayer
+    ? resolveLyricStyle(DEFAULT_LYRIC_STYLE, selectedLayer.style)
+    : DEFAULT_LYRIC_STYLE;
+  const inspectorAnimation = selectedClip
+    ? resolveLyricAnimation(DEFAULT_LYRIC_ANIMATION, selectedLayer?.animation, {
+        ...selectedClip.animationOverride,
+        transitionIn: selectedClip.transitionIn,
+        transitionOut: selectedClip.transitionOut
+      })
+    : DEFAULT_LYRIC_ANIMATION;
+  const inspectorFx = selectedClip
+    ? resolveLyricFx(DEFAULT_LYRIC_FX, selectedLayer?.fx, selectedClip.fxOverride)
+    : DEFAULT_LYRIC_FX;
+  const inspectorLayerFx = selectedLayer
+    ? resolveLyricFx(DEFAULT_LYRIC_FX, selectedLayer.fx)
+    : DEFAULT_LYRIC_FX;
+  const inspectorProgress = selectedClip
+    ? resolveClipProgressIndicator(
+        DEFAULT_CLIP_PROGRESS_INDICATOR,
+        selectedLayer?.progressIndicator,
+        selectedClip.progressIndicatorOverride
+      )
+    : DEFAULT_CLIP_PROGRESS_INDICATOR;
 
   return (
     <div className="timeline-editor">
@@ -888,128 +1027,382 @@ export function TimelineEditor({
           onClose={() => setSelectedClipIds(new Set())}
         >
           <div className="tl-inspector-body">
-            <label>
-              Text
-              <textarea
-                rows={2}
-                value={selectedClip.text}
-                onChange={(e) => updateSelectedClip({ text: e.target.value })}
-              />
-            </label>
-            <div className="tl-inspector-row">
+            <InspectorSection title="Timing" defaultOpen>
               <label>
-                Start
-                <input
-                  type="number"
-                  step="0.01"
-                  min={0}
-                  value={Number(selectedClip.startTime.toFixed(2))}
-                  onChange={(e) => {
-                    const next = parseFloat(e.target.value);
-                    if (!Number.isFinite(next)) return;
-                    updateSelectedClip({
-                      startTime: Math.max(0, Math.min(selectedClip.endTime - 0.25, next))
-                    });
-                  }}
+                Text
+                <textarea
+                  rows={2}
+                  value={selectedClip.text}
+                  onChange={(e) => updateSelectedClip({ text: e.target.value })}
                 />
               </label>
+              <div className="tl-inspector-row">
+                <label>
+                  Start
+                  <input
+                    type="number"
+                    step="0.01"
+                    min={0}
+                    value={Number(selectedClip.startTime.toFixed(2))}
+                    onChange={(e) => {
+                      const next = parseFloat(e.target.value);
+                      if (!Number.isFinite(next)) return;
+                      updateSelectedClip({
+                        startTime: Math.max(0, Math.min(selectedClip.endTime - 0.25, next))
+                      });
+                    }}
+                  />
+                </label>
+                <label>
+                  End
+                  <input
+                    type="number"
+                    step="0.01"
+                    min={0}
+                    value={Number(selectedClip.endTime.toFixed(2))}
+                    onChange={(e) => {
+                      const next = parseFloat(e.target.value);
+                      if (!Number.isFinite(next)) return;
+                      updateSelectedClip({
+                        endTime: Math.max(selectedClip.startTime + 0.25, next)
+                      });
+                    }}
+                  />
+                </label>
+              </div>
+            </InspectorSection>
+
+            <InspectorSection title="Layer" defaultOpen>
               <label>
-                End
-                <input
-                  type="number"
-                  step="0.01"
-                  min={0}
-                  value={Number(selectedClip.endTime.toFixed(2))}
-                  onChange={(e) => {
-                    const next = parseFloat(e.target.value);
-                    if (!Number.isFinite(next)) return;
-                    updateSelectedClip({
-                      endTime: Math.max(selectedClip.startTime + 0.25, next)
-                    });
-                  }}
-                />
-              </label>
-            </div>
-            <label>
-              Layer
-              <select
-                value={selectedClip.layerId}
-                onChange={(e) => updateSelectedClip({ layerId: e.target.value })}
-              >
-                {layers.map(l => (
-                  <option key={l.id} value={l.id}>{l.name}</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Position
-              <select
-                value={selectedClip.position ?? 'center'}
-                onChange={(e) => updateSelectedClip({ position: e.target.value as ClipPositionPreset })}
-                title="Override this clip's position (overrides layer default)"
-              >
-                <option value="center">Center (layer default)</option>
-                <option value="top">Top</option>
-                <option value="bottom">Bottom</option>
-                <option value="top-left">Top left</option>
-                <option value="top-right">Top right</option>
-                <option value="bottom-left">Bottom left</option>
-                <option value="bottom-right">Bottom right</option>
-              </select>
-            </label>
-            <div className="tl-inspector-row">
-              <label>
-                In
+                Clip layer
                 <select
-                  value={selectedClip.transitionIn}
-                  onChange={(e) => updateSelectedClip({ transitionIn: e.target.value as LyricClipModel['transitionIn'] })}
+                  value={selectedClip.layerId}
+                  onChange={(e) => updateSelectedClip({ layerId: e.target.value })}
                 >
-                  <option value="none">None</option>
-                  <option value="fade">Fade</option>
-                  <option value="slide-up">Slide up</option>
-                  <option value="slide-down">Slide down</option>
-                  <option value="zoom-in">Zoom in</option>
-                  <option value="zoom-out">Zoom out</option>
-                  <option value="blur-in">Blur in</option>
+                  {layers.map(l => (
+                    <option key={l.id} value={l.id}>{l.name}</option>
+                  ))}
+                </select>
+              </label>
+              {selectedLayer && (
+                <div className="tl-inspector-row">
+                  <label>
+                    Layer type
+                    <select
+                      value={selectedLayer.layerType}
+                      onChange={(e) => updateSelectedLayer({ layerType: e.target.value as LyricLayerType })}
+                    >
+                      {LAYER_TYPE_OPTIONS.map(o => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    Z-index
+                    <input
+                      type="number"
+                      step="1"
+                      value={selectedLayer.renderSettings?.zIndex ?? 0}
+                      onChange={(e) => {
+                        const next = parseInt(e.target.value, 10);
+                        if (Number.isFinite(next)) updateSelectedLayerRenderSettings({ zIndex: next });
+                      }}
+                    />
+                  </label>
+                </div>
+              )}
+              <label>
+                Position override
+                <select
+                  value={selectedClip.position ?? 'center'}
+                  onChange={(e) => updateSelectedClip({ position: e.target.value as ClipPositionPreset })}
+                >
+                  <option value="center">Layer default</option>
+                  <option value="top">Top</option>
+                  <option value="bottom">Bottom</option>
+                  <option value="top-left">Top left</option>
+                  <option value="top-right">Top right</option>
+                  <option value="bottom-left">Bottom left</option>
+                  <option value="bottom-right">Bottom right</option>
+                </select>
+              </label>
+            </InspectorSection>
+
+            <InspectorSection title="Style" defaultOpen>
+              <div className="tl-inspector-row">
+                <label>
+                  Font size
+                  <input
+                    type="number"
+                    step="0.1"
+                    min={0.5}
+                    value={parseFloat(inspectorStyle.fontSize) || 2.5}
+                    onChange={(e) => updateClipStyleOverride({ fontSize: `${e.target.value}rem` })}
+                  />
+                </label>
+                <label>
+                  Layer size
+                  <input
+                    type="number"
+                    step="0.1"
+                    min={0.5}
+                    value={parseFloat(inspectorLayerStyle.fontSize) || 2.5}
+                    onChange={(e) => updateLayerStyle({ fontSize: `${e.target.value}rem` })}
+                  />
+                </label>
+              </div>
+              <div className="tl-inspector-row">
+                <label>
+                  Text color
+                  <input
+                    type="color"
+                    value={toColorInput(inspectorStyle.textColor)}
+                    onChange={(e) => updateClipStyleOverride({ textColor: e.target.value, activeTextColor: e.target.value })}
+                  />
+                </label>
+                <label>
+                  Layer color
+                  <input
+                    type="color"
+                    value={toColorInput(inspectorLayerStyle.textColor)}
+                    onChange={(e) => updateLayerStyle({ textColor: e.target.value, activeTextColor: e.target.value })}
+                  />
+                </label>
+              </div>
+              <label>
+                Opacity
+                <input
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  value={inspectorStyle.opacity}
+                  onChange={(e) => updateClipStyleOverride({ opacity: parseFloat(e.target.value) })}
+                />
+              </label>
+              <label>
+                Glow intensity
+                <input
+                  type="range"
+                  min={0}
+                  max={2}
+                  step={0.05}
+                  value={inspectorStyle.glowIntensity}
+                  onChange={(e) => updateClipStyleOverride({ glowIntensity: parseFloat(e.target.value) })}
+                />
+              </label>
+              <label>
+                Blur amount
+                <input
+                  type="range"
+                  min={0}
+                  max={16}
+                  step={0.5}
+                  value={inspectorStyle.blurAmount}
+                  onChange={(e) => updateClipStyleOverride({ blurAmount: parseFloat(e.target.value) })}
+                />
+              </label>
+              <div className="tl-inspector-row">
+                <label>
+                  Outline width
+                  <input
+                    type="number"
+                    min={0}
+                    max={8}
+                    step={0.25}
+                    value={inspectorStyle.strokeWidth}
+                    onChange={(e) => updateClipStyleOverride({ strokeWidth: parseFloat(e.target.value) || 0 })}
+                  />
+                </label>
+                <label>
+                  Outline color
+                  <input
+                    type="color"
+                    value={toColorInput(inspectorStyle.strokeColor)}
+                    onChange={(e) => updateClipStyleOverride({ strokeColor: e.target.value })}
+                  />
+                </label>
+              </div>
+            </InspectorSection>
+
+            <InspectorSection title="Animation">
+              <div className="tl-inspector-row">
+                <label>
+                  In
+                  <select
+                    value={selectedClip.transitionIn}
+                    onChange={(e) => updateSelectedClip({ transitionIn: e.target.value as LyricClipModel['transitionIn'] })}
+                  >
+                    {TRANSITION_OPTIONS.map(o => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Out
+                  <select
+                    value={selectedClip.transitionOut}
+                    onChange={(e) => updateSelectedClip({ transitionOut: e.target.value as LyricClipModel['transitionOut'] })}
+                  >
+                    {TRANSITION_OPTIONS.map(o => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <label>
+                Active animation
+                <select
+                  value={inspectorAnimation.activeAnimation}
+                  onChange={(e) => updateClipAnimationOverride({ activeAnimation: e.target.value as LyricActiveAnimationPreset })}
+                >
+                  {ACTIVE_ANIMATION_OPTIONS.map(o => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
                 </select>
               </label>
               <label>
-                Out
+                Layer active animation
                 <select
-                  value={selectedClip.transitionOut}
-                  onChange={(e) => updateSelectedClip({ transitionOut: e.target.value as LyricClipModel['transitionOut'] })}
+                  value={resolveLyricAnimation(DEFAULT_LYRIC_ANIMATION, selectedLayer?.animation).activeAnimation}
+                  onChange={(e) => updateLayerAnimation({ activeAnimation: e.target.value as LyricActiveAnimationPreset })}
                 >
-                  <option value="none">None</option>
-                  <option value="fade">Fade</option>
-                  <option value="slide-up">Slide up</option>
-                  <option value="slide-down">Slide down</option>
-                  <option value="zoom-in">Zoom in</option>
-                  <option value="zoom-out">Zoom out</option>
-                  <option value="blur-in">Blur in</option>
+                  {ACTIVE_ANIMATION_OPTIONS.map(o => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
                 </select>
               </label>
-            </div>
-            <div className="tl-inspector-row">
+            </InspectorSection>
+
+            <InspectorSection title="FX">
               <label>
-                <input
-                  type="checkbox"
-                  checked={!!selectedClip.muted}
-                  onChange={(e) => updateSelectedClip({ muted: e.target.checked })}
-                />
-                Mute
+                FX preset
+                <select
+                  value={inspectorFx.preset}
+                  onChange={(e) => {
+                    const preset = e.target.value as LyricFxPreset;
+                    updateClipFxOverride({ preset, enabled: preset !== 'none' });
+                  }}
+                >
+                  {FX_OPTIONS.map(o => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
               </label>
               <label>
+                Layer FX preset
+                <select
+                  value={inspectorLayerFx.preset}
+                  onChange={(e) => {
+                    const preset = e.target.value as LyricFxPreset;
+                    updateSelectedLayer({ fx: { ...(selectedLayer?.fx ?? {}), preset, enabled: preset !== 'none' } });
+                  }}
+                >
+                  {FX_OPTIONS.map(o => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                FX intensity
+                <input
+                  type="range"
+                  min={0}
+                  max={2}
+                  step={0.05}
+                  value={inspectorFx.intensity}
+                  onChange={(e) => updateClipFxOverride({ intensity: parseFloat(e.target.value), enabled: inspectorFx.preset !== 'none' })}
+                />
+              </label>
+              <label>
+                Layer FX intensity
+                <input
+                  type="range"
+                  min={0}
+                  max={2}
+                  step={0.05}
+                  value={inspectorLayerFx.intensity}
+                  onChange={(e) => updateSelectedLayer({ fx: { ...(selectedLayer?.fx ?? {}), intensity: parseFloat(e.target.value), enabled: inspectorLayerFx.preset !== 'none' } })}
+                />
+              </label>
+              <label className="tl-inline-check">
                 <input
                   type="checkbox"
-                  checked={!!selectedClip.locked}
-                  onChange={(e) => updateSelectedClip({ locked: e.target.checked })}
+                  checked={inspectorProgress.enabled}
+                  onChange={(e) => updateClipProgressOverride({ enabled: e.target.checked })}
                 />
-                Lock
+                Show clip progress dot
               </label>
-            </div>
+            </InspectorSection>
+
+            <InspectorSection title="Advanced">
+              <div className="tl-inspector-row">
+                <label className="tl-inline-check">
+                  <input
+                    type="checkbox"
+                    checked={!!selectedClip.muted}
+                    onChange={(e) => updateSelectedClip({ muted: e.target.checked })}
+                  />
+                  Mute
+                </label>
+                <label className="tl-inline-check">
+                  <input
+                    type="checkbox"
+                    checked={!!selectedClip.locked}
+                    onChange={(e) => updateSelectedClip({ locked: e.target.checked })}
+                  />
+                  Lock
+                </label>
+              </div>
+              <button
+                className="tl-btn small ghost"
+                onClick={() => updateSelectedClip({
+                  styleOverride: undefined,
+                  animationOverride: undefined,
+                  fxOverride: undefined,
+                  progressIndicatorOverride: undefined
+                })}
+              >
+                Clear clip overrides
+              </button>
+            </InspectorSection>
           </div>
         </FloatingPanel>
       )}
     </div>
   );
+}
+
+function InspectorSection({
+  title,
+  defaultOpen = false,
+  children
+}: {
+  title: string;
+  defaultOpen?: boolean;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <section className="tl-inspector-section">
+      <button
+        type="button"
+        className="tl-inspector-section-toggle"
+        onClick={() => setOpen(value => !value)}
+      >
+        <span>{title}</span>
+        <span aria-hidden>{open ? 'v' : '>'}</span>
+      </button>
+      {open && <div className="tl-inspector-section-body">{children}</div>}
+    </section>
+  );
+}
+
+function toColorInput(color: string): string {
+  if (/^#[0-9a-f]{6}$/i.test(color)) return color;
+  if (/^#[0-9a-f]{3}$/i.test(color)) {
+    const [, r, g, b] = color.match(/^#([0-9a-f])([0-9a-f])([0-9a-f])$/i) ?? [];
+    return r && g && b ? `#${r}${r}${g}${g}${b}${b}` : '#ffffff';
+  }
+  return '#ffffff';
 }

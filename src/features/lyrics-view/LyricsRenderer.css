@@ -63,9 +63,12 @@
 .lyric-text {
   font-size: var(--lyric-font-size);
   font-weight: var(--lyric-font-weight);
+  font-family: var(--lyric-font-family, inherit);
   letter-spacing: var(--lyric-letter-spacing);
   line-height: var(--lyric-line-spacing);
   color: var(--lyric-color-primary);
+  opacity: var(--lyric-opacity, 1);
+  -webkit-text-stroke: var(--lyric-stroke-width, 0) var(--lyric-stroke-color, transparent);
   text-shadow: 0 4px calc(12px * var(--lyric-shadow-intensity)) rgba(0, 0, 0, var(--lyric-shadow-intensity));
   transition: color 0.4s ease, text-shadow 0.4s ease, font-size 0.4s ease;
   display: block;
