@@ -160,15 +160,23 @@ export function LyrixaEditorShell() {
         </div>
 
         <div className="ls-topbar-section ls-actions">
-          <button className="ls-btn" onClick={openMasterPicker}>
-            {masterChannel ? '↻ Replace audio' : '＋ Load audio'}
+          <button
+            className="ls-btn"
+            onClick={openMasterPicker}
+            title={masterChannel
+              ? `Master track: ${masterChannel.fileName}`
+              : 'Load the main audio file (MP3, WAV, etc.)'}
+          >
+            {masterChannel ? `↻ ${masterChannel.fileName}` : '＋ Load master track'}
           </button>
           <button
             className={`ls-btn ${vocalsChannel ? 'active' : ''}`}
             onClick={openVocalsPicker}
-            title="Optional vocals stem for analysis"
+            title={vocalsChannel
+              ? `Vocals stem loaded: ${vocalsChannel.fileName}. Used for timing assistance only — does not play separately.`
+              : 'Load an isolated vocals stem to assist with lyric timing. This file is analyzed only, not played.'}
           >
-            {vocalsChannel ? '↻ Replace vocals' : '＋ Load vocals'}
+            {vocalsChannel ? `↻ Vocals: ${vocalsChannel.fileName}` : '＋ Load vocals stem'}
           </button>
           {vocalsChannel && (
             <button
@@ -200,36 +208,36 @@ export function LyrixaEditorShell() {
             <button
               className="ls-btn primary"
               onClick={() => regenerateFromVocals()}
-              title="Use vocal activity to retime existing lyric clips"
+              title="Use detected vocal activity regions from the vocals stem to retime all lyric clips. You can still adjust manually after."
             >
               ⟲ Generate timings from vocals
             </button>
           )}
           <button
-            className={`ls-btn ${isPlaying ? 'active' : ''}`}
-            onClick={handlePlayToggle}
-            disabled={!masterChannel?.objectUrl}
-            title={!masterChannel?.objectUrl ? 'Load audio to play' : undefined}
-          >
-            {isPlaying ? '⏸ Pause' : '▶ Play'}
-          </button>
-          <button
             className={`ls-btn ${previewOpen ? 'active' : ''}`}
             onClick={() => setPreviewOpen(p => !p)}
           >
-            {previewOpen ? '🅧 Close preview' : '◉ Preview'}
+            {previewOpen ? '✕ Close preview' : '◉ Preview'}
           </button>
           {!miniPreviewVisible && !previewOpen && (
             <button className="ls-btn" onClick={() => setMiniPreviewVisible(true)}>
-              ◳ Mini preview
+              ◳ Live preview
             </button>
           )}
         </div>
 
         <div className="ls-topbar-section ls-meta">
           {vocalsAnalysisReady && (
-            <span className="ls-vocals-chip" title="Vocal activity detected">
-              ◐ Vocals analysis available
+            <span
+              className="ls-vocals-chip"
+              title="Vocals stem is loaded and analyzed. Vocal activity regions are shown on the vocals waveform lane. Use 'Generate timings from vocals' to auto-time your lyrics."
+            >
+              ◐ Vocals stem active
+            </span>
+          )}
+          {vocalsChannel && !vocalsAnalysisReady && (
+            <span className="ls-vocals-chip" title="Analyzing vocals stem waveform…">
+              ◌ Analyzing vocals…
             </span>
           )}
           <span className={`ls-save-chip ${saveStatus}`}>{SAVE_LABEL[saveStatus]}</span>

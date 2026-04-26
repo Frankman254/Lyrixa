@@ -628,30 +628,48 @@
   box-shadow: 0 2px 8px rgba(255, 85, 119, 0.6);
 }
 
-/* ── Inspector ───────────────────────────────────────── */
-.tl-inspector {
-  position: absolute;
-  right: 16px;
-  top: 74px;
-  width: 280px;
-  padding: 16px;
-  background: rgba(16, 18, 26, 0.92);
-  color: #e6e9f2;
+/* ── Play button (prominent) ─────────────────────────── */
+.tl-play-btn {
+  min-width: 44px;
+  font-size: 1rem;
+  padding: 6px 14px;
+}
+
+.tl-play-btn.active {
+  background: rgba(46, 122, 251, 0.18);
+  border-color: rgba(46, 122, 251, 0.55);
+  color: #b2ccff;
+}
+
+/* ── Layer position select ───────────────────────────── */
+.tl-track-pos-select {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #9ba0b5;
+  border-radius: 4px;
+  padding: 2px 4px;
+  font-size: 0.65rem;
+  cursor: pointer;
+  max-width: 80px;
+}
+
+.tl-track-pos-select:focus {
+  outline: none;
+  border-color: rgba(46, 122, 251, 0.5);
+}
+
+/* ── Inspector (floating panel body) ────────────────── */
+.tl-inspector-body {
+  padding: 14px;
   display: flex;
   flex-direction: column;
   gap: 10px;
-  z-index: 10;
+  max-height: 72vh;
+  overflow-y: auto;
+  color: #e6e9f2;
 }
 
-.tl-inspector h3 {
-  font-size: 0.8rem;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: #9ba0b5;
-  margin-bottom: 6px;
-}
-
-.tl-inspector label {
+.tl-inspector-body label {
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -659,10 +677,10 @@
   color: #9ba0b5;
 }
 
-.tl-inspector input[type='number'],
-.tl-inspector input[type='text'],
-.tl-inspector textarea,
-.tl-inspector select {
+.tl-inspector-body input[type='number'],
+.tl-inspector-body input[type='text'],
+.tl-inspector-body textarea,
+.tl-inspector-body select {
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.1);
   color: #e6e9f2;

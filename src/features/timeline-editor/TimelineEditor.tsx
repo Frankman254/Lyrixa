@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { LyricClip as LyricClipModel } from '../../core/types/clip';
+import type { LyricClip as LyricClipModel, ClipPositionPreset } from '../../core/types/clip';
 import type { LyricLayer } from '../../core/types/layer';
 import type { AudioPeak, AudioChannel } from '../../core/types/audio';
 import {
@@ -23,6 +23,7 @@ import { TimelineTrackHeader } from './TimelineTrackHeader';
 import { TimelineAudioTrack } from './TimelineAudioTrack';
 import type { ClipPointerModifiers, DragMode } from './LyricClip';
 import { clampZoom, getTimelinePointerTime, TRACK_HEADER_WIDTH } from './timelineMath';
+import { FloatingPanel } from '../../shared/components/FloatingPanel';
 import './TimelineEditor.css';
 
 interface TimelineEditorProps {
@@ -82,6 +83,8 @@ export function TimelineEditor({
   const [snapSeconds, setSnapSeconds] = useState(0);
   const [hoveredLayerId, setHoveredLayerId] = useState<string | null>(null);
   const [offsetInput, setOffsetInput] = useState<string>('0');
+  /** Which audio waveform rows to display. */
+  const [waveformView, setWaveformView] = useState<'master' | 'vocals' | 'both'>('both');
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const laneContainerRef = useRef<HTMLDivElement>(null);
@@ -91,6 +94,9 @@ export function TimelineEditor({
   const laneRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const selectedIdsRef = useRef<Set<string>>(selectedClipIds);
   const snapRef = useRef(snapSeconds);
+  // Stable ref so the keyboard handler can call onPlayToggle without stale closure.
+  const onPlayToggleRef = useRef(onPlayToggle);
+  useEffect(() => { onPlayToggleRef.current = onPlayToggle; }, [onPlayToggle]);
 
   useEffect(() => { clipsRef.current = clips; }, [clips]);
   useEffect(() => { layersRef.current = layers; }, [layers]);
@@ -422,6 +428,19 @@ export function TimelineEditor({
     );
   };
 
+  const handleLayerPositionChange = useCallback(
+    (layerId: string, preset: ClipPositionPreset) => {
+      onLayersChange(
+        layersRef.current.map(l =>
+          l.id === layerId
+            ? { ...l, renderSettings: { ...l.renderSettings, positionPreset: preset } }
+            : l
+        )
+      );
+    },
+    [onLayersChange]
+  );
+
   // Inspector only when exactly one clip is selected.
   const selectedClip = useMemo(() => {
     if (selectedClipIds.size !== 1) return null;
@@ -451,6 +470,13 @@ export function TimelineEditor({
       }
 
       const meta = e.metaKey || e.ctrlKey;
+
+      // Space = play / pause (most important transport shortcut)
+      if (e.code === 'Space') {
+        e.preventDefault();
+        onPlayToggleRef.current();
+        return;
+      }
 
       if (meta && e.key.toLowerCase() === 'a') {
         e.preventDefault();
@@ -508,14 +534,32 @@ export function TimelineEditor({
           <span className="tl-time muted">{formatTimecode(effectiveDuration)}</span>
         </div>
         <div className="tl-topbar-right">
-          <button className="tl-btn" onClick={onPlayToggle}>
-            {isPlaying ? '⏸ Pause' : '▶ Play'}
+          <button
+            className={`tl-btn tl-play-btn ${isPlaying ? 'active' : ''}`}
+            onClick={onPlayToggle}
+            title="Play / Pause  (Space)"
+          >
+            {isPlaying ? '⏸' : '▶'}
           </button>
           <div className="tl-zoom">
             <button className="tl-btn small" onClick={zoomOut} title="Zoom out">−</button>
             <span className="tl-zoom-value">{Math.round(pxPerSecond)} px/s</span>
             <button className="tl-btn small" onClick={zoomIn} title="Zoom in">+</button>
           </div>
+          {(masterChannel || vocalsChannel) && (
+            <label className="tl-snap">
+              Waves
+              <select
+                value={waveformView}
+                onChange={(e) => setWaveformView(e.target.value as typeof waveformView)}
+                title="Which waveform rows to show"
+              >
+                <option value="both">Both</option>
+                <option value="master">Master</option>
+                {vocalsChannel && <option value="vocals">Vocals</option>}
+              </select>
+            </label>
+          )}
           <label className="tl-snap">
             Snap
             <select
@@ -643,21 +687,23 @@ export function TimelineEditor({
             </div>
           </div>
 
-          <TimelineAudioTrack
-            title="Pista de audio"
-            color="#53c2f0"
-            duration={effectiveDuration}
-            pxPerSecond={pxPerSecond}
-            height={MASTER_WAVEFORM_HEIGHT}
-            peaks={masterPeaks}
-            badge={masterChannel ? 'master' : undefined}
-            mockFallback={masterIsMock}
-            onLaneClick={handleSeekClick}
-          />
-
-          {vocalsChannel && (
+          {(waveformView === 'master' || waveformView === 'both') && (
             <TimelineAudioTrack
-              title="Vocals"
+              title="Master track"
+              color="#53c2f0"
+              duration={effectiveDuration}
+              pxPerSecond={pxPerSecond}
+              height={MASTER_WAVEFORM_HEIGHT}
+              peaks={masterPeaks}
+              badge={masterChannel?.fileName ? 'master' : undefined}
+              mockFallback={masterIsMock}
+              onLaneClick={handleSeekClick}
+            />
+          )}
+
+          {vocalsChannel && (waveformView === 'vocals' || waveformView === 'both') && (
+            <TimelineAudioTrack
+              title="Vocals stem"
               color="#5fc88e"
               duration={effectiveDuration}
               pxPerSecond={pxPerSecond}
@@ -666,7 +712,7 @@ export function TimelineEditor({
               vocalActivity={vocalsChannel.vocalActivity}
               badge={
                 vocalsChannel.vocalActivity?.length
-                  ? `${vocalsChannel.vocalActivity.length} segments`
+                  ? `${vocalsChannel.vocalActivity.length} vocal segments`
                   : 'analyzing…'
               }
               mockFallback={!vocalsChannel.waveformPeaks?.length}
@@ -689,6 +735,7 @@ export function TimelineEditor({
                 onClipPointerDown={handleClipPointerDown}
                 onLayerToggleVisible={toggleLayerVisible}
                 onLayerToggleLocked={toggleLayerLocked}
+                onLayerPositionChange={handleLayerPositionChange}
               />
             ))}
           </div>
@@ -703,112 +750,135 @@ export function TimelineEditor({
       </div>
 
       {selectedClip && (
-        <aside className="tl-inspector glass-panel">
-          <h3>Clip</h3>
-          <label>
-            Text
-            <textarea
-              rows={2}
-              value={selectedClip.text}
-              onChange={(e) => updateSelectedClip({ text: e.target.value })}
-            />
-          </label>
-          <div className="tl-inspector-row">
+        <FloatingPanel
+          storageKey="lyrixa_clip_inspector_pos"
+          defaultPosition={{ x: window.innerWidth - 310, y: 120 }}
+          width={290}
+          title="Clip inspector"
+          onClose={() => setSelectedClipIds(new Set())}
+        >
+          <div className="tl-inspector-body">
             <label>
-              Start
-              <input
-                type="number"
-                step="0.01"
-                min={0}
-                value={Number(selectedClip.startTime.toFixed(2))}
-                onChange={(e) => {
-                  const next = parseFloat(e.target.value);
-                  if (!Number.isFinite(next)) return;
-                  updateSelectedClip({
-                    startTime: Math.max(0, Math.min(selectedClip.endTime - 0.25, next))
-                  });
-                }}
+              Text
+              <textarea
+                rows={2}
+                value={selectedClip.text}
+                onChange={(e) => updateSelectedClip({ text: e.target.value })}
               />
             </label>
+            <div className="tl-inspector-row">
+              <label>
+                Start
+                <input
+                  type="number"
+                  step="0.01"
+                  min={0}
+                  value={Number(selectedClip.startTime.toFixed(2))}
+                  onChange={(e) => {
+                    const next = parseFloat(e.target.value);
+                    if (!Number.isFinite(next)) return;
+                    updateSelectedClip({
+                      startTime: Math.max(0, Math.min(selectedClip.endTime - 0.25, next))
+                    });
+                  }}
+                />
+              </label>
+              <label>
+                End
+                <input
+                  type="number"
+                  step="0.01"
+                  min={0}
+                  value={Number(selectedClip.endTime.toFixed(2))}
+                  onChange={(e) => {
+                    const next = parseFloat(e.target.value);
+                    if (!Number.isFinite(next)) return;
+                    updateSelectedClip({
+                      endTime: Math.max(selectedClip.startTime + 0.25, next)
+                    });
+                  }}
+                />
+              </label>
+            </div>
             <label>
-              End
-              <input
-                type="number"
-                step="0.01"
-                min={0}
-                value={Number(selectedClip.endTime.toFixed(2))}
-                onChange={(e) => {
-                  const next = parseFloat(e.target.value);
-                  if (!Number.isFinite(next)) return;
-                  updateSelectedClip({
-                    endTime: Math.max(selectedClip.startTime + 0.25, next)
-                  });
-                }}
-              />
-            </label>
-          </div>
-          <label>
-            Layer
-            <select
-              value={selectedClip.layerId}
-              onChange={(e) => updateSelectedClip({ layerId: e.target.value })}
-            >
-              {layers.map(l => (
-                <option key={l.id} value={l.id}>{l.name}</option>
-              ))}
-            </select>
-          </label>
-          <div className="tl-inspector-row">
-            <label>
-              In
+              Layer
               <select
-                value={selectedClip.transitionIn}
-                onChange={(e) => updateSelectedClip({ transitionIn: e.target.value as LyricClipModel['transitionIn'] })}
+                value={selectedClip.layerId}
+                onChange={(e) => updateSelectedClip({ layerId: e.target.value })}
               >
-                <option value="none">None</option>
-                <option value="fade">Fade</option>
-                <option value="slide-up">Slide up</option>
-                <option value="slide-down">Slide down</option>
-                <option value="zoom-in">Zoom in</option>
-                <option value="zoom-out">Zoom out</option>
-                <option value="blur-in">Blur in</option>
+                {layers.map(l => (
+                  <option key={l.id} value={l.id}>{l.name}</option>
+                ))}
               </select>
             </label>
             <label>
-              Out
+              Position
               <select
-                value={selectedClip.transitionOut}
-                onChange={(e) => updateSelectedClip({ transitionOut: e.target.value as LyricClipModel['transitionOut'] })}
+                value={selectedClip.position ?? 'center'}
+                onChange={(e) => updateSelectedClip({ position: e.target.value as ClipPositionPreset })}
+                title="Override this clip's position (overrides layer default)"
               >
-                <option value="none">None</option>
-                <option value="fade">Fade</option>
-                <option value="slide-up">Slide up</option>
-                <option value="slide-down">Slide down</option>
-                <option value="zoom-in">Zoom in</option>
-                <option value="zoom-out">Zoom out</option>
-                <option value="blur-in">Blur in</option>
+                <option value="center">Center (layer default)</option>
+                <option value="top">Top</option>
+                <option value="bottom">Bottom</option>
+                <option value="top-left">Top left</option>
+                <option value="top-right">Top right</option>
+                <option value="bottom-left">Bottom left</option>
+                <option value="bottom-right">Bottom right</option>
               </select>
             </label>
+            <div className="tl-inspector-row">
+              <label>
+                In
+                <select
+                  value={selectedClip.transitionIn}
+                  onChange={(e) => updateSelectedClip({ transitionIn: e.target.value as LyricClipModel['transitionIn'] })}
+                >
+                  <option value="none">None</option>
+                  <option value="fade">Fade</option>
+                  <option value="slide-up">Slide up</option>
+                  <option value="slide-down">Slide down</option>
+                  <option value="zoom-in">Zoom in</option>
+                  <option value="zoom-out">Zoom out</option>
+                  <option value="blur-in">Blur in</option>
+                </select>
+              </label>
+              <label>
+                Out
+                <select
+                  value={selectedClip.transitionOut}
+                  onChange={(e) => updateSelectedClip({ transitionOut: e.target.value as LyricClipModel['transitionOut'] })}
+                >
+                  <option value="none">None</option>
+                  <option value="fade">Fade</option>
+                  <option value="slide-up">Slide up</option>
+                  <option value="slide-down">Slide down</option>
+                  <option value="zoom-in">Zoom in</option>
+                  <option value="zoom-out">Zoom out</option>
+                  <option value="blur-in">Blur in</option>
+                </select>
+              </label>
+            </div>
+            <div className="tl-inspector-row">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={!!selectedClip.muted}
+                  onChange={(e) => updateSelectedClip({ muted: e.target.checked })}
+                />
+                Mute
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={!!selectedClip.locked}
+                  onChange={(e) => updateSelectedClip({ locked: e.target.checked })}
+                />
+                Lock
+              </label>
+            </div>
           </div>
-          <div className="tl-inspector-row">
-            <label>
-              <input
-                type="checkbox"
-                checked={!!selectedClip.muted}
-                onChange={(e) => updateSelectedClip({ muted: e.target.checked })}
-              />
-              Mute
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked={!!selectedClip.locked}
-                onChange={(e) => updateSelectedClip({ locked: e.target.checked })}
-              />
-              Lock
-            </label>
-          </div>
-        </aside>
+        </FloatingPanel>
       )}
     </div>
   );

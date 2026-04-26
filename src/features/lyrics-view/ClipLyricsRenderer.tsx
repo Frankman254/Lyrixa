@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import type { LyricClip } from '../../core/types/clip';
+import type { LyricClip, ClipPositionPreset } from '../../core/types/clip';
 import type { LyricLayer } from '../../core/types/layer';
 import type { LyricVisualStyle } from '../../core/types/render';
 import { DEFAULT_LYRIC_STYLE } from '../../core/types/render';
@@ -14,14 +14,29 @@ interface ClipLyricsRendererProps {
 }
 
 const POSITION_CLASS: Record<string, string> = {
-  center: 'pos-center',
-  top: 'pos-top',
-  bottom: 'pos-bottom',
-  'top-left': 'pos-top-left',
-  'top-right': 'pos-top-right',
-  'bottom-left': 'pos-bottom-left',
+  center:       'pos-center',
+  top:          'pos-top',
+  bottom:       'pos-bottom',
+  'top-left':   'pos-top-left',
+  'top-right':  'pos-top-right',
+  'bottom-left':  'pos-bottom-left',
   'bottom-right': 'pos-bottom-right'
 };
+
+/**
+ * Resolve the final render position for a clip.
+ *
+ * Priority: explicit non-center clip position > layer default > center.
+ *
+ * A clip position of 'center' is treated as "no override" because all clips
+ * start at center by default; the layer's positionPreset (e.g. 'bottom' for
+ * Main Lyrics, 'top' for Backing Vocals) provides the per-channel default so
+ * multiple active clips from different layers don't all stack in the middle.
+ */
+function resolvePosition(clip: LyricClip, layer: LyricLayer | undefined): ClipPositionPreset {
+  if (clip.position && clip.position !== 'center') return clip.position;
+  return layer?.renderSettings?.positionPreset ?? 'center';
+}
 
 export function ClipLyricsRenderer({
   clips,
@@ -29,6 +44,11 @@ export function ClipLyricsRenderer({
   currentTime,
   styleConfig = DEFAULT_LYRIC_STYLE
 }: ClipLyricsRendererProps) {
+  const layerMap = useMemo(
+    () => new Map(layers.map(l => [l.id, l])),
+    [layers]
+  );
+
   const visibleLayerIds = useMemo(
     () => new Set(layers.filter(l => l.visible).map(l => l.id)),
     [layers]
@@ -59,17 +79,20 @@ export function ClipLyricsRenderer({
   return (
     <div className="clip-lyrics-stage" style={cssVariables}>
       {active.map(clip => {
+        const layer   = layerMap.get(clip.layerId);
+        const pos     = resolvePosition(clip, layer);
+        const posClass = POSITION_CLASS[pos] ?? 'pos-center';
         const duration = clip.endTime - clip.startTime;
         const progress = duration > 0 ? (currentTime - clip.startTime) / duration : 0;
-        const posClass = POSITION_CLASS[clip.position] ?? 'pos-center';
-        const layer = layers.find(l => l.id === clip.layerId);
+        const zIndex   = layer?.renderSettings?.zIndex;
         return (
           <div
             key={clip.id}
             className={`clip-lyric ${posClass} in-${clip.transitionIn} out-${clip.transitionOut}`}
             style={{
               '--clip-progress': progress,
-              '--clip-layer-color': layer?.color ?? '#ffffff'
+              '--clip-layer-color': layer?.color ?? '#ffffff',
+              ...(zIndex !== undefined ? { zIndex } : {})
             } as React.CSSProperties}
             data-layer={clip.layerId}
           >

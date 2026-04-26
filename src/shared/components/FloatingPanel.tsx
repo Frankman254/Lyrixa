@@ -74,6 +74,10 @@ export function FloatingPanel({
 
   const onHeaderPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return;
+    // Don't intercept clicks that originate on a button inside the header.
+    // Calling preventDefault on pointerdown suppresses the subsequent click
+    // event on child elements, which silences close/minimize/expand buttons.
+    if ((e.target as HTMLElement).closest('button')) return;
     e.preventDefault();
     isDragging.current = true;
     dragOrigin.current = {

@@ -1,7 +1,17 @@
 import type { LyricLayer } from '../../core/types/layer';
-import type { LyricClip as LyricClipModel } from '../../core/types/clip';
+import type { LyricClip as LyricClipModel, ClipPositionPreset } from '../../core/types/clip';
 import { LyricClip } from './LyricClip';
 import type { ClipPointerModifiers, DragMode } from './LyricClip';
+
+const POSITION_OPTIONS: { value: ClipPositionPreset; label: string }[] = [
+  { value: 'center',       label: 'Center'       },
+  { value: 'top',          label: 'Top'          },
+  { value: 'bottom',       label: 'Bottom'       },
+  { value: 'top-left',     label: 'Top left'     },
+  { value: 'top-right',    label: 'Top right'    },
+  { value: 'bottom-left',  label: 'Bottom left'  },
+  { value: 'bottom-right', label: 'Bottom right' }
+];
 
 interface LyricTrackProps {
   layer: LyricLayer;
@@ -22,6 +32,7 @@ interface LyricTrackProps {
   ) => void;
   onLayerToggleVisible: (layerId: string) => void;
   onLayerToggleLocked: (layerId: string) => void;
+  onLayerPositionChange: (layerId: string, preset: ClipPositionPreset) => void;
 }
 
 export function LyricTrack({
@@ -35,7 +46,8 @@ export function LyricTrack({
   laneRef,
   onClipPointerDown,
   onLayerToggleVisible,
-  onLayerToggleLocked
+  onLayerToggleLocked,
+  onLayerPositionChange
 }: LyricTrackProps) {
   const totalWidth = Math.max(duration, 1) * pxPerSecond;
   const trackClass = [
@@ -45,6 +57,8 @@ export function LyricTrack({
     isDropTarget ? 'drop-target' : ''
   ].filter(Boolean).join(' ');
 
+  const currentPos = layer.renderSettings?.positionPreset ?? 'center';
+
   return (
     <div className={trackClass}>
       <div className="tl-track-header" style={{ borderLeftColor: layer.color }}>
@@ -53,6 +67,17 @@ export function LyricTrack({
           <span className="tl-track-name">{layer.name}</span>
         </div>
         <div className="tl-track-actions">
+          <select
+            className="tl-track-pos-select"
+            value={currentPos}
+            title="Layer position in preview"
+            onChange={(e) => onLayerPositionChange(layer.id, e.target.value as ClipPositionPreset)}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {POSITION_OPTIONS.map(o => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
           <button
             className={`tl-track-btn ${layer.visible ? 'on' : ''}`}
             onClick={() => onLayerToggleVisible(layer.id)}
