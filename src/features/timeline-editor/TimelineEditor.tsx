@@ -22,7 +22,7 @@ import { TimelinePlayhead } from './TimelinePlayhead';
 import { TimelineTrackHeader } from './TimelineTrackHeader';
 import { TimelineAudioTrack } from './TimelineAudioTrack';
 import type { ClipPointerModifiers, DragMode } from './LyricClip';
-import { clampZoom, clientXToTime, TRACK_HEADER_WIDTH } from './timelineMath';
+import { clampZoom, getTimelinePointerTime, TRACK_HEADER_WIDTH } from './timelineMath';
 import './TimelineEditor.css';
 
 interface TimelineEditorProps {
@@ -162,15 +162,27 @@ export function TimelineEditor({
   const zoomIn = () => setPxPerSecond(p => clampZoom(p * 1.4));
   const zoomOut = () => setPxPerSecond(p => clampZoom(p / 1.4));
 
-  const handleRulerClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    const rect = laneContainerRef.current?.getBoundingClientRect();
+  /**
+   * Single seek handler shared by the ruler, waveform lane, and track lane.
+   * Uses the SCROLL CONTAINER rect (scrollRef) which is stable in viewport
+   * coords — see getTimelinePointerTime for the full explanation.
+   */
+  const handleSeekClick = useCallback((e: React.MouseEvent) => {
+    const rect = scrollRef.current?.getBoundingClientRect();
     if (!rect) return;
-    const time = clientXToTime(e.clientX, rect, {
-      pxPerSecond,
+    const time = getTimelinePointerTime({
+      clientX: e.clientX,
+      scrollContainerRect: rect,
       scrollLeft: scrollRef.current?.scrollLeft ?? 0,
-      headerOffset: headerWidth
+      pxPerSecond,
+      headerWidth,
+      duration: effectiveDuration
     });
-    onSeek(Math.max(0, Math.min(effectiveDuration, time)));
+    onSeek(time);
+  }, [pxPerSecond, headerWidth, effectiveDuration, onSeek]);
+
+  const handleRulerClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    handleSeekClick(e);
   };
 
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
@@ -394,14 +406,7 @@ export function TimelineEditor({
 
   const handleLaneBackgroundClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if ((e.target as HTMLElement).closest('.tl-clip')) return;
-    const rect = laneContainerRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const time = clientXToTime(e.clientX, rect, {
-      pxPerSecond,
-      scrollLeft: scrollRef.current?.scrollLeft ?? 0,
-      headerOffset: headerWidth
-    });
-    onSeek(Math.max(0, Math.min(effectiveDuration, time)));
+    handleSeekClick(e);
     setSelectedClipIds(new Set());
   };
 
@@ -647,6 +652,7 @@ export function TimelineEditor({
             peaks={masterPeaks}
             badge={masterChannel ? 'master' : undefined}
             mockFallback={masterIsMock}
+            onLaneClick={handleSeekClick}
           />
 
           {vocalsChannel && (
@@ -664,6 +670,7 @@ export function TimelineEditor({
                   : 'analyzing…'
               }
               mockFallback={!vocalsChannel.waveformPeaks?.length}
+              onLaneClick={handleSeekClick}
             />
           )}
 

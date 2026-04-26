@@ -324,6 +324,10 @@
   overflow: hidden;
 }
 
+.tl-audio-lane--seekable {
+  cursor: crosshair;
+}
+
 .tl-waveform {
   position: relative;
   pointer-events: none;

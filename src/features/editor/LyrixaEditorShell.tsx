@@ -5,7 +5,7 @@ import type { AudioEngineRef } from '../player/AudioEngine';
 import { TimelineEditor } from '../timeline-editor/TimelineEditor';
 import { ClipLyricsRenderer } from '../lyrics-view/ClipLyricsRenderer';
 import { LyricsImportPanel } from './LyricsImportPanel';
-import { MiniPreview } from './MiniPreview';
+import { FloatingPreview } from './FloatingPreview';
 import { useLyrixaProject } from './useLyrixaProject';
 import type { SaveStatus } from './useLyrixaProject';
 import type { AudioChannelRole } from '../../core/types/audio';
@@ -290,7 +290,7 @@ export function LyrixaEditorShell() {
         />
 
         {showMini && (
-          <MiniPreview
+          <FloatingPreview
             clips={project.clips}
             layers={project.layers}
             currentTime={playbackTime}

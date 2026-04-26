@@ -10,23 +10,44 @@ export interface ViewportBounds {
 }
 
 /**
- * Translate a pointer x (client coords) into an absolute timeline seconds value.
+ * Convert a pointer clientX into an absolute timeline time (seconds).
  *
- * `headerOffset` accounts for the sticky-left header column shared by every
- * row (see TimelineTrackHeader). Without it, time=0 would visually appear
- * before the first ruler tick.
+ * IMPORTANT — pass the SCROLL CONTAINER rect (tl-scroll / scrollRef), NOT the
+ * scrollable content element.  The scroll container's left edge is stable in
+ * viewport coordinates regardless of how far the content has been scrolled.
+ * scrollLeft is then added exactly once to recover the content position.
+ *
+ *   visualX  = clientX − scrollContainerRect.left
+ *              (distance from the visible left edge of the timeline area)
+ *   contentX = visualX − headerWidth + scrollLeft
+ *              (pixel position inside the timeline content, 0 = time 0)
+ *   time     = contentX / pxPerSecond
+ *
+ * Why NOT the content element rect:
+ *   The content element shifts left in the viewport as the user scrolls, so its
+ *   getBoundingClientRect().left already encodes the scroll offset.  Adding
+ *   scrollLeft on top of that would double-count it.
  */
-export function clientXToTime(
-  clientX: number,
-  containerRect: DOMRect,
-  {
-    pxPerSecond,
-    scrollLeft,
-    headerOffset = 0
-  }: { pxPerSecond: number; scrollLeft: number; headerOffset?: number }
-): number {
-  const localX = clientX - containerRect.left + scrollLeft - headerOffset;
-  return pxPerSecond > 0 ? localX / pxPerSecond : 0;
+export function getTimelinePointerTime({
+  clientX,
+  scrollContainerRect,
+  scrollLeft,
+  pxPerSecond,
+  headerWidth = TRACK_HEADER_WIDTH,
+  duration = Infinity
+}: {
+  clientX: number;
+  /** getBoundingClientRect() of the scroll container — stable, not the content. */
+  scrollContainerRect: DOMRect;
+  scrollLeft: number;
+  pxPerSecond: number;
+  headerWidth?: number;
+  duration?: number;
+}): number {
+  const visualX  = clientX - scrollContainerRect.left;
+  const contentX = visualX - headerWidth + scrollLeft;
+  const time     = pxPerSecond > 0 ? contentX / pxPerSecond : 0;
+  return Math.max(0, Math.min(duration, time));
 }
 
 /** Width (px) of the shared sticky-left header column on every row. */

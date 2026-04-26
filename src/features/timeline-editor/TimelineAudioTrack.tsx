@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import type { ReactNode } from 'react';
+import type { MouseEventHandler, ReactNode } from 'react';
 import type { AudioPeak, VocalActivitySegment } from '../../core/types/audio';
 import { AudioWaveformTrack } from './AudioWaveformTrack';
 import { TimelineTrackHeader } from './TimelineTrackHeader';
@@ -18,6 +18,8 @@ interface TimelineAudioTrackProps {
   actions?: ReactNode;
   /** True when no real decoded peaks exist and the waveform is the mock fallback. */
   mockFallback?: boolean;
+  /** Click handler for the waveform lane — used for timeline seek. */
+  onLaneClick?: MouseEventHandler<HTMLDivElement>;
 }
 
 /**
@@ -34,7 +36,8 @@ export function TimelineAudioTrack({
   vocalActivity,
   badge,
   actions,
-  mockFallback
+  mockFallback,
+  onLaneClick
 }: TimelineAudioTrackProps) {
   const totalWidth = Math.max(duration, 1) * pxPerSecond;
 
@@ -65,8 +68,9 @@ export function TimelineAudioTrack({
         variant="audio"
       />
       <div
-        className="tl-track-lane tl-audio-lane"
+        className={`tl-track-lane tl-audio-lane${onLaneClick ? ' tl-audio-lane--seekable' : ''}`}
         style={{ width: `${totalWidth}px`, height: `${height}px` }}
+        onClick={onLaneClick}
       >
         <AudioWaveformTrack
           duration={duration}
