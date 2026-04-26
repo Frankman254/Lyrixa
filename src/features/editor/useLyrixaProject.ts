@@ -53,6 +53,8 @@ export interface UseLyrixaProjectResult {
   setProjectName: (name: string) => void;
   loadAudioFile: (file: File, role?: AudioChannelRole) => Promise<void>;
   removeAudio: (role?: AudioChannelRole) => Promise<void>;
+  /** Returns the in-memory Blob for a loaded audio channel, or null if unavailable. */
+  getAudioBlob: (role: AudioChannelRole) => Blob | null;
 
   setRawLyricsText: (text: string) => void;
   applyLyrics: (rawText: string, options?: ApplyLyricsOptions) => void;
@@ -93,6 +95,9 @@ export function useLyrixaProject(): UseLyrixaProjectResult {
   const saveTimerRef = useRef<number | null>(null);
   const skipNextSaveRef = useRef(true);
 
+  // In-memory blobs for the current project — used by band peak extraction.
+  const blobsRef = useRef<{ master: Blob | null; vocals: Blob | null }>({ master: null, vocals: null });
+
   const projectIdRef = useRef(project.id);
   useEffect(() => {
     projectIdRef.current = project.id;
@@ -123,6 +128,7 @@ export function useLyrixaProject(): UseLyrixaProjectResult {
         if (role === 'master') setAudioNeedsReload(true);
         return;
       }
+      blobsRef.current[role] = stored.blob;
       const url = URL.createObjectURL(stored.blob);
       setProject(p => {
         const current = p.audioTracks[role];
@@ -231,6 +237,7 @@ export function useLyrixaProject(): UseLyrixaProjectResult {
 
   const loadAudioFile = useCallback(async (file: File, role: AudioChannelRole = 'master') => {
     const objectUrl = URL.createObjectURL(file);
+    blobsRef.current[role] = file;
     const duration = await readAudioDuration(file).catch(() => 0);
 
     setProject(p => {
@@ -260,6 +267,7 @@ export function useLyrixaProject(): UseLyrixaProjectResult {
   }, [extractAndApplyPeaks]);
 
   const removeAudio = useCallback(async (role: AudioChannelRole = 'master') => {
+    blobsRef.current[role] = null;
     setProject(p => {
       const previous = p.audioTracks[role];
       if (previous?.objectUrl) URL.revokeObjectURL(previous.objectUrl);
@@ -407,8 +415,14 @@ export function useLyrixaProject(): UseLyrixaProjectResult {
     setProject(p => ({ ...p, renderMode: mode }));
   }, []);
 
+  const getAudioBlob = useCallback(
+    (role: AudioChannelRole): Blob | null => blobsRef.current[role],
+    []
+  );
+
   const resetProject = useCallback(async () => {
     const oldId = projectIdRef.current;
+    blobsRef.current = { master: null, vocals: null };
     setProject(p => {
       const m = p.audioTracks.master?.objectUrl;
       const v = p.audioTracks.vocals?.objectUrl;
@@ -427,6 +441,7 @@ export function useLyrixaProject(): UseLyrixaProjectResult {
     setProjectName,
     loadAudioFile,
     removeAudio,
+    getAudioBlob,
     setRawLyricsText,
     applyLyrics,
     regenerateFromVocals,

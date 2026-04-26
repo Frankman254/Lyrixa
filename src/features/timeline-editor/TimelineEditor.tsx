@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { LyricClip as LyricClipModel, ClipPositionPreset } from '../../core/types/clip';
 import type { LyricLayer } from '../../core/types/layer';
-import type { AudioPeak, AudioChannel } from '../../core/types/audio';
+import type { AudioPeak, AudioChannel, AudioBandMode } from '../../core/types/audio';
 import {
   moveClip,
   resizeClipStart,
@@ -37,6 +37,10 @@ interface TimelineEditorProps {
   vocalsChannel?: AudioChannel | null;
   peaks?: AudioPeak[];
   embedded?: boolean;
+  /** Already-decoded peaks from the vocals stem. Used for vocals + instrumental band modes. */
+  vocalsBandPeaks?: AudioPeak[] | null;
+  /** Async callback to extract frequency-filtered peaks for a given band mode. */
+  onExtractBandPeaks?: (mode: AudioBandMode) => Promise<AudioPeak[] | null>;
   onClipsChange: (next: LyricClipModel[]) => void;
   onLayersChange: (next: LyricLayer[]) => void;
   onSeek: (time: number) => void;
@@ -58,6 +62,44 @@ const MASTER_WAVEFORM_HEIGHT = 96;
 const VOCALS_WAVEFORM_HEIGHT = 72;
 const RULER_HEIGHT = 28;
 
+const BAND_MODE_COLORS: Record<AudioBandMode, string> = {
+  'auto':         '#53c2f0',
+  'full-mix':     '#53c2f0',
+  'vocals':       '#5fc88e',
+  'instrumental': '#e6a86a',
+  'bass':         '#e65e8f',
+  'kick':         '#e55252',
+  'hihat':        '#a88ee6',
+};
+
+function getBandBadge(
+  mode: AudioBandMode,
+  source: 'master' | 'vocals-stem' | 'estimated',
+  loading: boolean,
+  hasMasterFile: boolean
+): string | undefined {
+  if (loading) return 'analyzing…';
+  switch (mode) {
+    case 'auto':
+    case 'full-mix':
+      return hasMasterFile ? undefined : 'mock';
+    case 'vocals':
+      return source === 'vocals-stem' ? 'Vocals Stem' : 'Est. Vocals';
+    case 'instrumental':
+      return source === 'master' ? 'Instrumental ≈' : 'Est. Instrumental';
+    case 'bass':    return 'Bass Band';
+    case 'kick':    return 'Kick Band';
+    case 'hihat':   return 'Hi-Hat Band';
+  }
+}
+
+function subtractPeaks(master: AudioPeak[], vocals: AudioPeak[]): AudioPeak[] {
+  return master.map((p, i) => ({
+    time: p.time,
+    amplitude: Math.max(0, p.amplitude - (vocals[i]?.amplitude ?? 0) * 0.8)
+  }));
+}
+
 const NUDGE_STEPS = [-1, -0.5, -0.1, 0.1, 0.5, 1];
 const OFFSET_STEPS = [-1, -0.5, -0.1, 0.1, 0.5, 1];
 
@@ -72,6 +114,8 @@ export function TimelineEditor({
   vocalsChannel,
   peaks,
   embedded = false,
+  vocalsBandPeaks,
+  onExtractBandPeaks,
   onClipsChange,
   onLayersChange,
   onSeek,
@@ -85,6 +129,14 @@ export function TimelineEditor({
   const [offsetInput, setOffsetInput] = useState<string>('0');
   /** Which audio waveform rows to display. */
   const [waveformView, setWaveformView] = useState<'master' | 'vocals' | 'both'>('both');
+  /** Which frequency band to emphasize in the master waveform. */
+  const [bandMode, setBandMode] = useState<AudioBandMode>(() => {
+    try { return (localStorage.getItem('lyrixa_band_mode') as AudioBandMode | null) ?? 'auto'; }
+    catch { return 'auto'; }
+  });
+  const [bandPeaks, setBandPeaks] = useState<AudioPeak[] | null>(null);
+  const [bandPeaksLoading, setBandPeaksLoading] = useState(false);
+  const [bandPeaksSource, setBandPeaksSource] = useState<'master' | 'vocals-stem' | 'estimated'>('master');
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const laneContainerRef = useRef<HTMLDivElement>(null);
@@ -507,6 +559,60 @@ export function TimelineEditor({
     return () => window.removeEventListener('keydown', onKey);
   }, [selectAll, clearSelection, nudgeSelected]);
 
+  // ── Band Mode peak extraction ──────────────────────────────────
+  const masterPeaks = masterChannel?.waveformPeaks ?? peaks;
+
+  useEffect(() => {
+    if (bandMode === 'auto' || bandMode === 'full-mix') {
+      setBandPeaks(null);
+      setBandPeaksSource('master');
+      setBandPeaksLoading(false);
+      return;
+    }
+
+    // Vocals — prefer real stem, fall back to offline estimation.
+    if (bandMode === 'vocals' && vocalsBandPeaks && vocalsBandPeaks.length > 0) {
+      setBandPeaks(vocalsBandPeaks);
+      setBandPeaksSource('vocals-stem');
+      setBandPeaksLoading(false);
+      return;
+    }
+
+    // Instrumental — subtract vocals stem from master when both are decoded.
+    if (
+      bandMode === 'instrumental' &&
+      vocalsBandPeaks && vocalsBandPeaks.length > 0 &&
+      masterPeaks && masterPeaks.length > 0
+    ) {
+      setBandPeaks(subtractPeaks(masterPeaks, vocalsBandPeaks));
+      setBandPeaksSource('master');
+      setBandPeaksLoading(false);
+      return;
+    }
+
+    if (!onExtractBandPeaks) {
+      setBandPeaks(null);
+      setBandPeaksLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setBandPeaksLoading(true);
+    onExtractBandPeaks(bandMode)
+      .then(extracted => {
+        if (cancelled) return;
+        setBandPeaks(extracted ?? null);
+        const isEstimated = bandMode === 'vocals' || bandMode === 'instrumental';
+        setBandPeaksSource(isEstimated ? 'estimated' : 'master');
+      })
+      .catch(() => { if (!cancelled) setBandPeaks(null); })
+      .finally(() => { if (!cancelled) setBandPeaksLoading(false); });
+
+    return () => { cancelled = true; };
+  // masterPeaks?.length ensures re-run once master audio is decoded.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bandMode, masterChannel?.fileName, vocalsBandPeaks, onExtractBandPeaks, masterPeaks?.length]);
+
   // ── Lyrics Offset ──────────────────────────────────────────────
   const applyOffsetInput = () => {
     const value = parseFloat(offsetInput);
@@ -515,8 +621,10 @@ export function TimelineEditor({
     setOffsetInput('0');
   };
 
-  const masterPeaks = masterChannel?.waveformPeaks ?? peaks;
   const masterIsMock = !masterPeaks || masterPeaks.length === 0;
+  const displayPeaks = (bandMode === 'auto' || bandMode === 'full-mix')
+    ? masterPeaks
+    : (bandPeaks ?? masterPeaks);
   const hasSelection = selectedClipIds.size > 0;
 
   return (
@@ -546,6 +654,28 @@ export function TimelineEditor({
             <span className="tl-zoom-value">{Math.round(pxPerSecond)} px/s</span>
             <button className="tl-btn small" onClick={zoomIn} title="Zoom in">+</button>
           </div>
+          {masterChannel && (
+            <label className="tl-snap">
+              Band
+              <select
+                value={bandMode}
+                onChange={(e) => {
+                  const next = e.target.value as AudioBandMode;
+                  setBandMode(next);
+                  try { localStorage.setItem('lyrixa_band_mode', next); } catch { /* ignore */ }
+                }}
+                title="Waveform band mode — which frequency range to emphasize in the master lane"
+              >
+                <option value="auto">Auto</option>
+                <option value="full-mix">Full Mix</option>
+                <option value="vocals">Vocals</option>
+                <option value="instrumental">Instrumental</option>
+                <option value="bass">Bass</option>
+                <option value="kick">Kick</option>
+                <option value="hihat">Hi-Hat</option>
+              </select>
+            </label>
+          )}
           {(masterChannel || vocalsChannel) && (
             <label className="tl-snap">
               Waves
@@ -690,13 +820,13 @@ export function TimelineEditor({
           {(waveformView === 'master' || waveformView === 'both') && (
             <TimelineAudioTrack
               title="Master track"
-              color="#53c2f0"
+              color={BAND_MODE_COLORS[bandMode]}
               duration={effectiveDuration}
               pxPerSecond={pxPerSecond}
               height={MASTER_WAVEFORM_HEIGHT}
-              peaks={masterPeaks}
-              badge={masterChannel?.fileName ? 'master' : undefined}
-              mockFallback={masterIsMock}
+              peaks={displayPeaks}
+              badge={getBandBadge(bandMode, bandPeaksSource, bandPeaksLoading, !!masterChannel?.fileName)}
+              mockFallback={masterIsMock && !bandPeaks && !bandPeaksLoading}
               onLaneClick={handleSeekClick}
             />
           )}

@@ -8,7 +8,8 @@ import { LyricsImportPanel } from './LyricsImportPanel';
 import { FloatingPreview } from './FloatingPreview';
 import { useLyrixaProject } from './useLyrixaProject';
 import type { SaveStatus } from './useLyrixaProject';
-import type { AudioChannelRole } from '../../core/types/audio';
+import type { AudioChannelRole, AudioBandMode } from '../../core/types/audio';
+import { extractBandPeaksFromBlob } from './peakExtraction';
 import './LyrixaEditorShell.css';
 
 const SAVE_LABEL: Record<SaveStatus, string> = {
@@ -25,6 +26,7 @@ export function LyrixaEditorShell() {
     setProjectName,
     loadAudioFile,
     removeAudio,
+    getAudioBlob,
     applyLyrics,
     regenerateFromVocals,
     setClips,
@@ -123,6 +125,15 @@ export function LyrixaEditorShell() {
     }
     setNameEditing(false);
   };
+
+  const extractBandPeaksForMode = useCallback(
+    async (mode: AudioBandMode) => {
+      const blob = getAudioBlob('master');
+      if (!blob) return null;
+      return extractBandPeaksFromBlob(blob, mode);
+    },
+    [getAudioBlob]
+  );
 
   const effectiveDuration = masterChannel?.duration ?? 60;
   const showMini = miniPreviewVisible && !previewOpen;
@@ -291,6 +302,8 @@ export function LyrixaEditorShell() {
           trackName={masterChannel?.fileName ?? 'No audio loaded'}
           masterChannel={masterChannel}
           vocalsChannel={vocalsChannel}
+          vocalsBandPeaks={vocalsChannel?.waveformPeaks}
+          onExtractBandPeaks={extractBandPeaksForMode}
           onClipsChange={setClips}
           onLayersChange={setLayers}
           onSeek={handleSeek}

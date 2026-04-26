@@ -54,3 +54,28 @@ export interface ProjectAudioTracks {
 export function createEmptyAudioTracks(): ProjectAudioTracks {
   return { master: null, vocals: null };
 }
+
+/**
+ * Which frequency band / mix to emphasize in the waveform display lane.
+ * 'auto' picks the best available source automatically.
+ */
+export type AudioBandMode =
+  | 'auto'
+  | 'full-mix'
+  | 'vocals'
+  | 'instrumental'
+  | 'bass'
+  | 'kick'
+  | 'hihat';
+
+/**
+ * A computed analysis pass for a specific band mode.
+ * Stored ephemerally — not persisted to project JSON.
+ */
+export interface AudioAnalysisTrack {
+  mode: AudioBandMode;
+  peaks: AudioPeak[];
+  activity?: VocalActivitySegment[];
+  /** Where the data came from: real stems, offline extraction, or heuristic estimate. */
+  source: 'master' | 'vocals-stem' | 'estimated';
+}
