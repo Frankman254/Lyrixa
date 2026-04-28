@@ -18,7 +18,7 @@ const TRANSITIONS: LyricClip['transitionIn'][] = [
   'blur-in'
 ];
 
-const TRANSITION_LABEL: Record<LyricClip['transitionIn'], string> = {
+const TRANSITION_LABEL: Partial<Record<LyricClip['transitionIn'], string>> = {
   none: 'None',
   fade: 'Fade',
   'slide-up': 'Slide up',

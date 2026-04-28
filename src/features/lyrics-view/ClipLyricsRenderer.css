@@ -53,6 +53,24 @@
   white-space: pre-wrap;
 }
 
+.clip-lyric.fill-gradient .clip-lyric-text,
+.clip-lyric.fill-texture .clip-lyric-text {
+  color: transparent;
+  background-image: var(--lyric-fill-image);
+  background-size: var(--lyric-texture-size, cover);
+  background-position: center;
+  background-repeat: repeat;
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+
+.clip-lyric.fill-texture .clip-lyric-text {
+  animation-name: lyric-texture-drift;
+  animation-duration: calc(var(--lyric-fx-speed, 1s) * 8);
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
 .pos-center { left: 50%; top: 50%; transform: translate(-50%, -50%); }
 .pos-top { left: 50%; top: 12%; transform: translate(-50%, 0); }
 .pos-bottom { left: 50%; bottom: 12%; transform: translate(-50%, 0); }
@@ -291,4 +309,9 @@
     scale: calc(1 + 0.08 * var(--lyric-fx-intensity, 0.7));
     filter: brightness(calc(1.1 + 0.5 * var(--lyric-fx-intensity, 0.7)));
   }
+}
+
+@keyframes lyric-texture-drift {
+  from { background-position: 0% 50%; }
+  to { background-position: 120% 50%; }
 }

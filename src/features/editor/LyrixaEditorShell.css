@@ -414,6 +414,29 @@ select option {
   z-index: 5;
 }
 
+.ls-transparent-preview {
+  position: fixed;
+  inset: 0;
+  z-index: 110;
+  background: transparent;
+  pointer-events: none;
+}
+
+.ls-transparent-preview .clip-lyrics-stage {
+  position: absolute;
+  inset: 0;
+}
+
+.ls-transparent-exit {
+  position: fixed;
+  top: 14px;
+  right: 14px;
+  z-index: 120;
+  pointer-events: auto;
+  background: rgba(8, 10, 16, 0.72);
+  backdrop-filter: blur(16px);
+}
+
 /* ── Mini preview ────────────────────────────────────── */
 .ls-mini-preview {
   position: absolute;

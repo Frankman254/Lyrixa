@@ -10,8 +10,7 @@ import type {
 import { ClipLyricsRenderer } from '../lyrics-view/ClipLyricsRenderer';
 import { FloatingPanel } from '../../shared/components/FloatingPanel';
 
-const PREVIEW_W = 320;
-const PREVIEW_H = 180;
+const PREVIEW_ASPECT = 16 / 9;
 const STORAGE_KEY = 'lyrixa_preview_panel_pos';
 
 interface FloatingPreviewProps {
@@ -22,6 +21,8 @@ interface FloatingPreviewProps {
   animationConfig: LyricAnimationConfig;
   fxConfig: LyricFxConfig;
   progressIndicatorConfig: ClipProgressIndicatorConfig;
+  width: number;
+  onSizeChange: (width: number) => void;
   onExpand: () => void;
   onClose: () => void;
 }
@@ -34,34 +35,54 @@ export function FloatingPreview({
   animationConfig,
   fxConfig,
   progressIndicatorConfig,
+  width,
+  onSizeChange,
   onExpand,
   onClose
 }: FloatingPreviewProps) {
+  const previewWidth = Math.max(320, Math.min(760, width));
+  const previewHeight = Math.round(previewWidth / PREVIEW_ASPECT);
   const miniStyle = useMemo<LyricVisualStyle>(
-    () => ({ ...styleConfig, fontSize: '1.05rem' }),
-    [styleConfig]
+    () => ({ ...styleConfig, fontSize: `${Math.max(1.05, previewWidth / 305)}rem` }),
+    [previewWidth, styleConfig]
   );
 
   return (
     <FloatingPanel
       storageKey={STORAGE_KEY}
-      width={PREVIEW_W}
+      width={previewWidth}
       title="Live preview"
       headerActions={
-        <button
-          className="fp-btn"
-          onClick={onExpand}
-          title="Expand to full preview"
-        >
-          ⤢
-        </button>
+        <>
+          <button
+            className="fp-btn"
+            onClick={() => onSizeChange(previewWidth - 80)}
+            title="Smaller preview"
+          >
+            -
+          </button>
+          <button
+            className="fp-btn"
+            onClick={() => onSizeChange(previewWidth + 80)}
+            title="Larger preview"
+          >
+            +
+          </button>
+          <button
+            className="fp-btn"
+            onClick={onExpand}
+            title="Expand to full preview"
+          >
+            ⤢
+          </button>
+        </>
       }
       onClose={onClose}
     >
       <div
         style={{
-          width:  PREVIEW_W,
-          height: PREVIEW_H,
+          width:  previewWidth,
+          height: previewHeight,
           position: 'relative',
           background: 'radial-gradient(circle at 50% 50%, rgba(40,45,60,0.4), #06080d 75%)'
         }}

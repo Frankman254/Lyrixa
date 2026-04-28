@@ -16,6 +16,7 @@ import type {
   LyricAnimationConfig,
   LyricFxConfig,
   LyricFxPreset,
+  LyricTextFillMode,
   LyricVisualStyle
 } from '../../core/types/render';
 import { createProjectExportEnvelope, parseProjectExportEnvelope } from '../../core/project/serialization';
@@ -59,6 +60,10 @@ export function LyrixaEditorShell() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [transparentPreviewOpen, setTransparentPreviewOpen] = useState(false);
+  const [floatingPreviewWidth, setFloatingPreviewWidth] = useState(() =>
+    readStoredNumber('lyrixa_floating_preview_width', 420)
+  );
   const [globalPanelOpen, setGlobalPanelOpen] = useState(false);
   const [miniPreviewVisible, setMiniPreviewVisible] = useState(true);
   const [nameEditing, setNameEditing] = useState(false);
@@ -195,6 +200,12 @@ export function LyrixaEditorShell() {
   const vocalsAnalysisReady = !!vocalsChannel?.vocalActivity?.length;
   const vocalsNeedsReload = !!vocalsChannel && !vocalsChannel.objectUrl;
 
+  const handleFloatingPreviewSize = (width: number) => {
+    const next = Math.max(320, Math.min(760, width));
+    setFloatingPreviewWidth(next);
+    try { window.localStorage.setItem('lyrixa_floating_preview_width', String(next)); } catch { /* ignore */ }
+  };
+
   return (
     <div className="lyrixa-shell">
       <header className="ls-topbar">
@@ -305,6 +316,13 @@ export function LyrixaEditorShell() {
           >
             {previewOpen ? '✕ Close preview' : '◉ Preview'}
           </button>
+          <button
+            className={`ls-btn ${transparentPreviewOpen ? 'active' : ''}`}
+            onClick={() => setTransparentPreviewOpen(true)}
+            title="Transparent in-editor overlay. Real always-on-top over other apps requires a desktop wrapper."
+          >
+            ⧉ Overlay
+          </button>
           {!miniPreviewVisible && !previewOpen && (
             <button className="ls-btn" onClick={() => setMiniPreviewVisible(true)}>
               ◳ Live preview
@@ -407,6 +425,8 @@ export function LyrixaEditorShell() {
             animationConfig={project.animationConfig}
             fxConfig={project.fxConfig}
             progressIndicatorConfig={project.progressIndicatorConfig}
+            width={floatingPreviewWidth}
+            onSizeChange={handleFloatingPreviewSize}
             onExpand={() => setPreviewOpen(true)}
             onClose={() => setMiniPreviewVisible(false)}
           />
@@ -484,6 +504,26 @@ export function LyrixaEditorShell() {
           </div>
         </div>
       )}
+
+      {transparentPreviewOpen && (
+        <div className="ls-transparent-preview" role="dialog" aria-label="Transparent preview overlay">
+          <ClipLyricsRenderer
+            clips={project.clips}
+            layers={project.layers}
+            currentTime={playbackTime}
+            styleConfig={project.styleConfig}
+            animationConfig={project.animationConfig}
+            fxConfig={project.fxConfig}
+            progressIndicatorConfig={project.progressIndicatorConfig}
+          />
+          <button
+            className="ls-btn ghost ls-transparent-exit"
+            onClick={() => setTransparentPreviewOpen(false)}
+          >
+            Exit overlay
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -528,6 +568,21 @@ function GlobalStylePanel({
   onFxChange: (next: LyricFxConfig) => void;
   onProgressChange: (next: ClipProgressIndicatorConfig) => void;
 }) {
+  const handleTextureSelected = async (file: File | undefined) => {
+    if (!file) return;
+    const reader = new FileReader();
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      reader.onload = () => resolve(String(reader.result ?? ''));
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(file);
+    });
+    onStyleChange({
+      ...styleConfig,
+      textFillMode: 'texture',
+      textTextureImage: dataUrl
+    });
+  };
+
   return (
     <div className="ls-global-panel">
       <details open className="inspector-section">
@@ -535,8 +590,21 @@ function GlobalStylePanel({
         <div className="inspector-section-body">
           <div className="inspector-grid">
             <label>Font size<input className="form-control form-input" type="number" step="0.1" min={0.5} value={parseFloat(styleConfig.fontSize) || 2.5} onChange={(e) => onStyleChange({ ...styleConfig, fontSize: `${e.target.value}rem` })} /></label>
+            <label>Weight<input className="form-control form-input" type="number" step="100" min={100} max={1000} value={parseInt(String(styleConfig.fontWeight), 10) || 800} onChange={(e) => onStyleChange({ ...styleConfig, fontWeight: parseInt(e.target.value, 10) || 800 })} /></label>
             <label>Text color<input className="form-color" type="color" value={toColorInput(styleConfig.textColor)} onChange={(e) => onStyleChange({ ...styleConfig, textColor: e.target.value, activeTextColor: e.target.value })} /></label>
+            <label>Stroke<input className="form-control form-input" type="number" min={0} max={12} step={0.5} value={styleConfig.strokeWidth} onChange={(e) => onStyleChange({ ...styleConfig, strokeWidth: parseFloat(e.target.value) || 0 })} /></label>
           </div>
+          <label>Letter spacing<input className="form-control form-input" type="text" value={styleConfig.letterSpacing} onChange={(e) => onStyleChange({ ...styleConfig, letterSpacing: e.target.value })} /></label>
+          <label>Fill mode<select className="form-control form-select" value={styleConfig.textFillMode ?? 'solid'} onChange={(e) => onStyleChange({ ...styleConfig, textFillMode: e.target.value as LyricTextFillMode })}><option value="solid">Solid color</option><option value="gradient">Gradient</option><option value="texture">Image texture</option></select></label>
+          {(styleConfig.textFillMode ?? 'solid') === 'gradient' && (
+            <label>Gradient<input className="form-control form-input" type="text" value={styleConfig.textGradient} onChange={(e) => onStyleChange({ ...styleConfig, textGradient: e.target.value })} /></label>
+          )}
+          {(styleConfig.textFillMode ?? 'solid') === 'texture' && (
+            <>
+              <label>Texture image<input className="form-control form-input" type="file" accept="image/*" onChange={(e) => void handleTextureSelected(e.target.files?.[0])} /></label>
+              <label>Texture size<select className="form-control form-select" value={styleConfig.textTextureSize} onChange={(e) => onStyleChange({ ...styleConfig, textTextureSize: e.target.value })}><option value="cover">Cover</option><option value="contain">Contain</option><option value="auto">Original</option><option value="180px">Tiled small</option><option value="360px">Tiled large</option></select></label>
+            </>
+          )}
           <label>Opacity<input className="form-range" type="range" min={0} max={1} step={0.05} value={styleConfig.opacity} onChange={(e) => onStyleChange({ ...styleConfig, opacity: parseFloat(e.target.value) })} /></label>
           <label>Glow intensity<input className="form-range" type="range" min={0} max={2} step={0.05} value={styleConfig.glowIntensity} onChange={(e) => onStyleChange({ ...styleConfig, glowIntensity: parseFloat(e.target.value) })} /></label>
           <label>Blur amount<input className="form-range" type="range" min={0} max={16} step={0.5} value={styleConfig.blurAmount} onChange={(e) => onStyleChange({ ...styleConfig, blurAmount: parseFloat(e.target.value) })} /></label>
@@ -570,6 +638,13 @@ function safeGetLocalStorage(key: string): string | null {
   } catch {
     return null;
   }
+}
+
+function readStoredNumber(key: string, fallback: number): number {
+  const raw = safeGetLocalStorage(key);
+  if (!raw) return fallback;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : fallback;
 }
 
 function toColorInput(color: string): string {

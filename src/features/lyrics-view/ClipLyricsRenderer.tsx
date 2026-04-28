@@ -121,6 +121,10 @@ export function ClipLyricsRenderer({
           layer?.progressIndicatorDefaults ?? layer?.progressIndicator,
           clip.progressIndicatorOverride
         );
+        const fillMode = style.textFillMode ?? 'solid';
+        const fillImage = fillMode === 'texture' && style.textTextureImage
+          ? `url("${style.textTextureImage}")`
+          : style.textGradient;
         const isExiting = currentTime > clip.endTime;
         const showProgressDot = progressIndicator.enabled && !isExiting && currentTime >= clip.startTime && currentTime <= clip.endTime;
         const layerType = layer?.layerType ?? 'lyrics';
@@ -147,6 +151,8 @@ export function ClipLyricsRenderer({
           '--lyric-bg-color': style.backgroundColor,
           '--lyric-bg-opacity': style.backgroundOpacity,
           '--lyric-bg-opacity-percent': `${Math.max(0, Math.min(1, style.backgroundOpacity)) * 100}%`,
+          '--lyric-fill-image': fillImage,
+          '--lyric-texture-size': style.textTextureSize,
           '--lyric-animation-duration': `${animation.durationMs}ms`,
           '--lyric-animation-easing': animation.easing,
           '--lyric-animation-intensity': animation.intensity,
@@ -174,6 +180,7 @@ export function ClipLyricsRenderer({
               `tx-${effectiveTransition}`,
               `loop-${animation.activeAnimation}`,
               fx.enabled && fx.preset !== 'none' ? `fx-${fx.preset}` : '',
+              fillMode !== 'solid' ? `fill-${fillMode}` : '',
               style.backgroundPill || style.backgroundEmphasis ? 'has-pill' : ''
             ].filter(Boolean).join(' ')}
             style={cssVariables}

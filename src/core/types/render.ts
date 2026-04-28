@@ -1,6 +1,7 @@
 export type RenderMode = 'player' | 'editor' | 'overlay-preview' | 'sync-recorder' | 'timeline-editor';
 
 export type LyricTextTransform = 'none' | 'uppercase' | 'lowercase';
+export type LyricTextFillMode = 'solid' | 'gradient' | 'texture';
 
 export interface LyricVisualStyle {
   textColor: string;
@@ -25,6 +26,10 @@ export interface LyricVisualStyle {
   backgroundColor: string;
   backgroundOpacity: number;
   backgroundEmphasis: boolean;
+  textFillMode: LyricTextFillMode;
+  textGradient: string;
+  textTextureImage: string;
+  textTextureSize: string;
 }
 
 export type LyricTransitionPreset =
@@ -119,7 +124,11 @@ export const DEFAULT_LYRIC_STYLE: LyricVisualStyle = {
   backgroundPill: false,
   backgroundColor: '#000000',
   backgroundOpacity: 0.28,
-  backgroundEmphasis: false
+  backgroundEmphasis: false,
+  textFillMode: 'solid',
+  textGradient: 'linear-gradient(110deg, #ffffff 0%, #80eaff 45%, #ff6bd5 100%)',
+  textTextureImage: '',
+  textTextureSize: 'cover'
 };
 
 export const DEFAULT_LYRIC_ANIMATION: LyricAnimationConfig = {

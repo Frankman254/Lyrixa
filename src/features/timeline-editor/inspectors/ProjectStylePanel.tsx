@@ -1,24 +1,21 @@
 import type {
-  AnimationConfig,
-  FxConfig,
+  ClipProgressIndicatorConfig,
+  LyricAnimationConfig,
+  LyricFxConfig,
   LyricVisualStyle,
-  ProgressIndicatorConfig,
-  ProgressIndicatorVariant
 } from '../../../core/types/render';
 import './Inspectors.css';
 
 interface ProjectStylePanelProps {
   styleConfig: LyricVisualStyle;
-  animationConfig: AnimationConfig;
-  fxConfig: FxConfig;
-  progressIndicatorConfig: ProgressIndicatorConfig;
+  animationConfig: LyricAnimationConfig;
+  fxConfig: LyricFxConfig;
+  progressIndicatorConfig: ClipProgressIndicatorConfig;
   onStyleChange: (next: LyricVisualStyle) => void;
-  onAnimationChange: (next: AnimationConfig) => void;
-  onFxChange: (next: FxConfig) => void;
-  onProgressChange: (next: ProgressIndicatorConfig) => void;
+  onAnimationChange: (next: LyricAnimationConfig) => void;
+  onFxChange: (next: LyricFxConfig) => void;
+  onProgressChange: (next: ClipProgressIndicatorConfig) => void;
 }
-
-const PROGRESS_VARIANTS: ProgressIndicatorVariant[] = ['none', 'bar', 'underline', 'glow'];
 
 export function ProjectStylePanel({
   styleConfig,
@@ -33,13 +30,13 @@ export function ProjectStylePanel({
   const patchStyle = (patch: Partial<LyricVisualStyle>) =>
     onStyleChange({ ...styleConfig, ...patch });
 
-  const patchAnimation = (patch: Partial<AnimationConfig>) =>
+  const patchAnimation = (patch: Partial<LyricAnimationConfig>) =>
     onAnimationChange({ ...animationConfig, ...patch });
 
-  const patchFx = (patch: Partial<FxConfig>) =>
+  const patchFx = (patch: Partial<LyricFxConfig>) =>
     onFxChange({ ...fxConfig, ...patch });
 
-  const patchProgress = (patch: Partial<ProgressIndicatorConfig>) =>
+  const patchProgress = (patch: Partial<ClipProgressIndicatorConfig>) =>
     onProgressChange({ ...progressIndicatorConfig, ...patch });
 
   return (
@@ -101,35 +98,35 @@ export function ProjectStylePanel({
       <label className="inline">
         <input
           type="checkbox"
-          checked={animationConfig.enabled}
-          onChange={(e) => patchAnimation({ enabled: e.target.checked })}
+          checked={animationConfig.activeAnimation !== 'none'}
+          onChange={(e) => patchAnimation({ activeAnimation: e.target.checked ? 'pulse' : 'none' })}
         />
-        Enable transitions
+        Enable active animation
       </label>
       <div className="lx-inspector-row">
         <label>
-          Enter (ms)
+          Duration (ms)
           <input
             type="number"
             min={0}
             step="20"
-            value={animationConfig.enterDurationMs}
+            value={animationConfig.durationMs}
             onChange={(e) => {
               const next = parseInt(e.target.value, 10);
-              if (Number.isFinite(next)) patchAnimation({ enterDurationMs: next });
+              if (Number.isFinite(next)) patchAnimation({ durationMs: next });
             }}
           />
         </label>
         <label>
-          Exit (ms)
+          Exit linger (ms)
           <input
             type="number"
             min={0}
             step="20"
-            value={animationConfig.exitDurationMs}
+            value={animationConfig.exitLingerMs}
             onChange={(e) => {
               const next = parseInt(e.target.value, 10);
-              if (Number.isFinite(next)) patchAnimation({ exitDurationMs: next });
+              if (Number.isFinite(next)) patchAnimation({ exitLingerMs: next });
             }}
           />
         </label>
@@ -147,45 +144,45 @@ export function ProjectStylePanel({
       </label>
       <div className="lx-inspector-row">
         <label>
-          Ambient
+          Intensity
           <input
             type="number"
             min={0}
-            max={1}
+            max={2}
             step="0.05"
-            value={fxConfig.ambientIntensity}
+            value={fxConfig.intensity}
             onChange={(e) => {
               const next = parseFloat(e.target.value);
-              if (Number.isFinite(next)) patchFx({ ambientIntensity: clamp01(next) });
+              if (Number.isFinite(next)) patchFx({ intensity: clamp(next, 0, 2) });
             }}
           />
         </label>
         <label>
-          Bloom
+          Blur
           <input
             type="number"
             min={0}
-            max={1}
-            step="0.05"
-            value={fxConfig.bloom}
+            max={24}
+            step="0.5"
+            value={fxConfig.blur}
             onChange={(e) => {
               const next = parseFloat(e.target.value);
-              if (Number.isFinite(next)) patchFx({ bloom: clamp01(next) });
+              if (Number.isFinite(next)) patchFx({ blur: clamp(next, 0, 24) });
             }}
           />
         </label>
       </div>
       <label>
-        Vignette
+        FX opacity
         <input
           type="number"
           min={0}
           max={1}
           step="0.05"
-          value={fxConfig.vignette}
+          value={fxConfig.opacity}
           onChange={(e) => {
             const next = parseFloat(e.target.value);
-            if (Number.isFinite(next)) patchFx({ vignette: clamp01(next) });
+            if (Number.isFinite(next)) patchFx({ opacity: clamp01(next) });
           }}
         />
       </label>
@@ -194,28 +191,29 @@ export function ProjectStylePanel({
       <h3>Progress indicator</h3>
       <div className="lx-inspector-row">
         <label>
-          Variant
-          <select
-            value={progressIndicatorConfig.variant}
-            onChange={(e) =>
-              patchProgress({ variant: e.target.value as ProgressIndicatorVariant })
-            }
-          >
-            {PROGRESS_VARIANTS.map(v => (
-              <option key={v} value={v}>{v}</option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Thickness
+          Dot size
           <input
             type="number"
             min={0}
             step="1"
-            value={progressIndicatorConfig.thickness}
+            value={progressIndicatorConfig.size}
             onChange={(e) => {
               const next = parseInt(e.target.value, 10);
-              if (Number.isFinite(next)) patchProgress({ thickness: next });
+              if (Number.isFinite(next)) patchProgress({ size: next });
+            }}
+          />
+        </label>
+        <label>
+          Dot glow
+          <input
+            type="number"
+            min={0}
+            max={2}
+            step="0.05"
+            value={progressIndicatorConfig.glow}
+            onChange={(e) => {
+              const next = parseFloat(e.target.value);
+              if (Number.isFinite(next)) patchProgress({ glow: clamp(next, 0, 2) });
             }}
           />
         </label>
@@ -223,18 +221,22 @@ export function ProjectStylePanel({
       <label className="inline">
         <input
           type="checkbox"
-          checked={progressIndicatorConfig.showOnActiveOnly}
-          onChange={(e) => patchProgress({ showOnActiveOnly: e.target.checked })}
+          checked={progressIndicatorConfig.enabled}
+          onChange={(e) => patchProgress({ enabled: e.target.checked })}
         />
-        Show on active only
+        Show progress dot
       </label>
     </aside>
   );
 }
 
 function clamp01(n: number): number {
-  if (n < 0) return 0;
-  if (n > 1) return 1;
+  return clamp(n, 0, 1);
+}
+
+function clamp(n: number, min: number, max: number): number {
+  if (n < min) return min;
+  if (n > max) return max;
   return n;
 }
 
