@@ -55,7 +55,7 @@
 }
 
 .clip-lyric.fill-gradient .clip-lyric-text,
-.clip-lyric.fill-texture .clip-lyric-text {
+.clip-lyric.fill-image-texture .clip-lyric-text {
   color: transparent;
   background-image: var(--lyric-fill-image);
   background-size: var(--lyric-texture-size, cover);
@@ -65,7 +65,8 @@
   background-clip: text;
 }
 
-.clip-lyric.fill-texture .clip-lyric-text {
+.clip-lyric.fill-image-texture .clip-lyric-text {
+  opacity: var(--lyric-texture-opacity, 1);
   filter: var(--lyric-texture-filter, none);
 }
 

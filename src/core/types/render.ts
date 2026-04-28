@@ -1,3 +1,6 @@
+import type { TextFillConfig } from './texture';
+import { DEFAULT_TEXT_FILL } from './texture';
+
 export type RenderMode = 'player' | 'editor' | 'overlay-preview' | 'sync-recorder' | 'timeline-editor';
 
 export type LyricTextTransform = 'none' | 'uppercase' | 'lowercase';
@@ -26,8 +29,12 @@ export interface LyricVisualStyle {
   backgroundColor: string;
   backgroundOpacity: number;
   backgroundEmphasis: boolean;
+  textFill: TextFillConfig;
+  /** @deprecated Use textFill. Kept for old saved projects. */
   textFillMode: LyricTextFillMode;
+  /** @deprecated Use textFill. Kept for old saved projects. */
   textGradient: string;
+  /** @deprecated Use textFill.imageTexture. Kept for old saved projects. */
   textTextureImage: string;
   textTextureSize: string;
   textTexturePosition: string;
@@ -134,6 +141,7 @@ export const DEFAULT_LYRIC_STYLE: LyricVisualStyle = {
   backgroundColor: '#000000',
   backgroundOpacity: 0.28,
   backgroundEmphasis: false,
+  textFill: DEFAULT_TEXT_FILL,
   textFillMode: 'solid',
   textGradient: 'linear-gradient(110deg, #ffffff 0%, #80eaff 45%, #ff6bd5 100%)',
   textTextureImage: '',
@@ -180,17 +188,8 @@ export function resolveLyricStyle(
   layerStyle?: Partial<LyricVisualStyle>,
   clipStyle?: Partial<LyricVisualStyle>
 ): LyricVisualStyle {
-  const merged = {
-    ...DEFAULT_LYRIC_STYLE,
-    ...globalStyle,
-    ...layerStyle,
-    ...clipStyle
-  };
-  return {
-    ...merged,
-    lineHeight: merged.lineHeight ?? merged.lineSpacing,
-    lineSpacing: merged.lineSpacing ?? merged.lineHeight
-  };
+  const merged = { ...DEFAULT_LYRIC_STYLE, ...globalStyle, ...layerStyle, ...clipStyle };
+  return { ...merged, lineHeight: merged.lineHeight ?? merged.lineSpacing, lineSpacing: merged.lineSpacing ?? merged.lineHeight };
 }
 
 export function resolveLyricAnimation(

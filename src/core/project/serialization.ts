@@ -8,8 +8,11 @@ import {
   resolveClipProgressIndicator,
   resolveLyricAnimation,
   resolveLyricFx,
-  resolveLyricStyle
 } from '../types/render';
+import {
+  normalizePartialLyricVisualStyle,
+  resolveLyricVisualStyle
+} from '../render/resolveVisualStyle';
 
 export const LYRX_EXPORT_APP = 'Lyrixa';
 export const LYRX_EXPORT_SCHEMA_VERSION = 1;
@@ -40,7 +43,7 @@ export function createProjectExportEnvelope(
     app: LYRX_EXPORT_APP,
     exportedAt: new Date().toISOString(),
     project: {
-      ...normalizeProject(project),
+      ...stripRuntimeTextureUrls(normalizeProject(project)),
       audioTracks: {
         master: stripObjectUrl(project.audioTracks.master),
         vocals: stripObjectUrl(project.audioTracks.vocals)
@@ -69,7 +72,7 @@ export function normalizeProject(input: Partial<LyrixaProject>): LyrixaProject {
     normalizedLyrics: Array.isArray(input.normalizedLyrics) ? input.normalizedLyrics : [],
     layers: normalizeLayers(input.layers),
     clips: normalizeClips(input.clips),
-    styleConfig: resolveLyricStyle(input.styleConfig),
+    styleConfig: resolveLyricVisualStyle(input.styleConfig),
     animationConfig: resolveLyricAnimation(input.animationConfig),
     fxConfig: resolveLyricFx(input.fxConfig),
     progressIndicatorConfig: resolveClipProgressIndicator(input.progressIndicatorConfig),
@@ -85,7 +88,9 @@ export function normalizeLayers(layers: LyricLayer[] | undefined): LyricLayer[] 
 
   return source.map((layer, index) => {
     const fallback = byId.get(layer.id);
-    const styleDefaults = layer.styleDefaults ?? layer.style ?? fallback?.styleDefaults ?? fallback?.style;
+    const styleDefaults = normalizePartialLyricVisualStyle(
+      layer.styleDefaults ?? layer.style ?? fallback?.styleDefaults ?? fallback?.style
+    );
     const animationDefaults = layer.animationDefaults ?? layer.animation ?? fallback?.animationDefaults ?? fallback?.animation;
     const fxDefaults = layer.fxDefaults ?? layer.fx ?? fallback?.fxDefaults ?? fallback?.fx;
     const progressIndicatorDefaults =
@@ -121,6 +126,7 @@ export function normalizeLayers(layers: LyricLayer[] | undefined): LyricLayer[] 
 export function normalizeClips(clips: LyricClip[] | undefined): LyricClip[] {
   return (clips ?? []).map(clip => ({
     ...clip,
+    styleOverride: normalizePartialLyricVisualStyle(clip.styleOverride),
     transitionIn: clip.transitionIn ?? DEFAULT_LYRIC_ANIMATION.transitionIn,
     transitionOut: clip.transitionOut ?? DEFAULT_LYRIC_ANIMATION.transitionOut,
     position: clip.position ?? 'center'
@@ -139,6 +145,36 @@ function stripObjectUrl(channel: AudioChannel | null | undefined): SerializableA
   const { objectUrl: _objectUrl, ...rest } = channel;
   void _objectUrl;
   return rest;
+}
+
+export function stripRuntimeTextureUrls(project: LyrixaProject): LyrixaProject {
+  return {
+    ...project,
+    styleConfig: stripStyleTextureUrl(project.styleConfig),
+    layers: project.layers.map(layer => ({
+      ...layer,
+      styleDefaults: layer.styleDefaults ? stripStyleTextureUrl(layer.styleDefaults) : layer.styleDefaults
+    })),
+    clips: project.clips.map(clip => ({
+      ...clip,
+      styleOverride: clip.styleOverride ? stripStyleTextureUrl(clip.styleOverride) : clip.styleOverride
+    }))
+  };
+}
+
+export function stripStyleTextureUrl<T extends Partial<import('../types/render').LyricVisualStyle>>(style: T): T {
+  const imageTexture = style.textFill?.imageTexture;
+  if (!imageTexture?.objectUrl) return style;
+  return {
+    ...style,
+    textFill: {
+      ...style.textFill,
+      imageTexture: {
+        ...imageTexture,
+        objectUrl: undefined
+      }
+    }
+  } as T;
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {

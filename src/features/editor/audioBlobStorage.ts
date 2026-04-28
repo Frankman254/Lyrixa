@@ -12,7 +12,7 @@ import type { AudioChannelRole } from '../../core/types/audio';
  */
 
 const DB_NAME = 'lyrixa';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE_AUDIO = 'audio';
 
 export interface StoredAudio {
@@ -37,6 +37,9 @@ function openDB(): Promise<IDBDatabase> {
       const db = req.result;
       if (!db.objectStoreNames.contains(STORE_AUDIO)) {
         db.createObjectStore(STORE_AUDIO);
+      }
+      if (!db.objectStoreNames.contains('texture-assets')) {
+        db.createObjectStore('texture-assets');
       }
     };
     req.onsuccess = () => resolve(req.result);

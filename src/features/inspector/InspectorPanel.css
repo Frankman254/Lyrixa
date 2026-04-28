@@ -1,0 +1,131 @@
+.inspector-panel {
+  width: 340px;
+  min-width: 320px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #0b0d13;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  color: #e6e9f2;
+  overflow: hidden;
+}
+
+.insp-header {
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.015));
+}
+
+.insp-header strong {
+  display: block;
+  font-size: 0.82rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.insp-header span {
+  display: block;
+  margin-top: 4px;
+  color: #858ca3;
+  font-size: 0.72rem;
+}
+
+.insp-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  overflow-x: auto;
+}
+
+.insp-tabs button {
+  border: 1px solid transparent;
+  border-radius: 5px;
+  padding: 5px 8px;
+  background: transparent;
+  color: #9097ae;
+  cursor: pointer;
+  text-transform: capitalize;
+  font-size: 0.72rem;
+}
+
+.insp-tabs button.active {
+  color: #d9e6ff;
+  background: rgba(46, 122, 251, 0.2);
+  border-color: rgba(46, 122, 251, 0.45);
+}
+
+.insp-body {
+  flex: 1;
+  overflow: auto;
+  padding: 10px;
+}
+
+.insp-stack {
+  display: grid;
+  gap: 10px;
+}
+
+.insp-group {
+  border: 1px solid rgba(143, 173, 230, 0.14);
+  border-radius: 7px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.insp-group summary {
+  cursor: pointer;
+  padding: 8px 10px;
+  color: #aab3ce;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.insp-group > div {
+  display: grid;
+  gap: 9px;
+  padding: 10px;
+}
+
+.insp-group label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  color: #9ba4bb;
+  font-size: 0.72rem;
+}
+
+.insp-group .tl-inline-check {
+  flex-direction: row;
+  align-items: center;
+}
+
+.insp-group textarea {
+  resize: vertical;
+  min-height: 74px;
+}
+
+.insp-button-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.insp-empty,
+.insp-warning {
+  padding: 10px;
+  border-radius: 6px;
+  color: #8f96ad;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 0.78rem;
+}
+
+.insp-warning {
+  color: #ffd58c;
+  border: 1px solid rgba(255, 196, 92, 0.25);
+  background: rgba(255, 196, 92, 0.08);
+}

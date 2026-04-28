@@ -2,7 +2,12 @@ import type { LyrixaProject, LyrixaTrack } from '../../core/types/project';
 import type { AudioChannel, ProjectAudioTracks } from '../../core/types/audio';
 import { createEmptyAudioTracks } from '../../core/types/audio';
 import { createDefaultLayers } from '../../core/types/layer';
-import { normalizeClips, normalizeLayers, normalizeProject } from '../../core/project/serialization';
+import {
+  normalizeClips,
+  normalizeLayers,
+  normalizeProject,
+  stripRuntimeTextureUrls
+} from '../../core/project/serialization';
 import {
   DEFAULT_CLIP_PROGRESS_INDICATOR,
   DEFAULT_LYRIC_ANIMATION,
@@ -10,9 +15,9 @@ import {
   DEFAULT_LYRIC_STYLE,
   resolveClipProgressIndicator,
   resolveLyricAnimation,
-  resolveLyricFx,
-  resolveLyricStyle
+  resolveLyricFx
 } from '../../core/types/render';
+import { resolveLyricVisualStyle } from '../../core/render/resolveVisualStyle';
 
 const STORAGE_KEY = 'lyrixa:project:v1';
 const SCHEMA_VERSION = 3;
@@ -175,7 +180,7 @@ function migrateV1(legacy: LegacyV1Project): LyrixaProject {
     normalizedLyrics: legacy.normalizedLyrics ?? [],
     layers: normalizeLayers(legacy.layers),
     clips: normalizeClips(legacy.clips),
-    styleConfig: resolveLyricStyle(legacy.styleConfig),
+    styleConfig: resolveLyricVisualStyle(legacy.styleConfig),
     animationConfig: resolveLyricAnimation(legacy.animationConfig),
     fxConfig: resolveLyricFx(legacy.fxConfig),
     progressIndicatorConfig: resolveClipProgressIndicator(legacy.progressIndicatorConfig),
@@ -191,11 +196,12 @@ function migrateV1(legacy: LegacyV1Project): LyrixaProject {
 export function saveProject(project: LyrixaProject): void {
   if (typeof window === 'undefined' || !window.localStorage) return;
 
+  const serializableProject = stripRuntimeTextureUrls(project);
   const persisted: PersistedProject = {
-    ...project,
+    ...serializableProject,
     audioTracks: {
-      master: stripObjectUrls(project.audioTracks.master),
-      vocals: stripObjectUrls(project.audioTracks.vocals)
+      master: stripObjectUrls(serializableProject.audioTracks.master),
+      vocals: stripObjectUrls(serializableProject.audioTracks.vocals)
     }
   };
 

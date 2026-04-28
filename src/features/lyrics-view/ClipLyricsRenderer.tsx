@@ -12,11 +12,13 @@ import {
   DEFAULT_LYRIC_ANIMATION,
   DEFAULT_LYRIC_FX,
   DEFAULT_LYRIC_STYLE,
-  resolveClipProgressIndicator,
-  resolveLyricAnimation,
-  resolveLyricFx,
-  resolveLyricStyle
 } from '../../core/types/render';
+import {
+  resolveLyricAnimationConfig,
+  resolveLyricFxConfig,
+  resolveLyricVisualStyle,
+  resolveProgressIndicatorConfig
+} from '../../core/render/resolveVisualStyle';
 import './ClipLyricsRenderer.css';
 
 interface ClipLyricsRendererProps {
@@ -79,7 +81,7 @@ export function ClipLyricsRenderer({
         const layer = layerMap.get(clip.layerId);
         if (!layer || !visibleLayerIds.has(clip.layerId)) return false;
         if (clip.muted || clip.text.trim().length === 0) return false;
-        const clipAnimation = resolveLyricAnimation(
+        const clipAnimation = resolveLyricAnimationConfig(
           animationConfig,
           layer.animationDefaults ?? layer.animation,
           {
@@ -105,8 +107,8 @@ export function ClipLyricsRenderer({
           ? Math.max(0, Math.min(1, (currentTime - clip.startTime) / duration))
           : 0;
         const zIndex   = layer?.renderSettings?.zIndex;
-        const style = resolveLyricStyle(styleConfig, layer?.styleDefaults ?? layer?.style, clip.styleOverride);
-        const animation = resolveLyricAnimation(
+        const style = resolveLyricVisualStyle(styleConfig, layer?.styleDefaults ?? layer?.style, clip.styleOverride);
+        const animation = resolveLyricAnimationConfig(
           animationConfig,
           layer?.animationDefaults ?? layer?.animation,
           {
@@ -115,19 +117,25 @@ export function ClipLyricsRenderer({
             transitionOut: clip.transitionOut
           }
         );
-        const fx = resolveLyricFx(fxConfig, layer?.fxDefaults ?? layer?.fx, clip.fxOverride);
-        const progressIndicator = resolveClipProgressIndicator(
+        const fx = resolveLyricFxConfig(fxConfig, layer?.fxDefaults ?? layer?.fx, clip.fxOverride);
+        const progressIndicator = resolveProgressIndicatorConfig(
           progressIndicatorConfig,
           layer?.progressIndicatorDefaults ?? layer?.progressIndicator,
           clip.progressIndicatorOverride
         );
-        const fillMode = style.textFillMode ?? 'solid';
-        const fillImage = fillMode === 'texture' && style.textTextureImage
-          ? `url("${style.textTextureImage}")`
-          : style.textGradient;
-        const textureRepeat = style.textTextureRepeat ?? (
-          /px|em|rem/.test(style.textTextureSize ?? '') ? 'repeat' : 'no-repeat'
-        );
+        const fill = style.textFill;
+        const texture = fill.imageTexture;
+        const fillMode = fill.type;
+        const hasImageTexture = fillMode === 'image-texture' && !!texture?.objectUrl;
+        const visualFillMode = hasImageTexture ? 'image-texture' : fillMode === 'gradient' ? 'gradient' : 'solid';
+        const gradient = fill.gradient ?? { colorA: style.textColor, colorB: style.activeTextColor, angle: 110 };
+        const fillImage = hasImageTexture
+          ? `url("${texture.objectUrl}")`
+          : `linear-gradient(${gradient.angle}deg, ${gradient.colorA}, ${gradient.colorB})`;
+        const textureScale = texture?.scale ?? 1;
+        const textureSize = textureScale === 1
+          ? texture?.fit ?? 'cover'
+          : `${Math.max(10, textureScale * 100)}%`;
         const isExiting = currentTime > clip.endTime;
         const showProgressDot = progressIndicator.enabled && !isExiting && currentTime >= clip.startTime && currentTime <= clip.endTime;
         const layerType = layer?.layerType ?? 'lyrics';
@@ -136,6 +144,7 @@ export function ClipLyricsRenderer({
           '--clip-progress': progress,
           '--clip-layer-color': layer?.color ?? '#ffffff',
           '--lyric-color-primary': style.textColor,
+          '--lyric-solid-color': fill.solidColor ?? style.textColor,
           '--lyric-color-active': style.activeTextColor,
           '--lyric-color-secondary': style.secondaryTextColor,
           '--lyric-glow': style.glowColor,
@@ -155,9 +164,10 @@ export function ClipLyricsRenderer({
           '--lyric-bg-opacity': style.backgroundOpacity,
           '--lyric-bg-opacity-percent': `${Math.max(0, Math.min(1, style.backgroundOpacity)) * 100}%`,
           '--lyric-fill-image': fillImage,
-          '--lyric-texture-size': style.textTextureSize,
-          '--lyric-texture-position': style.textTexturePosition,
-          '--lyric-texture-repeat': textureRepeat,
+          '--lyric-texture-size': textureSize,
+          '--lyric-texture-position': `calc(50% + ${texture?.offsetX ?? 0}px) calc(50% + ${texture?.offsetY ?? 0}px)`,
+          '--lyric-texture-repeat': 'no-repeat',
+          '--lyric-texture-opacity': texture?.opacity ?? 1,
           '--lyric-texture-filter': `brightness(${style.textTextureBrightness}) contrast(${style.textTextureContrast}) saturate(${style.textTextureSaturation})`,
           '--lyric-animation-duration': `${animation.durationMs}ms`,
           '--lyric-animation-easing': animation.easing,
@@ -186,7 +196,7 @@ export function ClipLyricsRenderer({
               `tx-${effectiveTransition}`,
               `loop-${animation.activeAnimation}`,
               fx.enabled && fx.preset !== 'none' ? `fx-${fx.preset}` : '',
-              fillMode !== 'solid' ? `fill-${fillMode}` : '',
+              visualFillMode !== 'solid' ? `fill-${visualFillMode}` : '',
               style.backgroundPill || style.backgroundEmphasis ? 'has-pill' : ''
             ].filter(Boolean).join(' ')}
             style={cssVariables}

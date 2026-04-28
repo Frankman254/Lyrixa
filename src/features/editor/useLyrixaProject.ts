@@ -32,6 +32,7 @@ import {
 } from './audioBlobStorage';
 import { extractPeaksFromBlob } from './peakExtraction';
 import { extractVocalsFromMasterBlob } from './vocalIsolation';
+import { getTextureAsset } from '../assets/textureAssetStorage';
 
 const AUTOSAVE_DEBOUNCE_MS = 400;
 
@@ -123,12 +124,38 @@ export function useLyrixaProject(): UseLyrixaProjectResult {
     master: null,
     vocals: null
   });
+  const textureObjectUrlsRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     objectUrlsRef.current = {
       master: project.audioTracks.master?.objectUrl ?? null,
       vocals: project.audioTracks.vocals?.objectUrl ?? null
     };
   }, [project.audioTracks.master?.objectUrl, project.audioTracks.vocals?.objectUrl]);
+
+  useEffect(() => {
+    const nextUrls = collectTextureObjectUrls(project);
+    textureObjectUrlsRef.current.forEach(url => {
+      if (!nextUrls.has(url)) URL.revokeObjectURL(url);
+    });
+    textureObjectUrlsRef.current = nextUrls;
+  }, [project]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const restore = async () => {
+      const textureIds = collectTextureIds(hydrated.project);
+      if (textureIds.length === 0) return;
+      const restored = new Map<string, string | null>();
+      for (const id of textureIds) {
+        const asset = await getTextureAsset(hydrated.project.id, id);
+        if (cancelled) return;
+        restored.set(id, asset ? URL.createObjectURL(asset.blob) : null);
+      }
+      setProject(p => applyRestoredTextureUrls(p, restored));
+    };
+    void restore();
+    return () => { cancelled = true; };
+  }, [hydrated.project]);
 
   // Restore audio blobs from IndexedDB on mount, one role at a time.
   useEffect(() => {
@@ -181,6 +208,7 @@ export function useLyrixaProject(): UseLyrixaProjectResult {
       const { master, vocals } = objectUrlsRef.current;
       if (master) URL.revokeObjectURL(master);
       if (vocals) URL.revokeObjectURL(vocals);
+      textureObjectUrlsRef.current.forEach(url => URL.revokeObjectURL(url));
     };
   }, []);
 
@@ -573,4 +601,59 @@ function makeExtractedVocalsFileName(masterFileName: string): string {
   const trimmed = masterFileName.trim();
   const withoutExtension = trimmed.replace(/\.[a-z0-9]+$/i, '');
   return `${withoutExtension || 'master'} - vocal focus.wav`;
+}
+
+function collectTextureIds(project: LyrixaProject): string[] {
+  const ids = new Set<string>();
+  const visit = (style?: Partial<LyricVisualStyle>) => {
+    const id = style?.textFill?.imageTexture?.id;
+    if (id) ids.add(id);
+  };
+  visit(project.styleConfig);
+  project.layers.forEach(layer => visit(layer.styleDefaults ?? layer.style));
+  project.clips.forEach(clip => visit(clip.styleOverride));
+  return Array.from(ids);
+}
+
+function collectTextureObjectUrls(project: LyrixaProject): Set<string> {
+  const urls = new Set<string>();
+  const visit = (style?: Partial<LyricVisualStyle>) => {
+    const objectUrl = style?.textFill?.imageTexture?.objectUrl;
+    if (objectUrl) urls.add(objectUrl);
+  };
+  visit(project.styleConfig);
+  project.layers.forEach(layer => visit(layer.styleDefaults ?? layer.style));
+  project.clips.forEach(clip => visit(clip.styleOverride));
+  return urls;
+}
+
+function applyRestoredTextureUrls(project: LyrixaProject, urls: Map<string, string | null>): LyrixaProject {
+  const apply = <T extends Partial<LyricVisualStyle> | undefined>(style: T): T => {
+    const texture = style?.textFill?.imageTexture;
+    if (!texture || !urls.has(texture.id)) return style;
+    const objectUrl = urls.get(texture.id);
+    return {
+      ...style,
+      textFill: {
+        ...style.textFill,
+        imageTexture: {
+          ...texture,
+          objectUrl: objectUrl ?? undefined,
+          missing: !objectUrl
+        }
+      }
+    } as T;
+  };
+  return {
+    ...project,
+    styleConfig: apply(project.styleConfig),
+    layers: project.layers.map(layer => ({
+      ...layer,
+      styleDefaults: apply(layer.styleDefaults)
+    })),
+    clips: project.clips.map(clip => ({
+      ...clip,
+      styleOverride: apply(clip.styleOverride)
+    }))
+  };
 }

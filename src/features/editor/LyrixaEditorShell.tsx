@@ -6,18 +6,10 @@ import { TimelineEditor } from '../timeline-editor/TimelineEditor';
 import { ClipLyricsRenderer } from '../lyrics-view/ClipLyricsRenderer';
 import { LyricsImportPanel } from './LyricsImportPanel';
 import { FloatingPreview } from './FloatingPreview';
+import { InspectorPanel } from '../inspector/InspectorPanel';
 import { useLyrixaProject } from './useLyrixaProject';
 import type { SaveStatus } from './useLyrixaProject';
 import type { AudioChannelRole, AudioBandMode } from '../../core/types/audio';
-import type {
-  ClipProgressIndicatorConfig,
-  LyricActiveAnimationPreset,
-  LyricAnimationConfig,
-  LyricFxConfig,
-  LyricFxPreset,
-  LyricTextFillMode,
-  LyricVisualStyle
-} from '../../core/types/render';
 import { createProjectExportEnvelope, parseProjectExportEnvelope } from '../../core/project/serialization';
 import { extractBandPeaksFromBlob } from './peakExtraction';
 import './LyrixaEditorShell.css';
@@ -66,10 +58,11 @@ export function LyrixaEditorShell() {
   const [floatingPreviewWidth, setFloatingPreviewWidth] = useState(() =>
     readStoredNumber('lyrixa_floating_preview_width', 420)
   );
-  const [globalPanelOpen, setGlobalPanelOpen] = useState(false);
   const [miniPreviewVisible, setMiniPreviewVisible] = useState(true);
   const [nameEditing, setNameEditing] = useState(false);
   const [draftName, setDraftName] = useState(project.name);
+  const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
+  const [selectedLayerId, setSelectedLayerId] = useState<string | null>(project.layers[0]?.id ?? null);
 
   // Transient playback time. Updated at ~60fps via rAF while playing,
   // and by user-driven seeks otherwise. Never persisted on its own ticks.
@@ -332,12 +325,6 @@ export function LyrixaEditorShell() {
           <button className="ls-btn" onClick={openProjectImportPicker}>
             Import Project
           </button>
-          <button
-            className={`ls-btn ${globalPanelOpen ? 'active' : ''}`}
-            onClick={() => setGlobalPanelOpen(value => !value)}
-          >
-            Global Style
-          </button>
           {vocalsAnalysisReady && project.normalizedLyrics.length > 0 && (
             <button
               className="ls-btn primary"
@@ -465,59 +452,81 @@ export function LyrixaEditorShell() {
       )}
 
       <main className="ls-main">
-        <TimelineEditor
-          embedded
-          clips={project.clips}
-          layers={project.layers}
-          currentTime={playbackTime}
-          duration={effectiveDuration}
-          isPlaying={isPlaying}
-          trackName={masterChannel?.fileName ?? 'No audio loaded'}
-          masterChannel={masterChannel}
-          vocalsChannel={vocalsChannel}
-          vocalsBandPeaks={vocalsChannel?.waveformPeaks}
-          onExtractBandPeaks={extractBandPeaksForMode}
-          onClipsChange={setClips}
-          onLayersChange={setLayers}
-          onSeek={handleSeek}
-          onPlayToggle={handlePlayToggle}
-        />
-
-        {showMini && (
-          <FloatingPreview
+        <section className="ls-stage">
+          <TimelineEditor
+            embedded
             clips={project.clips}
             layers={project.layers}
             currentTime={playbackTime}
-            styleConfig={project.styleConfig}
-            animationConfig={project.animationConfig}
-            fxConfig={project.fxConfig}
-            progressIndicatorConfig={project.progressIndicatorConfig}
-            width={floatingPreviewWidth}
-            onSizeChange={handleFloatingPreviewSize}
-            onExpand={() => setPreviewOpen(true)}
-            onClose={() => setMiniPreviewVisible(false)}
+            duration={effectiveDuration}
+            isPlaying={isPlaying}
+            trackName={masterChannel?.fileName ?? 'No audio loaded'}
+            masterChannel={masterChannel}
+            vocalsChannel={vocalsChannel}
+            vocalsBandPeaks={vocalsChannel?.waveformPeaks}
+            onExtractBandPeaks={extractBandPeaksForMode}
+            onClipsChange={setClips}
+            onLayersChange={setLayers}
+            onSeek={handleSeek}
+            onPlayToggle={handlePlayToggle}
+            onSelectionChange={({ clipId, layerId }) => {
+              setSelectedClipId(clipId);
+              setSelectedLayerId(layerId);
+            }}
           />
-        )}
 
-        {!masterChannel && (
-          <EmptyLaneHint
-            icon="🎵"
-            title="No audio loaded"
-            description="Load an MP3, WAV, or other audio file to populate the audio lane."
-            actionLabel="Load audio"
-            onAction={openMasterPicker}
-          />
-        )}
+          {showMini && (
+            <FloatingPreview
+              clips={project.clips}
+              layers={project.layers}
+              currentTime={playbackTime}
+              styleConfig={project.styleConfig}
+              animationConfig={project.animationConfig}
+              fxConfig={project.fxConfig}
+              progressIndicatorConfig={project.progressIndicatorConfig}
+              width={floatingPreviewWidth}
+              onSizeChange={handleFloatingPreviewSize}
+              onExpand={() => setPreviewOpen(true)}
+              onClose={() => setMiniPreviewVisible(false)}
+            />
+          )}
 
-        {project.clips.length === 0 && masterChannel && (
-          <EmptyLaneHint
-            icon="📝"
-            title="No lyrics yet"
-            description="Paste or import lyrics to create draggable text clips on the timeline."
-            actionLabel="Import lyrics"
-            onAction={() => setImportOpen(true)}
-          />
-        )}
+          {!masterChannel && (
+            <EmptyLaneHint
+              icon="🎵"
+              title="No audio loaded"
+              description="Load an MP3, WAV, or other audio file to populate the audio lane."
+              actionLabel="Load audio"
+              onAction={openMasterPicker}
+            />
+          )}
+
+          {project.clips.length === 0 && masterChannel && (
+            <EmptyLaneHint
+              icon="📝"
+              title="No lyrics yet"
+              description="Paste or import lyrics to create draggable text clips on the timeline."
+              actionLabel="Import lyrics"
+              onAction={() => setImportOpen(true)}
+            />
+          )}
+        </section>
+
+        <InspectorPanel
+          project={project}
+          selectedClipId={selectedClipId}
+          selectedLayerId={selectedLayerId}
+          onProjectNameChange={setProjectName}
+          onStyleChange={setStyleConfig}
+          onAnimationChange={setAnimationConfig}
+          onFxChange={setFxConfig}
+          onProgressChange={setProgressIndicatorConfig}
+          onClipsChange={setClips}
+          onLayersChange={setLayers}
+          onImportLyrics={() => setImportOpen(true)}
+          onExportProject={handleExportProject}
+          onImportProject={openProjectImportPicker}
+        />
       </main>
 
       <LyricsImportPanel
@@ -528,27 +537,6 @@ export function LyrixaEditorShell() {
         onClose={() => setImportOpen(false)}
         onApply={applyLyrics}
       />
-
-      {globalPanelOpen && (
-        <section className="ls-bottom-style-dock" aria-label="Global style controls">
-          <header className="ls-bottom-style-header">
-            <span>Global style</span>
-            <button className="fp-btn" onClick={() => setGlobalPanelOpen(false)} title="Close global style">
-              ✕
-            </button>
-          </header>
-          <GlobalStylePanel
-            styleConfig={project.styleConfig}
-            animationConfig={project.animationConfig}
-            fxConfig={project.fxConfig}
-            progressIndicatorConfig={project.progressIndicatorConfig}
-            onStyleChange={setStyleConfig}
-            onAnimationChange={setAnimationConfig}
-            onFxChange={setFxConfig}
-            onProgressChange={setProgressIndicatorConfig}
-          />
-        </section>
-      )}
 
       {previewOpen && (
         <div className="ls-preview-overlay" onClick={() => setPreviewOpen(false)}>
@@ -616,139 +604,6 @@ function EmptyLaneHint({ icon, title, description, actionLabel, onAction }: Empt
   );
 }
 
-const FONT_PRESETS = [
-  { label: 'Inter', value: 'Inter, system-ui, sans-serif' },
-  { label: 'Impact', value: 'Impact, Haettenschweiler, Arial Narrow Bold, sans-serif' },
-  { label: 'Arial Black', value: '"Arial Black", Arial, sans-serif' },
-  { label: 'Condensed', value: '"Avenir Next Condensed", "Roboto Condensed", Arial Narrow, sans-serif' },
-  { label: 'Rounded', value: '"Arial Rounded MT Bold", "Trebuchet MS", system-ui, sans-serif' },
-  { label: 'Serif', value: 'Georgia, "Times New Roman", serif' },
-  { label: 'Mono', value: '"SFMono-Regular", Menlo, Consolas, monospace' },
-  { label: 'System', value: 'system-ui, -apple-system, BlinkMacSystemFont, sans-serif' }
-];
-
-const ACTIVE_ANIMATION_PRESETS: LyricActiveAnimationPreset[] = [
-  'none',
-  'pulse',
-  'glow-pulse',
-  'breathing',
-  'shake-light',
-  'wave',
-  'flicker'
-];
-
-const FX_PRESETS: LyricFxPreset[] = [
-  'none',
-  'neon-glow',
-  'soft-bloom',
-  'prism-shader',
-  'liquid-shimmer',
-  'heat-haze',
-  'rgb-shift',
-  'glitch',
-  'scanline',
-  'blur-flicker',
-  'shadow-trail',
-  'energy-pulse'
-];
-
-function GlobalStylePanel({
-  styleConfig,
-  animationConfig,
-  fxConfig,
-  progressIndicatorConfig,
-  onStyleChange,
-  onAnimationChange,
-  onFxChange,
-  onProgressChange
-}: {
-  styleConfig: LyricVisualStyle;
-  animationConfig: LyricAnimationConfig;
-  fxConfig: LyricFxConfig;
-  progressIndicatorConfig: ClipProgressIndicatorConfig;
-  onStyleChange: (next: LyricVisualStyle) => void;
-  onAnimationChange: (next: LyricAnimationConfig) => void;
-  onFxChange: (next: LyricFxConfig) => void;
-  onProgressChange: (next: ClipProgressIndicatorConfig) => void;
-}) {
-  const handleTextureSelected = async (file: File | undefined) => {
-    if (!file) return;
-    const dataUrl = await readTextureFileAsDataUrl(file);
-    onStyleChange({
-      ...styleConfig,
-      textFillMode: 'texture',
-      textTextureImage: dataUrl,
-      textTextureSize: styleConfig.textTextureSize === 'auto' ? 'cover' : styleConfig.textTextureSize,
-      textTextureRepeat: styleConfig.textTextureRepeat ?? 'no-repeat'
-    });
-  };
-
-  return (
-    <div className="ls-global-panel">
-      <details open className="inspector-section">
-        <summary>Style</summary>
-        <div className="inspector-section-body">
-          <div className="inspector-grid">
-            <label>Font size<input className="form-control form-input" type="number" step="0.1" min={0.5} value={parseFloat(styleConfig.fontSize) || 2.5} onChange={(e) => onStyleChange({ ...styleConfig, fontSize: `${e.target.value}rem` })} /></label>
-            <label>Weight<input className="form-control form-input" type="number" step="100" min={100} max={1000} value={parseInt(String(styleConfig.fontWeight), 10) || 800} onChange={(e) => onStyleChange({ ...styleConfig, fontWeight: parseInt(e.target.value, 10) || 800 })} /></label>
-            <label>Font<select className="form-control form-select" value={styleConfig.fontFamily} onChange={(e) => onStyleChange({ ...styleConfig, fontFamily: e.target.value })}>{FONT_PRESETS.map(font => <option key={font.label} value={font.value}>{font.label}</option>)}</select></label>
-            <label>Text color<input className="form-color" type="color" value={toColorInput(styleConfig.textColor)} onChange={(e) => onStyleChange({ ...styleConfig, textColor: e.target.value, activeTextColor: e.target.value })} /></label>
-            <label>Stroke<input className="form-control form-input" type="number" min={0} max={12} step={0.5} value={styleConfig.strokeWidth} onChange={(e) => onStyleChange({ ...styleConfig, strokeWidth: parseFloat(e.target.value) || 0 })} /></label>
-            <label>Line height<input className="form-control form-input" type="number" min={0.7} max={2} step={0.05} value={parseFloat(styleConfig.lineHeight) || 1.2} onChange={(e) => onStyleChange({ ...styleConfig, lineHeight: e.target.value, lineSpacing: e.target.value })} /></label>
-          </div>
-          <label>Letter spacing<input className="form-control form-input" type="text" value={styleConfig.letterSpacing} onChange={(e) => onStyleChange({ ...styleConfig, letterSpacing: e.target.value })} /></label>
-          <label>Fill mode<select className="form-control form-select" value={styleConfig.textFillMode ?? 'solid'} onChange={(e) => onStyleChange({ ...styleConfig, textFillMode: e.target.value as LyricTextFillMode })}><option value="solid">Solid color</option><option value="gradient">Gradient</option><option value="texture">Image texture</option></select></label>
-          {(styleConfig.textFillMode ?? 'solid') === 'gradient' && (
-            <label>Gradient<input className="form-control form-input" type="text" value={styleConfig.textGradient} onChange={(e) => onStyleChange({ ...styleConfig, textGradient: e.target.value })} /></label>
-          )}
-          {(styleConfig.textFillMode ?? 'solid') === 'texture' && (
-            <>
-              <label>Texture image<input className="form-control form-input" type="file" accept="image/*" onChange={(e) => void handleTextureSelected(e.target.files?.[0])} /></label>
-              <div className="inspector-grid">
-                <label>Texture fit<select className="form-control form-select" value={styleConfig.textTextureSize} onChange={(e) => {
-                  const size = e.target.value;
-                  onStyleChange({ ...styleConfig, textTextureSize: size, textTextureRepeat: /px/.test(size) ? 'repeat' : 'no-repeat' });
-                }}><option value="cover">Cover text</option><option value="100% 100%">Stretch text</option><option value="contain">Contain</option><option value="180px">Tile small</option><option value="360px">Tile large</option></select></label>
-                <label>Position<select className="form-control form-select" value={styleConfig.textTexturePosition} onChange={(e) => onStyleChange({ ...styleConfig, textTexturePosition: e.target.value })}><option value="center">Center</option><option value="top">Top</option><option value="bottom">Bottom</option><option value="left center">Left</option><option value="right center">Right</option></select></label>
-              </div>
-              <label>Texture brightness<input className="form-range" type="range" min={0.4} max={2} step={0.05} value={styleConfig.textTextureBrightness} onChange={(e) => onStyleChange({ ...styleConfig, textTextureBrightness: parseFloat(e.target.value) })} /></label>
-              <label>Texture contrast<input className="form-range" type="range" min={0.5} max={2.5} step={0.05} value={styleConfig.textTextureContrast} onChange={(e) => onStyleChange({ ...styleConfig, textTextureContrast: parseFloat(e.target.value) })} /></label>
-            </>
-          )}
-          <label>Opacity<input className="form-range" type="range" min={0} max={1} step={0.05} value={styleConfig.opacity} onChange={(e) => onStyleChange({ ...styleConfig, opacity: parseFloat(e.target.value) })} /></label>
-          <label>Glow intensity<input className="form-range" type="range" min={0} max={2} step={0.05} value={styleConfig.glowIntensity} onChange={(e) => onStyleChange({ ...styleConfig, glowIntensity: parseFloat(e.target.value) })} /></label>
-          <label>Blur amount<input className="form-range" type="range" min={0} max={16} step={0.5} value={styleConfig.blurAmount} onChange={(e) => onStyleChange({ ...styleConfig, blurAmount: parseFloat(e.target.value) })} /></label>
-        </div>
-      </details>
-      <details className="inspector-section">
-        <summary>Animation</summary>
-        <div className="inspector-section-body">
-          <label>Default active<select className="form-control form-select" value={animationConfig.activeAnimation} onChange={(e) => onAnimationChange({ ...animationConfig, activeAnimation: e.target.value as LyricActiveAnimationPreset })}>{ACTIVE_ANIMATION_PRESETS.map(value => <option key={value} value={value}>{value}</option>)}</select></label>
-          <label>Intensity<input className="form-range" type="range" min={0} max={2.5} step={0.05} value={animationConfig.intensity} onChange={(e) => onAnimationChange({ ...animationConfig, intensity: parseFloat(e.target.value) })} /></label>
-          <label>Speed<input className="form-range" type="range" min={0.25} max={4} step={0.05} value={animationConfig.speed} onChange={(e) => onAnimationChange({ ...animationConfig, speed: parseFloat(e.target.value) })} /></label>
-          <label>Exit linger<input className="form-control form-input" type="number" min={0} step={50} value={animationConfig.exitLingerMs} onChange={(e) => onAnimationChange({ ...animationConfig, exitLingerMs: parseInt(e.target.value, 10) || 0 })} /></label>
-        </div>
-      </details>
-      <details className="inspector-section">
-        <summary>FX</summary>
-        <div className="inspector-section-body">
-          <label>Default FX<select className="form-control form-select" value={fxConfig.preset} onChange={(e) => {
-            const preset = e.target.value as LyricFxPreset;
-            onFxChange({ ...fxConfig, preset, enabled: preset !== 'none' });
-          }}>{FX_PRESETS.map(value => <option key={value} value={value}>{value}</option>)}</select></label>
-          <label>Intensity<input className="form-range" type="range" min={0} max={2} step={0.05} value={fxConfig.intensity} onChange={(e) => onFxChange({ ...fxConfig, intensity: parseFloat(e.target.value), enabled: fxConfig.preset !== 'none' })} /></label>
-          <label>FX blur<input className="form-range" type="range" min={0} max={18} step={0.5} value={fxConfig.blur} onChange={(e) => onFxChange({ ...fxConfig, blur: parseFloat(e.target.value), enabled: fxConfig.preset !== 'none' })} /></label>
-          <div className="inspector-grid">
-            <label>Color A<input className="form-color" type="color" value={toColorInput(fxConfig.colorA)} onChange={(e) => onFxChange({ ...fxConfig, colorA: e.target.value, enabled: fxConfig.preset !== 'none' })} /></label>
-            <label>Color B<input className="form-color" type="color" value={toColorInput(fxConfig.colorB)} onChange={(e) => onFxChange({ ...fxConfig, colorB: e.target.value, enabled: fxConfig.preset !== 'none' })} /></label>
-          </div>
-          <label className="tl-inline-check"><input type="checkbox" checked={progressIndicatorConfig.enabled} onChange={(e) => onProgressChange({ ...progressIndicatorConfig, enabled: e.target.checked })} />Show progress dot by default</label>
-        </div>
-      </details>
-    </div>
-  );
-}
-
 function safeGetLocalStorage(key: string): string | null {
   try {
     return window.localStorage.getItem(key);
@@ -757,53 +612,9 @@ function safeGetLocalStorage(key: string): string | null {
   }
 }
 
-async function readTextureFileAsDataUrl(file: File): Promise<string> {
-  if (typeof window === 'undefined') return readFileAsDataUrl(file);
-  const image = new Image();
-  const objectUrl = URL.createObjectURL(file);
-  try {
-    await new Promise<void>((resolve, reject) => {
-      image.onload = () => resolve();
-      image.onerror = () => reject(new Error('Could not read texture image.'));
-      image.src = objectUrl;
-    });
-
-    const maxSide = 1400;
-    const scale = Math.min(1, maxSide / Math.max(image.naturalWidth, image.naturalHeight));
-    const width = Math.max(1, Math.round(image.naturalWidth * scale));
-    const height = Math.max(1, Math.round(image.naturalHeight * scale));
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return readFileAsDataUrl(file);
-    ctx.drawImage(image, 0, 0, width, height);
-    const dataUrl = canvas.toDataURL('image/webp', 0.9);
-    return dataUrl.startsWith('data:image/') ? dataUrl : readFileAsDataUrl(file);
-  } catch {
-    return readFileAsDataUrl(file);
-  } finally {
-    URL.revokeObjectURL(objectUrl);
-  }
-}
-
-function readFileAsDataUrl(file: File): Promise<string> {
-  const reader = new FileReader();
-  return new Promise<string>((resolve, reject) => {
-    reader.onload = () => resolve(String(reader.result ?? ''));
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
-}
-
 function readStoredNumber(key: string, fallback: number): number {
   const raw = safeGetLocalStorage(key);
   if (!raw) return fallback;
   const parsed = Number(raw);
   return Number.isFinite(parsed) ? parsed : fallback;
-}
-
-function toColorInput(color: string): string {
-  if (/^#[0-9a-f]{6}$/i.test(color)) return color;
-  return '#ffffff';
 }

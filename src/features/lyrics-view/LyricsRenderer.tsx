@@ -2,7 +2,8 @@ import { useEffect, useRef } from 'react';
 import type { TimelineSnapshot, TimelineEntry } from '../../core/types/timeline';
 import type { LyricLine } from '../../core/types/lyrics';
 import type { LyricVisualStyle } from '../../core/types/render';
-import { DEFAULT_LYRIC_STYLE, resolveLyricStyle } from '../../core/types/render';
+import { DEFAULT_LYRIC_STYLE } from '../../core/types/render';
+import { resolveLyricVisualStyle } from '../../core/render/resolveVisualStyle';
 import './LyricsRenderer.css';
 
 interface LyricsRendererProps {
@@ -29,7 +30,7 @@ export function LyricsRenderer({ entries, snapshot, styleConfig = DEFAULT_LYRIC_
   }, [snapshot.activeIndex]);
 
   const isInstrumental = snapshot.phase === 'instrumental-gap';
-  const resolvedStyle = resolveLyricStyle(styleConfig);
+  const resolvedStyle = resolveLyricVisualStyle(styleConfig);
 
   // Construct Custom CSS Properties from Style Config
   const cssVariables = {

@@ -8,12 +8,14 @@ import {
   DEFAULT_CLIP_PROGRESS_INDICATOR,
   DEFAULT_LYRIC_ANIMATION,
   DEFAULT_LYRIC_FX,
-  DEFAULT_LYRIC_STYLE,
-  resolveClipProgressIndicator,
-  resolveLyricAnimation,
-  resolveLyricFx,
-  resolveLyricStyle
+  DEFAULT_LYRIC_STYLE
 } from '../../core/types/render';
+import {
+  resolveLyricAnimationConfig,
+  resolveLyricFxConfig,
+  resolveLyricVisualStyle,
+  resolveProgressIndicatorConfig
+} from '../../core/render/resolveVisualStyle';
 import {
   moveClip,
   resizeClipStart,
@@ -57,6 +59,8 @@ interface TimelineEditorProps {
   onLayersChange: (next: LyricLayer[]) => void;
   onSeek: (time: number) => void;
   onPlayToggle: () => void;
+  onSelectionChange?: (selection: { clipId: string | null; layerId: string | null }) => void;
+  showFloatingInspectors?: boolean;
   onExit?: () => void;
 }
 
@@ -172,6 +176,8 @@ export function TimelineEditor({
   onLayersChange,
   onSeek,
   onPlayToggle,
+  onSelectionChange,
+  showFloatingInspectors = false,
   onExit
 }: TimelineEditorProps) {
   const [pxPerSecond, setPxPerSecond] = useState(60);
@@ -569,6 +575,13 @@ export function TimelineEditor({
     [layers, selectedLayerId]
   );
 
+  useEffect(() => {
+    onSelectionChange?.({
+      clipId: selectedClip?.id ?? null,
+      layerId: selectedLayerId
+    });
+  }, [onSelectionChange, selectedClip?.id, selectedLayerId]);
+
   const updateSelectedClip = (patch: Partial<LyricClipModel>) => {
     if (!selectedClip) return;
     onClipsChange(
@@ -756,26 +769,26 @@ export function TimelineEditor({
     : (bandPeaks ?? masterPeaks);
   const hasSelection = selectedClipIds.size > 0;
   const inspectorStyle = selectedClip
-    ? resolveLyricStyle(DEFAULT_LYRIC_STYLE, selectedClipLayer?.styleDefaults ?? selectedClipLayer?.style, selectedClip.styleOverride)
+    ? resolveLyricVisualStyle(DEFAULT_LYRIC_STYLE, selectedClipLayer?.styleDefaults ?? selectedClipLayer?.style, selectedClip.styleOverride)
     : DEFAULT_LYRIC_STYLE;
   const inspectorLayerStyle = selectedLayer
-    ? resolveLyricStyle(DEFAULT_LYRIC_STYLE, selectedLayer.styleDefaults ?? selectedLayer.style)
+    ? resolveLyricVisualStyle(DEFAULT_LYRIC_STYLE, selectedLayer.styleDefaults ?? selectedLayer.style)
     : DEFAULT_LYRIC_STYLE;
   const inspectorAnimation = selectedClip
-    ? resolveLyricAnimation(DEFAULT_LYRIC_ANIMATION, selectedClipLayer?.animationDefaults ?? selectedClipLayer?.animation, {
+    ? resolveLyricAnimationConfig(DEFAULT_LYRIC_ANIMATION, selectedClipLayer?.animationDefaults ?? selectedClipLayer?.animation, {
         ...selectedClip.animationOverride,
         transitionIn: selectedClip.transitionIn,
         transitionOut: selectedClip.transitionOut
       })
     : DEFAULT_LYRIC_ANIMATION;
   const inspectorFx = selectedClip
-    ? resolveLyricFx(DEFAULT_LYRIC_FX, selectedClipLayer?.fxDefaults ?? selectedClipLayer?.fx, selectedClip.fxOverride)
+    ? resolveLyricFxConfig(DEFAULT_LYRIC_FX, selectedClipLayer?.fxDefaults ?? selectedClipLayer?.fx, selectedClip.fxOverride)
     : DEFAULT_LYRIC_FX;
   const inspectorLayerFx = selectedLayer
-    ? resolveLyricFx(DEFAULT_LYRIC_FX, selectedLayer.fxDefaults ?? selectedLayer.fx)
+    ? resolveLyricFxConfig(DEFAULT_LYRIC_FX, selectedLayer.fxDefaults ?? selectedLayer.fx)
     : DEFAULT_LYRIC_FX;
   const inspectorProgress = selectedClip
-    ? resolveClipProgressIndicator(
+    ? resolveProgressIndicatorConfig(
         DEFAULT_CLIP_PROGRESS_INDICATOR,
         selectedClipLayer?.progressIndicatorDefaults ?? selectedClipLayer?.progressIndicator,
         selectedClip.progressIndicatorOverride
@@ -1036,7 +1049,7 @@ export function TimelineEditor({
         </div>
       </div>
 
-      {selectedClip && (
+      {showFloatingInspectors && selectedClip && (
         <FloatingPanel
           storageKey="lyrixa_clip_inspector_pos"
           defaultPosition={{ x: window.innerWidth - 310, y: 120 }}
@@ -1195,7 +1208,7 @@ export function TimelineEditor({
         </FloatingPanel>
       )}
 
-      {selectedLayer && (
+      {showFloatingInspectors && selectedLayer && (
         <FloatingPanel
           storageKey="lyrixa_layer_inspector_pos"
           defaultPosition={{ x: window.innerWidth - 620, y: 120 }}
@@ -1243,10 +1256,10 @@ export function TimelineEditor({
             </InspectorSection>
 
             <InspectorSection title="Animation">
-              <label>Default active animation<select className="form-control form-select" value={resolveLyricAnimation(DEFAULT_LYRIC_ANIMATION, selectedLayer.animationDefaults ?? selectedLayer.animation).activeAnimation} onChange={(e) => updateLayerAnimation({ activeAnimation: e.target.value as LyricActiveAnimationPreset })}>{ACTIVE_ANIMATION_OPTIONS.map(o => (<option key={o.value} value={o.value}>{o.label}</option>))}</select></label>
+              <label>Default active animation<select className="form-control form-select" value={resolveLyricAnimationConfig(DEFAULT_LYRIC_ANIMATION, selectedLayer.animationDefaults ?? selectedLayer.animation).activeAnimation} onChange={(e) => updateLayerAnimation({ activeAnimation: e.target.value as LyricActiveAnimationPreset })}>{ACTIVE_ANIMATION_OPTIONS.map(o => (<option key={o.value} value={o.value}>{o.label}</option>))}</select></label>
               <div className="tl-inspector-row">
-                <label>In<select className="form-control form-select" value={resolveLyricAnimation(DEFAULT_LYRIC_ANIMATION, selectedLayer.animationDefaults ?? selectedLayer.animation).transitionIn} onChange={(e) => updateLayerAnimation({ transitionIn: e.target.value as LyricTransitionPreset })}>{TRANSITION_OPTIONS.map(o => (<option key={o.value} value={o.value}>{o.label}</option>))}</select></label>
-                <label>Out<select className="form-control form-select" value={resolveLyricAnimation(DEFAULT_LYRIC_ANIMATION, selectedLayer.animationDefaults ?? selectedLayer.animation).transitionOut} onChange={(e) => updateLayerAnimation({ transitionOut: e.target.value as LyricTransitionPreset })}>{TRANSITION_OPTIONS.map(o => (<option key={o.value} value={o.value}>{o.label}</option>))}</select></label>
+                <label>In<select className="form-control form-select" value={resolveLyricAnimationConfig(DEFAULT_LYRIC_ANIMATION, selectedLayer.animationDefaults ?? selectedLayer.animation).transitionIn} onChange={(e) => updateLayerAnimation({ transitionIn: e.target.value as LyricTransitionPreset })}>{TRANSITION_OPTIONS.map(o => (<option key={o.value} value={o.value}>{o.label}</option>))}</select></label>
+                <label>Out<select className="form-control form-select" value={resolveLyricAnimationConfig(DEFAULT_LYRIC_ANIMATION, selectedLayer.animationDefaults ?? selectedLayer.animation).transitionOut} onChange={(e) => updateLayerAnimation({ transitionOut: e.target.value as LyricTransitionPreset })}>{TRANSITION_OPTIONS.map(o => (<option key={o.value} value={o.value}>{o.label}</option>))}</select></label>
               </div>
             </InspectorSection>
 
@@ -1256,7 +1269,7 @@ export function TimelineEditor({
                 updateSelectedLayer({ fxDefaults: { ...(selectedLayer.fxDefaults ?? selectedLayer.fx ?? {}), preset, enabled: preset !== 'none' } });
               }}>{FX_OPTIONS.map(o => (<option key={o.value} value={o.value}>{o.label}</option>))}</select></label>
               <label>FX intensity<input className="form-range" type="range" min={0} max={2} step={0.05} value={inspectorLayerFx.intensity} onChange={(e) => updateSelectedLayer({ fxDefaults: { ...(selectedLayer.fxDefaults ?? selectedLayer.fx ?? {}), intensity: parseFloat(e.target.value), enabled: inspectorLayerFx.preset !== 'none' } })} /></label>
-              <label className="tl-inline-check"><input type="checkbox" checked={resolveClipProgressIndicator(DEFAULT_CLIP_PROGRESS_INDICATOR, selectedLayer.progressIndicatorDefaults ?? selectedLayer.progressIndicator).enabled} onChange={(e) => updateSelectedLayer({ progressIndicatorDefaults: { ...(selectedLayer.progressIndicatorDefaults ?? selectedLayer.progressIndicator ?? {}), enabled: e.target.checked } })} />Show progress dot by default</label>
+              <label className="tl-inline-check"><input type="checkbox" checked={resolveProgressIndicatorConfig(DEFAULT_CLIP_PROGRESS_INDICATOR, selectedLayer.progressIndicatorDefaults ?? selectedLayer.progressIndicator).enabled} onChange={(e) => updateSelectedLayer({ progressIndicatorDefaults: { ...(selectedLayer.progressIndicatorDefaults ?? selectedLayer.progressIndicator ?? {}), enabled: e.target.checked } })} />Show progress dot by default</label>
             </InspectorSection>
           </div>
         </FloatingPanel>
