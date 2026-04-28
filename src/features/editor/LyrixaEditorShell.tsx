@@ -6,7 +6,6 @@ import { TimelineEditor } from '../timeline-editor/TimelineEditor';
 import { ClipLyricsRenderer } from '../lyrics-view/ClipLyricsRenderer';
 import { LyricsImportPanel } from './LyricsImportPanel';
 import { FloatingPreview } from './FloatingPreview';
-import { FloatingPanel } from '../../shared/components/FloatingPanel';
 import { useLyrixaProject } from './useLyrixaProject';
 import type { SaveStatus } from './useLyrixaProject';
 import type { AudioChannelRole, AudioBandMode } from '../../core/types/audio';
@@ -34,8 +33,10 @@ export function LyrixaEditorShell() {
     project,
     saveStatus,
     audioNeedsReload,
+    vocalExtractionStatus,
     setProjectName,
     loadAudioFile,
+    extractVocalsFromMaster,
     removeAudio,
     getAudioBlob,
     applyLyrics,
@@ -58,6 +59,7 @@ export function LyrixaEditorShell() {
   const projectImportInputRef = useRef<HTMLInputElement>(null);
 
   const [isPlaying, setIsPlaying] = useState(false);
+  const [playbackMode, setPlaybackMode] = useState<'master' | 'vocals'>('master');
   const [importOpen, setImportOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [transparentPreviewOpen, setTransparentPreviewOpen] = useState(false);
@@ -76,6 +78,8 @@ export function LyrixaEditorShell() {
 
   const masterChannel = project.audioTracks.master;
   const vocalsChannel = project.audioTracks.vocals;
+  const activeAudioChannel =
+    playbackMode === 'vocals' && vocalsChannel?.objectUrl ? vocalsChannel : masterChannel;
 
   useEffect(() => {
     setDraftName(project.name);
@@ -116,6 +120,12 @@ export function LyrixaEditorShell() {
   const openVocalsPicker = () => vocalsFileInputRef.current?.click();
   const openProjectImportPicker = () => projectImportInputRef.current?.click();
 
+  useEffect(() => {
+    if (playbackMode === 'vocals' && !vocalsChannel?.objectUrl) {
+      setPlaybackMode('master');
+    }
+  }, [playbackMode, vocalsChannel?.objectUrl]);
+
   const handleAudioFileSelected = (role: AudioChannelRole) =>
     async (e: ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
@@ -135,9 +145,24 @@ export function LyrixaEditorShell() {
   }, [setCurrentTime]);
 
   const handlePlayToggle = () => {
-    if (!masterChannel?.objectUrl) return;
+    if (!activeAudioChannel?.objectUrl) return;
     setIsPlaying(p => !p);
   };
+
+  const handleExtractVocals = useCallback(async () => {
+    if (!masterChannel?.objectUrl || vocalExtractionStatus === 'extracting') return;
+    const wasPlaying = isPlaying;
+    setIsPlaying(false);
+    try {
+      await extractVocalsFromMaster();
+      setPlaybackMode('vocals');
+      setMiniPreviewVisible(true);
+      if (wasPlaying) setIsPlaying(true);
+    } catch (err) {
+      console.error('[Lyrixa] Vocal isolation failed:', err);
+      window.alert(err instanceof Error ? err.message : 'Could not isolate vocals from this track.');
+    }
+  }, [extractVocalsFromMaster, isPlaying, masterChannel?.objectUrl, vocalExtractionStatus]);
 
   const commitName = () => {
     const trimmed = draftName.trim();
@@ -249,12 +274,24 @@ export function LyrixaEditorShell() {
           </button>
           <button
             className={`ls-btn ${vocalsChannel ? 'active' : ''}`}
-            onClick={openVocalsPicker}
+            onClick={handleExtractVocals}
+            disabled={!masterChannel?.objectUrl || vocalExtractionStatus === 'extracting'}
             title={vocalsChannel
-              ? `Vocals stem loaded: ${vocalsChannel.fileName}. Used for timing assistance only — does not play separately.`
-              : 'Load an isolated vocals stem to assist with lyric timing. This file is analyzed only, not played.'}
+              ? `Re-isolate vocals from the master track. Current vocals helper: ${vocalsChannel.fileName}.`
+              : 'Isolate a vocal-focused helper track from the loaded master audio.'}
           >
-            {vocalsChannel ? `↻ Vocals: ${vocalsChannel.fileName}` : '＋ Load vocals stem'}
+            {vocalExtractionStatus === 'extracting'
+              ? 'Isolating vocals…'
+              : vocalsChannel
+                ? '↻ Isolate vocals'
+                : '✦ Isolate vocals'}
+          </button>
+          <button
+            className="ls-btn ghost small"
+            onClick={openVocalsPicker}
+            title="Upload a clean isolated vocals stem instead of using automatic extraction."
+          >
+            Upload stem
           </button>
           {vocalsChannel && (
             <button
@@ -328,6 +365,30 @@ export function LyrixaEditorShell() {
               ◳ Live preview
             </button>
           )}
+          {vocalsChannel?.objectUrl && (
+            <div className="ls-monitor-toggle" aria-label="Playback source">
+              <button
+                className={playbackMode === 'master' ? 'active' : ''}
+                onClick={() => {
+                  setIsPlaying(false);
+                  setPlaybackMode('master');
+                }}
+                title="Listen to the original master track"
+              >
+                Master
+              </button>
+              <button
+                className={playbackMode === 'vocals' ? 'active' : ''}
+                onClick={() => {
+                  setIsPlaying(false);
+                  setPlaybackMode('vocals');
+                }}
+                title="Listen to the isolated vocals helper"
+              >
+                Vocals
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="ls-topbar-section ls-meta">
@@ -342,6 +403,11 @@ export function LyrixaEditorShell() {
           {vocalsChannel && !vocalsAnalysisReady && (
             <span className="ls-vocals-chip" title="Analyzing vocals stem waveform…">
               ◌ Analyzing vocals…
+            </span>
+          )}
+          {vocalExtractionStatus === 'failed' && (
+            <span className="ls-vocals-chip error" title="Automatic vocal isolation failed. Try uploading a clean vocals stem.">
+              Vocal isolation failed
             </span>
           )}
           <span className={`ls-save-chip ${saveStatus}`}>{SAVE_LABEL[saveStatus]}</span>
@@ -387,12 +453,13 @@ export function LyrixaEditorShell() {
         </div>
       )}
 
-      {masterChannel?.objectUrl && (
+      {activeAudioChannel?.objectUrl && (
         <AudioEngine
           ref={audioEngineRef}
-          audioUrl={masterChannel.objectUrl}
+          audioUrl={activeAudioChannel.objectUrl}
           isPlaying={isPlaying}
-          onDurationChange={setMasterDuration}
+          sourceSyncTime={playbackTime}
+          onDurationChange={playbackMode === 'master' ? setMasterDuration : () => undefined}
           onEnded={() => setIsPlaying(false)}
         />
       )}
@@ -463,13 +530,13 @@ export function LyrixaEditorShell() {
       />
 
       {globalPanelOpen && (
-        <FloatingPanel
-          storageKey="lyrixa_global_style_panel_pos"
-          defaultPosition={{ x: Math.max(24, window.innerWidth - 340), y: 96 }}
-          width={310}
-          title="Global style"
-          onClose={() => setGlobalPanelOpen(false)}
-        >
+        <section className="ls-bottom-style-dock" aria-label="Global style controls">
+          <header className="ls-bottom-style-header">
+            <span>Global style</span>
+            <button className="fp-btn" onClick={() => setGlobalPanelOpen(false)} title="Close global style">
+              ✕
+            </button>
+          </header>
           <GlobalStylePanel
             styleConfig={project.styleConfig}
             animationConfig={project.animationConfig}
@@ -480,7 +547,7 @@ export function LyrixaEditorShell() {
             onFxChange={setFxConfig}
             onProgressChange={setProgressIndicatorConfig}
           />
-        </FloatingPanel>
+        </section>
       )}
 
       {previewOpen && (
@@ -549,6 +616,42 @@ function EmptyLaneHint({ icon, title, description, actionLabel, onAction }: Empt
   );
 }
 
+const FONT_PRESETS = [
+  { label: 'Inter', value: 'Inter, system-ui, sans-serif' },
+  { label: 'Impact', value: 'Impact, Haettenschweiler, Arial Narrow Bold, sans-serif' },
+  { label: 'Arial Black', value: '"Arial Black", Arial, sans-serif' },
+  { label: 'Condensed', value: '"Avenir Next Condensed", "Roboto Condensed", Arial Narrow, sans-serif' },
+  { label: 'Rounded', value: '"Arial Rounded MT Bold", "Trebuchet MS", system-ui, sans-serif' },
+  { label: 'Serif', value: 'Georgia, "Times New Roman", serif' },
+  { label: 'Mono', value: '"SFMono-Regular", Menlo, Consolas, monospace' },
+  { label: 'System', value: 'system-ui, -apple-system, BlinkMacSystemFont, sans-serif' }
+];
+
+const ACTIVE_ANIMATION_PRESETS: LyricActiveAnimationPreset[] = [
+  'none',
+  'pulse',
+  'glow-pulse',
+  'breathing',
+  'shake-light',
+  'wave',
+  'flicker'
+];
+
+const FX_PRESETS: LyricFxPreset[] = [
+  'none',
+  'neon-glow',
+  'soft-bloom',
+  'prism-shader',
+  'liquid-shimmer',
+  'heat-haze',
+  'rgb-shift',
+  'glitch',
+  'scanline',
+  'blur-flicker',
+  'shadow-trail',
+  'energy-pulse'
+];
+
 function GlobalStylePanel({
   styleConfig,
   animationConfig,
@@ -570,16 +673,13 @@ function GlobalStylePanel({
 }) {
   const handleTextureSelected = async (file: File | undefined) => {
     if (!file) return;
-    const reader = new FileReader();
-    const dataUrl = await new Promise<string>((resolve, reject) => {
-      reader.onload = () => resolve(String(reader.result ?? ''));
-      reader.onerror = () => reject(reader.error);
-      reader.readAsDataURL(file);
-    });
+    const dataUrl = await readTextureFileAsDataUrl(file);
     onStyleChange({
       ...styleConfig,
       textFillMode: 'texture',
-      textTextureImage: dataUrl
+      textTextureImage: dataUrl,
+      textTextureSize: styleConfig.textTextureSize === 'auto' ? 'cover' : styleConfig.textTextureSize,
+      textTextureRepeat: styleConfig.textTextureRepeat ?? 'no-repeat'
     });
   };
 
@@ -591,8 +691,10 @@ function GlobalStylePanel({
           <div className="inspector-grid">
             <label>Font size<input className="form-control form-input" type="number" step="0.1" min={0.5} value={parseFloat(styleConfig.fontSize) || 2.5} onChange={(e) => onStyleChange({ ...styleConfig, fontSize: `${e.target.value}rem` })} /></label>
             <label>Weight<input className="form-control form-input" type="number" step="100" min={100} max={1000} value={parseInt(String(styleConfig.fontWeight), 10) || 800} onChange={(e) => onStyleChange({ ...styleConfig, fontWeight: parseInt(e.target.value, 10) || 800 })} /></label>
+            <label>Font<select className="form-control form-select" value={styleConfig.fontFamily} onChange={(e) => onStyleChange({ ...styleConfig, fontFamily: e.target.value })}>{FONT_PRESETS.map(font => <option key={font.label} value={font.value}>{font.label}</option>)}</select></label>
             <label>Text color<input className="form-color" type="color" value={toColorInput(styleConfig.textColor)} onChange={(e) => onStyleChange({ ...styleConfig, textColor: e.target.value, activeTextColor: e.target.value })} /></label>
             <label>Stroke<input className="form-control form-input" type="number" min={0} max={12} step={0.5} value={styleConfig.strokeWidth} onChange={(e) => onStyleChange({ ...styleConfig, strokeWidth: parseFloat(e.target.value) || 0 })} /></label>
+            <label>Line height<input className="form-control form-input" type="number" min={0.7} max={2} step={0.05} value={parseFloat(styleConfig.lineHeight) || 1.2} onChange={(e) => onStyleChange({ ...styleConfig, lineHeight: e.target.value, lineSpacing: e.target.value })} /></label>
           </div>
           <label>Letter spacing<input className="form-control form-input" type="text" value={styleConfig.letterSpacing} onChange={(e) => onStyleChange({ ...styleConfig, letterSpacing: e.target.value })} /></label>
           <label>Fill mode<select className="form-control form-select" value={styleConfig.textFillMode ?? 'solid'} onChange={(e) => onStyleChange({ ...styleConfig, textFillMode: e.target.value as LyricTextFillMode })}><option value="solid">Solid color</option><option value="gradient">Gradient</option><option value="texture">Image texture</option></select></label>
@@ -602,7 +704,15 @@ function GlobalStylePanel({
           {(styleConfig.textFillMode ?? 'solid') === 'texture' && (
             <>
               <label>Texture image<input className="form-control form-input" type="file" accept="image/*" onChange={(e) => void handleTextureSelected(e.target.files?.[0])} /></label>
-              <label>Texture size<select className="form-control form-select" value={styleConfig.textTextureSize} onChange={(e) => onStyleChange({ ...styleConfig, textTextureSize: e.target.value })}><option value="cover">Cover</option><option value="contain">Contain</option><option value="auto">Original</option><option value="180px">Tiled small</option><option value="360px">Tiled large</option></select></label>
+              <div className="inspector-grid">
+                <label>Texture fit<select className="form-control form-select" value={styleConfig.textTextureSize} onChange={(e) => {
+                  const size = e.target.value;
+                  onStyleChange({ ...styleConfig, textTextureSize: size, textTextureRepeat: /px/.test(size) ? 'repeat' : 'no-repeat' });
+                }}><option value="cover">Cover text</option><option value="100% 100%">Stretch text</option><option value="contain">Contain</option><option value="180px">Tile small</option><option value="360px">Tile large</option></select></label>
+                <label>Position<select className="form-control form-select" value={styleConfig.textTexturePosition} onChange={(e) => onStyleChange({ ...styleConfig, textTexturePosition: e.target.value })}><option value="center">Center</option><option value="top">Top</option><option value="bottom">Bottom</option><option value="left center">Left</option><option value="right center">Right</option></select></label>
+              </div>
+              <label>Texture brightness<input className="form-range" type="range" min={0.4} max={2} step={0.05} value={styleConfig.textTextureBrightness} onChange={(e) => onStyleChange({ ...styleConfig, textTextureBrightness: parseFloat(e.target.value) })} /></label>
+              <label>Texture contrast<input className="form-range" type="range" min={0.5} max={2.5} step={0.05} value={styleConfig.textTextureContrast} onChange={(e) => onStyleChange({ ...styleConfig, textTextureContrast: parseFloat(e.target.value) })} /></label>
             </>
           )}
           <label>Opacity<input className="form-range" type="range" min={0} max={1} step={0.05} value={styleConfig.opacity} onChange={(e) => onStyleChange({ ...styleConfig, opacity: parseFloat(e.target.value) })} /></label>
@@ -613,7 +723,9 @@ function GlobalStylePanel({
       <details className="inspector-section">
         <summary>Animation</summary>
         <div className="inspector-section-body">
-          <label>Default active<select className="form-control form-select" value={animationConfig.activeAnimation} onChange={(e) => onAnimationChange({ ...animationConfig, activeAnimation: e.target.value as LyricActiveAnimationPreset })}>{['none', 'pulse', 'glow-pulse', 'breathing', 'shake-light', 'wave', 'flicker'].map(value => <option key={value} value={value}>{value}</option>)}</select></label>
+          <label>Default active<select className="form-control form-select" value={animationConfig.activeAnimation} onChange={(e) => onAnimationChange({ ...animationConfig, activeAnimation: e.target.value as LyricActiveAnimationPreset })}>{ACTIVE_ANIMATION_PRESETS.map(value => <option key={value} value={value}>{value}</option>)}</select></label>
+          <label>Intensity<input className="form-range" type="range" min={0} max={2.5} step={0.05} value={animationConfig.intensity} onChange={(e) => onAnimationChange({ ...animationConfig, intensity: parseFloat(e.target.value) })} /></label>
+          <label>Speed<input className="form-range" type="range" min={0.25} max={4} step={0.05} value={animationConfig.speed} onChange={(e) => onAnimationChange({ ...animationConfig, speed: parseFloat(e.target.value) })} /></label>
           <label>Exit linger<input className="form-control form-input" type="number" min={0} step={50} value={animationConfig.exitLingerMs} onChange={(e) => onAnimationChange({ ...animationConfig, exitLingerMs: parseInt(e.target.value, 10) || 0 })} /></label>
         </div>
       </details>
@@ -623,8 +735,13 @@ function GlobalStylePanel({
           <label>Default FX<select className="form-control form-select" value={fxConfig.preset} onChange={(e) => {
             const preset = e.target.value as LyricFxPreset;
             onFxChange({ ...fxConfig, preset, enabled: preset !== 'none' });
-          }}>{['none', 'neon-glow', 'rgb-shift', 'glitch', 'scanline', 'blur-flicker', 'shadow-trail', 'energy-pulse'].map(value => <option key={value} value={value}>{value}</option>)}</select></label>
+          }}>{FX_PRESETS.map(value => <option key={value} value={value}>{value}</option>)}</select></label>
           <label>Intensity<input className="form-range" type="range" min={0} max={2} step={0.05} value={fxConfig.intensity} onChange={(e) => onFxChange({ ...fxConfig, intensity: parseFloat(e.target.value), enabled: fxConfig.preset !== 'none' })} /></label>
+          <label>FX blur<input className="form-range" type="range" min={0} max={18} step={0.5} value={fxConfig.blur} onChange={(e) => onFxChange({ ...fxConfig, blur: parseFloat(e.target.value), enabled: fxConfig.preset !== 'none' })} /></label>
+          <div className="inspector-grid">
+            <label>Color A<input className="form-color" type="color" value={toColorInput(fxConfig.colorA)} onChange={(e) => onFxChange({ ...fxConfig, colorA: e.target.value, enabled: fxConfig.preset !== 'none' })} /></label>
+            <label>Color B<input className="form-color" type="color" value={toColorInput(fxConfig.colorB)} onChange={(e) => onFxChange({ ...fxConfig, colorB: e.target.value, enabled: fxConfig.preset !== 'none' })} /></label>
+          </div>
           <label className="tl-inline-check"><input type="checkbox" checked={progressIndicatorConfig.enabled} onChange={(e) => onProgressChange({ ...progressIndicatorConfig, enabled: e.target.checked })} />Show progress dot by default</label>
         </div>
       </details>
@@ -638,6 +755,45 @@ function safeGetLocalStorage(key: string): string | null {
   } catch {
     return null;
   }
+}
+
+async function readTextureFileAsDataUrl(file: File): Promise<string> {
+  if (typeof window === 'undefined') return readFileAsDataUrl(file);
+  const image = new Image();
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    await new Promise<void>((resolve, reject) => {
+      image.onload = () => resolve();
+      image.onerror = () => reject(new Error('Could not read texture image.'));
+      image.src = objectUrl;
+    });
+
+    const maxSide = 1400;
+    const scale = Math.min(1, maxSide / Math.max(image.naturalWidth, image.naturalHeight));
+    const width = Math.max(1, Math.round(image.naturalWidth * scale));
+    const height = Math.max(1, Math.round(image.naturalHeight * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return readFileAsDataUrl(file);
+    ctx.drawImage(image, 0, 0, width, height);
+    const dataUrl = canvas.toDataURL('image/webp', 0.9);
+    return dataUrl.startsWith('data:image/') ? dataUrl : readFileAsDataUrl(file);
+  } catch {
+    return readFileAsDataUrl(file);
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  const reader = new FileReader();
+  return new Promise<string>((resolve, reject) => {
+    reader.onload = () => resolve(String(reader.result ?? ''));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
 }
 
 function readStoredNumber(key: string, fallback: number): number {

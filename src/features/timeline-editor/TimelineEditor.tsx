@@ -143,6 +143,10 @@ const ACTIVE_ANIMATION_OPTIONS: { value: LyricActiveAnimationPreset; label: stri
 const FX_OPTIONS: { value: LyricFxPreset; label: string }[] = [
   { value: 'none', label: 'None' },
   { value: 'neon-glow', label: 'Neon glow' },
+  { value: 'soft-bloom', label: 'Soft bloom' },
+  { value: 'prism-shader', label: 'Prism shader' },
+  { value: 'liquid-shimmer', label: 'Liquid shimmer' },
+  { value: 'heat-haze', label: 'Heat haze' },
   { value: 'rgb-shift', label: 'RGB shift' },
   { value: 'glitch', label: 'Glitch' },
   { value: 'scanline', label: 'Scanline' },

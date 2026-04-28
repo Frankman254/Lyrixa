@@ -12,6 +12,8 @@ export interface AudioEngineRef {
 interface AudioEngineProps {
   audioUrl: string;
   isPlaying: boolean;
+  /** Position to restore when the underlying audio source URL changes. */
+  sourceSyncTime?: number;
   /** Optional ~4Hz tick from the <audio> element. Use rAF for smooth playhead. */
   onTimeUpdate?: (time: number) => void;
   onDurationChange: (duration: number) => void;
@@ -21,15 +23,21 @@ interface AudioEngineProps {
 export const AudioEngine = forwardRef<AudioEngineRef, AudioEngineProps>(({
   audioUrl,
   isPlaying,
+  sourceSyncTime = 0,
   onTimeUpdate,
   onDurationChange,
   onEnded
 }, ref) => {
   const audioRef = useRef<HTMLAudioElement>(null);
+  const sourceSyncTimeRef = useRef(sourceSyncTime);
 
   const audioCtxRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const isConnectedRef = useRef(false);
+
+  useEffect(() => {
+    sourceSyncTimeRef.current = sourceSyncTime;
+  }, [sourceSyncTime]);
 
   const initWebAudio = () => {
     if (!audioCtxRef.current) {
@@ -59,6 +67,24 @@ export const AudioEngine = forwardRef<AudioEngineRef, AudioEngineProps>(({
   }));
 
   useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    const applySyncTime = () => {
+      const max = Number.isFinite(audio.duration) ? Math.max(0, audio.duration - 0.05) : sourceSyncTimeRef.current;
+      audio.currentTime = Math.max(0, Math.min(sourceSyncTimeRef.current, max));
+      onTimeUpdate?.(audio.currentTime);
+    };
+
+    if (audio.readyState >= 1) {
+      applySyncTime();
+      return;
+    }
+
+    audio.addEventListener('loadedmetadata', applySyncTime, { once: true });
+    return () => audio.removeEventListener('loadedmetadata', applySyncTime);
+  }, [audioUrl, onTimeUpdate]);
+
+  useEffect(() => {
     if (audioRef.current) {
       if (isPlaying) {
         initWebAudio();
@@ -70,7 +96,7 @@ export const AudioEngine = forwardRef<AudioEngineRef, AudioEngineProps>(({
         audioRef.current.pause();
       }
     }
-  }, [isPlaying]);
+  }, [audioUrl, isPlaying]);
 
   const handleTimeUpdate = () => {
     if (audioRef.current && onTimeUpdate) {
@@ -86,6 +112,10 @@ export const AudioEngine = forwardRef<AudioEngineRef, AudioEngineProps>(({
       onTimeUpdate={handleTimeUpdate}
       onLoadedMetadata={() => {
         if (audioRef.current) {
+          const max = Number.isFinite(audioRef.current.duration)
+            ? Math.max(0, audioRef.current.duration - 0.05)
+            : sourceSyncTimeRef.current;
+          audioRef.current.currentTime = Math.max(0, Math.min(sourceSyncTimeRef.current, max));
           onDurationChange(audioRef.current.duration);
         }
       }}

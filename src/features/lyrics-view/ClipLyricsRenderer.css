@@ -17,7 +17,7 @@
   text-align: var(--lyric-alignment, center);
   line-height: var(--lyric-line-height, 1.2);
   opacity: var(--lyric-opacity, 1);
-  filter: blur(var(--lyric-fx-blur, 0));
+  filter: blur(calc(var(--lyric-blur, 0px) + var(--lyric-fx-blur, 0px)));
   mix-blend-mode: var(--lyric-blend-mode, normal);
   text-shadow:
     0 0 calc(24px * var(--lyric-glow-intensity, 0.7)) var(--lyric-glow, rgba(255,255,255,0.5)),
@@ -51,6 +51,7 @@
   z-index: 2;
   display: inline-block;
   white-space: pre-wrap;
+  isolation: isolate;
 }
 
 .clip-lyric.fill-gradient .clip-lyric-text,
@@ -58,17 +59,39 @@
   color: transparent;
   background-image: var(--lyric-fill-image);
   background-size: var(--lyric-texture-size, cover);
-  background-position: center;
-  background-repeat: repeat;
+  background-position: var(--lyric-texture-position, center);
+  background-repeat: var(--lyric-texture-repeat, no-repeat);
   -webkit-background-clip: text;
   background-clip: text;
 }
 
 .clip-lyric.fill-texture .clip-lyric-text {
-  animation-name: lyric-texture-drift;
-  animation-duration: calc(var(--lyric-fx-speed, 1s) * 8);
-  animation-timing-function: linear;
-  animation-iteration-count: infinite;
+  filter: var(--lyric-texture-filter, none);
+}
+
+.clip-lyric-text::before,
+.clip-lyric-text::after {
+  content: attr(data-text);
+  position: absolute;
+  inset: 0;
+  white-space: inherit;
+  pointer-events: none;
+}
+
+.clip-lyric-text::before {
+  z-index: -1;
+  color: var(--lyric-color-primary, #ffffff);
+  opacity: calc(0.12 + var(--lyric-glow-intensity, 0.7) * 0.24);
+  filter: blur(calc(10px + 18px * var(--lyric-glow-intensity, 0.7)));
+  transform: scale(1.035);
+}
+
+.clip-lyric-text::after {
+  z-index: 3;
+  display: none;
+  color: transparent;
+  -webkit-background-clip: text;
+  background-clip: text;
 }
 
 .pos-center { left: 50%; top: 50%; transform: translate(-50%, -50%); }
@@ -180,6 +203,44 @@
   animation: lyric-energy-pulse calc(var(--lyric-fx-speed, 1s) * 1.3) ease-in-out infinite;
 }
 
+.fx-soft-bloom .clip-lyric-text::before {
+  opacity: calc(0.32 + var(--lyric-fx-intensity, 0.7) * 0.34);
+  filter: blur(calc(18px + 34px * var(--lyric-fx-intensity, 0.7)));
+  transform: scale(calc(1.04 + 0.04 * var(--lyric-fx-intensity, 0.7)));
+}
+
+.fx-prism-shader .clip-lyric-text::after,
+.fx-liquid-shimmer .clip-lyric-text::after,
+.fx-heat-haze .clip-lyric-text::after {
+  display: block;
+}
+
+.fx-prism-shader .clip-lyric-text::after {
+  background-image:
+    linear-gradient(90deg, var(--lyric-fx-color-a, #60f5ff), #ffffff 42%, var(--lyric-fx-color-b, #ff4fd8));
+  opacity: calc(0.18 + var(--lyric-fx-intensity, 0.7) * 0.28);
+  mix-blend-mode: screen;
+  animation: lyric-prism-split calc(var(--lyric-fx-speed, 1s) * 1.8) ease-in-out infinite;
+}
+
+.fx-liquid-shimmer .clip-lyric-text::after {
+  background-image:
+    linear-gradient(105deg, transparent 0%, rgba(255,255,255,0.1) 22%, rgba(255,255,255,0.95) 46%, rgba(255,255,255,0.18) 58%, transparent 82%);
+  background-size: 260% 100%;
+  opacity: calc(0.28 + var(--lyric-fx-intensity, 0.7) * 0.32);
+  mix-blend-mode: plus-lighter;
+  animation: lyric-liquid-shimmer calc(var(--lyric-fx-speed, 1s) * 2.4) linear infinite;
+}
+
+.fx-heat-haze .clip-lyric-text::after {
+  background-image:
+    linear-gradient(180deg, var(--lyric-fx-color-a, #60f5ff), var(--lyric-fx-color-b, #ff4fd8));
+  opacity: calc(0.08 + var(--lyric-fx-intensity, 0.7) * 0.22);
+  filter: blur(calc(1px + 2px * var(--lyric-fx-intensity, 0.7)));
+  mix-blend-mode: screen;
+  animation: lyric-heat-haze calc(var(--lyric-fx-speed, 1s) * 1.4) ease-in-out infinite;
+}
+
 .clip-progress-dot {
   position: absolute;
   left: calc(var(--clip-progress, 0) * 100%);
@@ -227,11 +288,11 @@
 
 @keyframes clip-blur-in {
   from { opacity: 0; filter: blur(calc(var(--lyric-blur, 2px) + 8px)); }
-  to { opacity: var(--lyric-opacity, 1); filter: blur(var(--lyric-fx-blur, 0)); }
+  to { opacity: var(--lyric-opacity, 1); filter: blur(calc(var(--lyric-blur, 0px) + var(--lyric-fx-blur, 0px))); }
 }
 
 @keyframes clip-blur-out {
-  from { opacity: var(--lyric-opacity, 1); filter: blur(var(--lyric-fx-blur, 0)); }
+  from { opacity: var(--lyric-opacity, 1); filter: blur(calc(var(--lyric-blur, 0px) + var(--lyric-fx-blur, 0px))); }
   to { opacity: 0; filter: blur(calc(var(--lyric-blur, 2px) + 10px)); }
 }
 
@@ -311,7 +372,19 @@
   }
 }
 
-@keyframes lyric-texture-drift {
-  from { background-position: 0% 50%; }
-  to { background-position: 120% 50%; }
+@keyframes lyric-prism-split {
+  0%, 100% { translate: 0 0; filter: hue-rotate(0deg); }
+  35% { translate: calc(-2px * var(--lyric-fx-intensity, 0.7)) 0; filter: hue-rotate(-18deg); }
+  70% { translate: calc(2px * var(--lyric-fx-intensity, 0.7)) 0; filter: hue-rotate(16deg); }
+}
+
+@keyframes lyric-liquid-shimmer {
+  from { background-position: 180% 50%; }
+  to { background-position: -80% 50%; }
+}
+
+@keyframes lyric-heat-haze {
+  0%, 100% { translate: 0 0; skew: 0deg; }
+  33% { translate: calc(1.5px * var(--lyric-fx-intensity, 0.7)) -1px; skew: -1deg; }
+  66% { translate: calc(-1.5px * var(--lyric-fx-intensity, 0.7)) 1px; skew: 1deg; }
 }

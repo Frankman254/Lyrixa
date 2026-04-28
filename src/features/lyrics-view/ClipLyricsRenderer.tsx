@@ -125,6 +125,9 @@ export function ClipLyricsRenderer({
         const fillImage = fillMode === 'texture' && style.textTextureImage
           ? `url("${style.textTextureImage}")`
           : style.textGradient;
+        const textureRepeat = style.textTextureRepeat ?? (
+          /px|em|rem/.test(style.textTextureSize ?? '') ? 'repeat' : 'no-repeat'
+        );
         const isExiting = currentTime > clip.endTime;
         const showProgressDot = progressIndicator.enabled && !isExiting && currentTime >= clip.startTime && currentTime <= clip.endTime;
         const layerType = layer?.layerType ?? 'lyrics';
@@ -153,6 +156,9 @@ export function ClipLyricsRenderer({
           '--lyric-bg-opacity-percent': `${Math.max(0, Math.min(1, style.backgroundOpacity)) * 100}%`,
           '--lyric-fill-image': fillImage,
           '--lyric-texture-size': style.textTextureSize,
+          '--lyric-texture-position': style.textTexturePosition,
+          '--lyric-texture-repeat': textureRepeat,
+          '--lyric-texture-filter': `brightness(${style.textTextureBrightness}) contrast(${style.textTextureContrast}) saturate(${style.textTextureSaturation})`,
           '--lyric-animation-duration': `${animation.durationMs}ms`,
           '--lyric-animation-easing': animation.easing,
           '--lyric-animation-intensity': animation.intensity,
@@ -187,7 +193,7 @@ export function ClipLyricsRenderer({
             data-layer={clip.layerId}
             data-layer-type={layerType}
           >
-            <span className="clip-lyric-text">{transformText(clip.text, style.textTransform)}</span>
+            <span className="clip-lyric-text" data-text={transformText(clip.text, style.textTransform)}>{transformText(clip.text, style.textTransform)}</span>
             {fx.enabled && fx.preset === 'scanline' && <span className="clip-scanline" aria-hidden />}
             {showProgressDot && <span className="clip-progress-dot" aria-hidden />}
           </div>

@@ -31,10 +31,12 @@ import {
   deleteAllProjectAudio
 } from './audioBlobStorage';
 import { extractPeaksFromBlob } from './peakExtraction';
+import { extractVocalsFromMasterBlob } from './vocalIsolation';
 
 const AUTOSAVE_DEBOUNCE_MS = 400;
 
 export type SaveStatus = 'idle' | 'pending' | 'saved';
+export type VocalExtractionStatus = 'idle' | 'extracting' | 'ready' | 'failed';
 
 export interface ApplyLyricsOptions {
   /** Default duration in seconds. Used by `fixed` and as fallback. */
@@ -55,9 +57,11 @@ export interface UseLyrixaProjectResult {
   project: LyrixaProject;
   saveStatus: SaveStatus;
   audioNeedsReload: boolean;
+  vocalExtractionStatus: VocalExtractionStatus;
 
   setProjectName: (name: string) => void;
   loadAudioFile: (file: File, role?: AudioChannelRole) => Promise<void>;
+  extractVocalsFromMaster: () => Promise<void>;
   removeAudio: (role?: AudioChannelRole) => Promise<void>;
   /** Returns the in-memory Blob for a loaded audio channel, or null if unavailable. */
   getAudioBlob: (role: AudioChannelRole) => Blob | null;
@@ -101,6 +105,7 @@ export function useLyrixaProject(): UseLyrixaProjectResult {
   const [project, setProject] = useState<LyrixaProject>(hydrated.project);
   const [audioNeedsReload, setAudioNeedsReload] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
+  const [vocalExtractionStatus, setVocalExtractionStatus] = useState<VocalExtractionStatus>('idle');
 
   const saveTimerRef = useRef<number | null>(null);
   const skipNextSaveRef = useRef(true);
@@ -266,6 +271,7 @@ export function useLyrixaProject(): UseLyrixaProjectResult {
       };
     });
     if (role === 'master') setAudioNeedsReload(false);
+    if (role === 'vocals') setVocalExtractionStatus('ready');
 
     try {
       await putAudio(projectIdRef.current, role, file, file.name, duration);
@@ -275,6 +281,55 @@ export function useLyrixaProject(): UseLyrixaProjectResult {
 
     extractAndApplyPeaks(file, role);
   }, [extractAndApplyPeaks]);
+
+  const extractVocalsFromMaster = useCallback(async () => {
+    const masterBlob = blobsRef.current.master;
+    const master = project.audioTracks.master;
+    if (!masterBlob || !master) {
+      throw new Error('Load a master track before extracting vocals.');
+    }
+
+    setVocalExtractionStatus('extracting');
+    try {
+      const extracted = await extractVocalsFromMasterBlob(masterBlob);
+      const objectUrl = URL.createObjectURL(extracted.blob);
+      const fileName = makeExtractedVocalsFileName(master.fileName);
+      blobsRef.current.vocals = extracted.blob;
+
+      const vocalActivity = detectVocalActivity(extracted.peaks, {
+        threshold: 0.16,
+        minDuration: 0.3,
+        mergeGap: 0.22,
+        maxDuration: 6
+      });
+
+      setProject(p => {
+        const previous = p.audioTracks.vocals;
+        if (previous?.objectUrl) URL.revokeObjectURL(previous.objectUrl);
+        const channel: AudioChannel = {
+          fileName,
+          objectUrl,
+          duration: extracted.duration,
+          waveformPeaks: extracted.peaks,
+          vocalActivity
+        };
+        return {
+          ...p,
+          audioTracks: { ...p.audioTracks, vocals: channel }
+        };
+      });
+
+      try {
+        await putAudio(projectIdRef.current, 'vocals', extracted.blob, fileName, extracted.duration);
+      } catch (err) {
+        console.warn('[Lyrixa] Could not persist extracted vocals blob:', err);
+      }
+      setVocalExtractionStatus('ready');
+    } catch (err) {
+      setVocalExtractionStatus('failed');
+      throw err;
+    }
+  }, [project.audioTracks.master]);
 
   const removeAudio = useCallback(async (role: AudioChannelRole = 'master') => {
     blobsRef.current[role] = null;
@@ -287,6 +342,7 @@ export function useLyrixaProject(): UseLyrixaProjectResult {
       };
     });
     if (role === 'master') setAudioNeedsReload(false);
+    if (role === 'vocals') setVocalExtractionStatus('idle');
     await deleteAudio(projectIdRef.current, role);
   }, []);
 
@@ -472,8 +528,10 @@ export function useLyrixaProject(): UseLyrixaProjectResult {
     project,
     saveStatus,
     audioNeedsReload,
+    vocalExtractionStatus,
     setProjectName,
     loadAudioFile,
+    extractVocalsFromMaster,
     removeAudio,
     getAudioBlob,
     setRawLyricsText,
@@ -509,4 +567,10 @@ function readAudioDuration(file: File): Promise<number> {
       reject(new Error(`Could not read audio metadata for ${file.name}`));
     });
   });
+}
+
+function makeExtractedVocalsFileName(masterFileName: string): string {
+  const trimmed = masterFileName.trim();
+  const withoutExtension = trimmed.replace(/\.[a-z0-9]+$/i, '');
+  return `${withoutExtension || 'master'} - vocal focus.wav`;
 }

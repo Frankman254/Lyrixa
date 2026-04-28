@@ -30,6 +30,11 @@ export interface LyricVisualStyle {
   textGradient: string;
   textTextureImage: string;
   textTextureSize: string;
+  textTexturePosition: string;
+  textTextureRepeat: 'repeat' | 'no-repeat';
+  textTextureBrightness: number;
+  textTextureContrast: number;
+  textTextureSaturation: number;
 }
 
 export type LyricTransitionPreset =
@@ -79,7 +84,11 @@ export type LyricFxPreset =
   | 'blur-flicker'
   | 'wave-distort'
   | 'shadow-trail'
-  | 'energy-pulse';
+  | 'energy-pulse'
+  | 'soft-bloom'
+  | 'prism-shader'
+  | 'liquid-shimmer'
+  | 'heat-haze';
 
 export type LyricBlendMode = 'normal' | 'screen' | 'multiply' | 'overlay' | 'plus-lighter';
 
@@ -128,7 +137,12 @@ export const DEFAULT_LYRIC_STYLE: LyricVisualStyle = {
   textFillMode: 'solid',
   textGradient: 'linear-gradient(110deg, #ffffff 0%, #80eaff 45%, #ff6bd5 100%)',
   textTextureImage: '',
-  textTextureSize: 'cover'
+  textTextureSize: 'cover',
+  textTexturePosition: 'center',
+  textTextureRepeat: 'no-repeat',
+  textTextureBrightness: 1.08,
+  textTextureContrast: 1.22,
+  textTextureSaturation: 1.18
 };
 
 export const DEFAULT_LYRIC_ANIMATION: LyricAnimationConfig = {
