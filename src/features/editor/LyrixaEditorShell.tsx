@@ -1,24 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
 import { AudioEngine } from '../player/AudioEngine';
-import type { AudioEngineRef } from '../player/AudioEngine';
 import { TimelineEditor } from '../timeline-editor/TimelineEditor';
 import { ClipLyricsRenderer } from '../lyrics-view/ClipLyricsRenderer';
 import { LyricsImportPanel } from './LyricsImportPanel';
 import { FloatingPreview } from './FloatingPreview';
+import { EditorAlerts } from './EditorAlerts';
+import { EditorTopBar } from './EditorTopBar';
 import { InspectorPanel } from '../inspector/InspectorPanel';
 import { useLyrixaProject } from './useLyrixaProject';
-import type { SaveStatus } from './useLyrixaProject';
 import type { AudioChannelRole, AudioBandMode } from '../../core/types/audio';
-import { createProjectExportEnvelope, parseProjectExportEnvelope } from '../../core/project/serialization';
 import { extractBandPeaksFromBlob } from './peakExtraction';
+import { usePlaybackController } from './usePlaybackController';
+import { useProjectImportExport } from './useProjectImportExport';
 import './LyrixaEditorShell.css';
-
-const SAVE_LABEL: Record<SaveStatus, string> = {
-  idle: 'Saved',
-  pending: 'Saving…',
-  saved: 'Saved ✓'
-};
 
 export function LyrixaEditorShell() {
   const {
@@ -45,12 +40,9 @@ export function LyrixaEditorShell() {
     resetProject
   } = useLyrixaProject();
 
-  const audioEngineRef = useRef<AudioEngineRef>(null);
   const masterFileInputRef = useRef<HTMLInputElement>(null);
   const vocalsFileInputRef = useRef<HTMLInputElement>(null);
-  const projectImportInputRef = useRef<HTMLInputElement>(null);
 
-  const [isPlaying, setIsPlaying] = useState(false);
   const [playbackMode, setPlaybackMode] = useState<'master' | 'vocals'>('master');
   const [importOpen, setImportOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -64,54 +56,32 @@ export function LyrixaEditorShell() {
   const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
   const [selectedLayerId, setSelectedLayerId] = useState<string | null>(project.layers[0]?.id ?? null);
 
-  // Transient playback time. Updated at ~60fps via rAF while playing,
-  // and by user-driven seeks otherwise. Never persisted on its own ticks.
-  const [playbackTime, setPlaybackTime] = useState(project.currentTime ?? 0);
-  const rafRef = useRef<number | null>(null);
-
   const masterChannel = project.audioTracks.master;
   const vocalsChannel = project.audioTracks.vocals;
   const activeAudioChannel =
     playbackMode === 'vocals' && vocalsChannel?.objectUrl ? vocalsChannel : masterChannel;
 
+  const {
+    audioEngineRef,
+    isPlaying,
+    setIsPlaying,
+    playbackTime,
+    setPlaybackTime,
+    handleSeek,
+    handlePlayToggle
+  } = usePlaybackController({
+    projectId: project.id,
+    initialTime: project.currentTime ?? 0,
+    activeAudioChannel,
+    onCurrentTimeCommit: setCurrentTime
+  });
+
   useEffect(() => {
     setDraftName(project.name);
   }, [project.name]);
 
-  useEffect(() => {
-    setPlaybackTime(project.currentTime ?? 0);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [project.id]);
-
-  // rAF loop for the playhead.
-  useEffect(() => {
-    if (!isPlaying) {
-      if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
-      rafRef.current = null;
-      return;
-    }
-    const tick = () => {
-      const t = audioEngineRef.current?.getCurrentTime() ?? 0;
-      setPlaybackTime(t);
-      rafRef.current = requestAnimationFrame(tick);
-    };
-    rafRef.current = requestAnimationFrame(tick);
-    return () => {
-      if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
-      rafRef.current = null;
-    };
-  }, [isPlaying]);
-
-  // Persist last position only on pause transitions.
-  useEffect(() => {
-    if (isPlaying) return;
-    setCurrentTime(playbackTime);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPlaying]);
-
   const openMasterPicker = () => masterFileInputRef.current?.click();
   const openVocalsPicker = () => vocalsFileInputRef.current?.click();
-  const openProjectImportPicker = () => projectImportInputRef.current?.click();
 
   useEffect(() => {
     if (playbackMode === 'vocals' && !vocalsChannel?.objectUrl) {
@@ -130,17 +100,6 @@ export function LyrixaEditorShell() {
         console.error(`[Lyrixa] Failed to load ${role} audio file:`, err);
       }
     };
-
-  const handleSeek = useCallback((time: number) => {
-    setPlaybackTime(time);
-    setCurrentTime(time);
-    audioEngineRef.current?.seekTo(time);
-  }, [setCurrentTime]);
-
-  const handlePlayToggle = () => {
-    if (!activeAudioChannel?.objectUrl) return;
-    setIsPlaying(p => !p);
-  };
 
   const handleExtractVocals = useCallback(async () => {
     if (!masterChannel?.objectUrl || vocalExtractionStatus === 'extracting') return;
@@ -167,6 +126,11 @@ export function LyrixaEditorShell() {
     setNameEditing(false);
   };
 
+  const cancelNameEdit = () => {
+    setDraftName(project.name);
+    setNameEditing(false);
+  };
+
   const extractBandPeaksForMode = useCallback(
     async (mode: AudioBandMode) => {
       const blob = getAudioBlob('master');
@@ -176,42 +140,20 @@ export function LyrixaEditorShell() {
     [getAudioBlob]
   );
 
-  const handleExportProject = useCallback(() => {
-    const envelope = createProjectExportEnvelope(project, {
-      bandMode: safeGetLocalStorage('lyrixa_band_mode') ?? undefined
-    });
-    const blob = new Blob([JSON.stringify(envelope, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    const safeName = project.name.trim().replace(/[^a-z0-9-_]+/gi, '-').replace(/^-+|-+$/g, '') || 'lyrixa-project';
-    link.href = url;
-    link.download = `${safeName}.lyrixa.json`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
-  }, [project]);
-
-  const handleProjectFileSelected = async (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file) return;
-    try {
-      const envelope = JSON.parse(await file.text());
-      const imported = parseProjectExportEnvelope(envelope);
-      const bandMode = envelope?.project?.uiPreferences?.bandMode;
-      if (typeof bandMode === 'string') {
-        try { window.localStorage.setItem('lyrixa_band_mode', bandMode); } catch { /* ignore */ }
-      }
-      importProject(imported);
+  const {
+    projectImportInputRef,
+    openProjectImportPicker,
+    handleExportProject,
+    handleProjectFileSelected
+  } = useProjectImportExport({
+    project,
+    importProject,
+    onProjectImported: imported => {
       setIsPlaying(false);
       setPlaybackTime(imported.currentTime ?? 0);
       setMiniPreviewVisible(true);
-    } catch (err) {
-      console.error('[Lyrixa] Failed to import project:', err);
-      window.alert(err instanceof Error ? err.message : 'Could not import Lyrixa project.');
     }
-  };
+  });
 
   const effectiveDuration = masterChannel?.duration ?? 60;
   const showMini = miniPreviewVisible && !previewOpen;
@@ -226,219 +168,63 @@ export function LyrixaEditorShell() {
 
   return (
     <div className="lyrixa-shell">
-      <header className="ls-topbar">
-        <div className="ls-topbar-section ls-brand">
-          <span className="ls-logo">LYRIXA</span>
-          {nameEditing ? (
-            <input
-              className="ls-name-input"
-              autoFocus
-              value={draftName}
-              onChange={(e) => setDraftName(e.target.value)}
-              onBlur={commitName}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') commitName();
-                else if (e.key === 'Escape') {
-                  setDraftName(project.name);
-                  setNameEditing(false);
-                }
-              }}
-            />
-          ) : (
-            <button
-              className="ls-name"
-              onClick={() => setNameEditing(true)}
-              title="Rename project"
-            >
-              {project.name}
-            </button>
-          )}
-        </div>
+      <EditorTopBar
+        projectName={project.name}
+        nameEditing={nameEditing}
+        draftName={draftName}
+        masterChannel={masterChannel ?? null}
+        vocalsChannel={vocalsChannel ?? null}
+        playbackMode={playbackMode}
+        saveStatus={saveStatus}
+        vocalExtractionStatus={vocalExtractionStatus}
+        vocalsAnalysisReady={vocalsAnalysisReady}
+        canGenerateTimings={project.normalizedLyrics.length > 0}
+        previewOpen={previewOpen}
+        transparentPreviewOpen={transparentPreviewOpen}
+        miniPreviewVisible={miniPreviewVisible}
+        masterFileInputRef={masterFileInputRef}
+        vocalsFileInputRef={vocalsFileInputRef}
+        projectImportInputRef={projectImportInputRef}
+        onDraftNameChange={setDraftName}
+        onStartNameEdit={() => setNameEditing(true)}
+        onCommitName={commitName}
+        onCancelNameEdit={cancelNameEdit}
+        onOpenMasterPicker={openMasterPicker}
+        onOpenVocalsPicker={openVocalsPicker}
+        onOpenProjectImportPicker={openProjectImportPicker}
+        onAudioFileSelected={handleAudioFileSelected}
+        onProjectFileSelected={handleProjectFileSelected}
+        onExtractVocals={handleExtractVocals}
+        onRemoveVocals={() => removeAudio('vocals')}
+        onOpenLyricsImport={() => setImportOpen(true)}
+        onExportProject={handleExportProject}
+        onRegenerateFromVocals={regenerateFromVocals}
+        onTogglePreview={() => setPreviewOpen(p => !p)}
+        onOpenOverlay={() => setTransparentPreviewOpen(true)}
+        onShowMiniPreview={() => setMiniPreviewVisible(true)}
+        onPlaybackModeChange={(mode) => {
+          setIsPlaying(false);
+          setPlaybackMode(mode);
+        }}
+        onResetProject={() => {
+          if (window.confirm('Discard the current project and start a new one?')) {
+            resetProject();
+            setIsPlaying(false);
+            setPlaybackTime(0);
+          }
+        }}
+      />
 
-        <div className="ls-topbar-section ls-actions">
-          <button
-            className="ls-btn"
-            onClick={openMasterPicker}
-            title={masterChannel
-              ? `Master track: ${masterChannel.fileName}`
-              : 'Load the main audio file (MP3, WAV, etc.)'}
-          >
-            {masterChannel ? `↻ ${masterChannel.fileName}` : '＋ Load master track'}
-          </button>
-          <button
-            className={`ls-btn ${vocalsChannel ? 'active' : ''}`}
-            onClick={handleExtractVocals}
-            disabled={!masterChannel?.objectUrl || vocalExtractionStatus === 'extracting'}
-            title={vocalsChannel
-              ? `Re-isolate vocals from the master track. Current vocals helper: ${vocalsChannel.fileName}.`
-              : 'Isolate a vocal-focused helper track from the loaded master audio.'}
-          >
-            {vocalExtractionStatus === 'extracting'
-              ? 'Isolating vocals…'
-              : vocalsChannel
-                ? '↻ Isolate vocals'
-                : '✦ Isolate vocals'}
-          </button>
-          <button
-            className="ls-btn ghost small"
-            onClick={openVocalsPicker}
-            title="Upload a clean isolated vocals stem instead of using automatic extraction."
-          >
-            Upload stem
-          </button>
-          {vocalsChannel && (
-            <button
-              className="ls-btn ghost small"
-              onClick={() => removeAudio('vocals')}
-              title="Remove vocals stem"
-            >
-              ✕
-            </button>
-          )}
-          <input
-            ref={masterFileInputRef}
-            type="file"
-            accept="audio/*,.mp3,.wav,.ogg,.flac,.m4a"
-            style={{ display: 'none' }}
-            onChange={handleAudioFileSelected('master')}
-          />
-          <input
-            ref={vocalsFileInputRef}
-            type="file"
-            accept="audio/*,.mp3,.wav,.ogg,.flac,.m4a"
-            style={{ display: 'none' }}
-            onChange={handleAudioFileSelected('vocals')}
-          />
-          <input
-            ref={projectImportInputRef}
-            type="file"
-            accept=".lyrixa.json,application/json"
-            style={{ display: 'none' }}
-            onChange={handleProjectFileSelected}
-          />
-          <button className="ls-btn" onClick={() => setImportOpen(true)}>
-            Import lyrics
-          </button>
-          <button className="ls-btn" onClick={handleExportProject}>
-            Export Project
-          </button>
-          <button className="ls-btn" onClick={openProjectImportPicker}>
-            Import Project
-          </button>
-          {vocalsAnalysisReady && project.normalizedLyrics.length > 0 && (
-            <button
-              className="ls-btn primary"
-              onClick={() => regenerateFromVocals()}
-              title="Use detected vocal activity regions from the vocals stem to retime all lyric clips. You can still adjust manually after."
-            >
-              ⟲ Generate timings from vocals
-            </button>
-          )}
-          <button
-            className={`ls-btn ${previewOpen ? 'active' : ''}`}
-            onClick={() => setPreviewOpen(p => !p)}
-          >
-            {previewOpen ? '✕ Close preview' : '◉ Preview'}
-          </button>
-          <button
-            className={`ls-btn ${transparentPreviewOpen ? 'active' : ''}`}
-            onClick={() => setTransparentPreviewOpen(true)}
-            title="Transparent in-editor overlay. Real always-on-top over other apps requires a desktop wrapper."
-          >
-            ⧉ Overlay
-          </button>
-          {!miniPreviewVisible && !previewOpen && (
-            <button className="ls-btn" onClick={() => setMiniPreviewVisible(true)}>
-              ◳ Live preview
-            </button>
-          )}
-          {vocalsChannel?.objectUrl && (
-            <div className="ls-monitor-toggle" aria-label="Playback source">
-              <button
-                className={playbackMode === 'master' ? 'active' : ''}
-                onClick={() => {
-                  setIsPlaying(false);
-                  setPlaybackMode('master');
-                }}
-                title="Listen to the original master track"
-              >
-                Master
-              </button>
-              <button
-                className={playbackMode === 'vocals' ? 'active' : ''}
-                onClick={() => {
-                  setIsPlaying(false);
-                  setPlaybackMode('vocals');
-                }}
-                title="Listen to the isolated vocals helper"
-              >
-                Vocals
-              </button>
-            </div>
-          )}
-        </div>
-
-        <div className="ls-topbar-section ls-meta">
-          {vocalsAnalysisReady && (
-            <span
-              className="ls-vocals-chip"
-              title="Vocals stem is loaded and analyzed. Vocal activity regions are shown on the vocals waveform lane. Use 'Generate timings from vocals' to auto-time your lyrics."
-            >
-              ◐ Vocals stem active
-            </span>
-          )}
-          {vocalsChannel && !vocalsAnalysisReady && (
-            <span className="ls-vocals-chip" title="Analyzing vocals stem waveform…">
-              ◌ Analyzing vocals…
-            </span>
-          )}
-          {vocalExtractionStatus === 'failed' && (
-            <span className="ls-vocals-chip error" title="Automatic vocal isolation failed. Try uploading a clean vocals stem.">
-              Vocal isolation failed
-            </span>
-          )}
-          <span className={`ls-save-chip ${saveStatus}`}>{SAVE_LABEL[saveStatus]}</span>
-          <button
-            className="ls-btn ghost danger"
-            onClick={() => {
-              if (window.confirm('Discard the current project and start a new one?')) {
-                resetProject();
-                setIsPlaying(false);
-                setPlaybackTime(0);
-              }
-            }}
-            title="Reset project"
-          >
-            New
-          </button>
-        </div>
-      </header>
-
-      {audioNeedsReload && masterChannel && !masterChannel.objectUrl && (
-        <div className="ls-reload-banner">
-          <span>
-            Audio file needs to be reloaded:{' '}
-            <strong>{masterChannel.fileName}</strong>. Your lyrics and clips are safe.
-          </span>
-          <div className="ls-reload-actions">
-            <button className="ls-btn small" onClick={openMasterPicker}>Reload audio</button>
-            <button className="ls-btn ghost small" onClick={() => removeAudio('master')}>Clear</button>
-          </div>
-        </div>
-      )}
-
-      {vocalsNeedsReload && (
-        <div className="ls-reload-banner">
-          <span>
-            Vocals stem needs to be reloaded:{' '}
-            <strong>{vocalsChannel.fileName}</strong>.
-          </span>
-          <div className="ls-reload-actions">
-            <button className="ls-btn small" onClick={openVocalsPicker}>Reload vocals stem</button>
-            <button className="ls-btn ghost small" onClick={() => removeAudio('vocals')}>Clear</button>
-          </div>
-        </div>
-      )}
+      <EditorAlerts
+        audioNeedsReload={audioNeedsReload}
+        masterChannel={masterChannel}
+        vocalsNeedsReload={vocalsNeedsReload}
+        vocalsChannel={vocalsChannel}
+        onReloadMaster={openMasterPicker}
+        onClearMaster={() => removeAudio('master')}
+        onReloadVocals={openVocalsPicker}
+        onClearVocals={() => removeAudio('vocals')}
+      />
 
       {activeAudioChannel?.objectUrl && (
         <AudioEngine

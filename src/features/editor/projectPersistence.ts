@@ -12,12 +12,14 @@ import {
   DEFAULT_CLIP_PROGRESS_INDICATOR,
   DEFAULT_LYRIC_ANIMATION,
   DEFAULT_LYRIC_FX,
-  DEFAULT_LYRIC_STYLE,
-  resolveClipProgressIndicator,
-  resolveLyricAnimation,
-  resolveLyricFx
+  DEFAULT_LYRIC_STYLE
 } from '../../core/types/render';
-import { resolveLyricVisualStyle } from '../../core/render/resolveVisualStyle';
+import {
+  resolveLyricAnimationConfig,
+  resolveLyricFxConfig,
+  resolveLyricVisualStyle,
+  resolveProgressIndicatorConfig
+} from '../../core/render/resolveVisualStyle';
 
 const STORAGE_KEY = 'lyrixa:project:v1';
 const SCHEMA_VERSION = 3;
@@ -181,9 +183,9 @@ function migrateV1(legacy: LegacyV1Project): LyrixaProject {
     layers: normalizeLayers(legacy.layers),
     clips: normalizeClips(legacy.clips),
     styleConfig: resolveLyricVisualStyle(legacy.styleConfig),
-    animationConfig: resolveLyricAnimation(legacy.animationConfig),
-    fxConfig: resolveLyricFx(legacy.fxConfig),
-    progressIndicatorConfig: resolveClipProgressIndicator(legacy.progressIndicatorConfig),
+    animationConfig: resolveLyricAnimationConfig(legacy.animationConfig),
+    fxConfig: resolveLyricFxConfig(legacy.fxConfig),
+    progressIndicatorConfig: resolveProgressIndicatorConfig(legacy.progressIndicatorConfig),
     currentTime: legacy.currentTime ?? 0,
     renderMode: legacy.renderMode ?? 'editor'
   };

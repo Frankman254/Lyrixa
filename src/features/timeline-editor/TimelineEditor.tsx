@@ -20,8 +20,7 @@ import {
   moveClip,
   resizeClipStart,
   resizeClipEnd,
-  pxToTime,
-  formatTimecode
+  pxToTime
 } from '../../core/timeline/clips';
 import { resolveDroppedLayerId } from '../../core/timeline/clipsFromLyrics';
 import {
@@ -30,11 +29,11 @@ import {
   getClipsAfterTime,
   getSelectionBounds
 } from '../../core/timeline/clipSelection';
-import { LyricTrack } from './LyricTrack';
-import { TimelineRuler } from './TimelineRuler';
 import { TimelinePlayhead } from './TimelinePlayhead';
-import { TimelineTrackHeader } from './TimelineTrackHeader';
-import { TimelineAudioTrack } from './TimelineAudioTrack';
+import { TimelineAudioLanes } from './TimelineAudioLanes';
+import { TimelineLayerList } from './TimelineLayerList';
+import { TimelineSelectionToolbar } from './TimelineSelectionToolbar';
+import { TimelineToolbar } from './TimelineToolbar';
 import type { ClipPointerModifiers, DragMode } from './LyricClip';
 import { clampZoom, getTimelinePointerTime, TRACK_HEADER_WIDTH } from './timelineMath';
 import { FloatingPanel } from '../../shared/components/FloatingPanel';
@@ -78,37 +77,6 @@ const MASTER_WAVEFORM_HEIGHT = 96;
 const VOCALS_WAVEFORM_HEIGHT = 72;
 const RULER_HEIGHT = 28;
 
-const BAND_MODE_COLORS: Record<AudioBandMode, string> = {
-  'auto':         '#53c2f0',
-  'full-mix':     '#53c2f0',
-  'vocals':       '#5fc88e',
-  'instrumental': '#e6a86a',
-  'bass':         '#e65e8f',
-  'kick':         '#e55252',
-  'hihat':        '#a88ee6',
-};
-
-function getBandBadge(
-  mode: AudioBandMode,
-  source: 'master' | 'vocals-stem' | 'estimated',
-  loading: boolean,
-  hasMasterFile: boolean
-): string | undefined {
-  if (loading) return 'analyzing…';
-  switch (mode) {
-    case 'auto':
-    case 'full-mix':
-      return hasMasterFile ? undefined : 'mock';
-    case 'vocals':
-      return source === 'vocals-stem' ? 'Vocals Stem' : 'Est. Vocals';
-    case 'instrumental':
-      return source === 'master' ? 'Instrumental ≈' : 'Est. Instrumental';
-    case 'bass':    return 'Bass Band';
-    case 'kick':    return 'Kick Band';
-    case 'hihat':   return 'Hi-Hat Band';
-  }
-}
-
 function subtractPeaks(master: AudioPeak[], vocals: AudioPeak[]): AudioPeak[] {
   return master.map((p, i) => ({
     time: p.time,
@@ -116,8 +84,6 @@ function subtractPeaks(master: AudioPeak[], vocals: AudioPeak[]): AudioPeak[] {
   }));
 }
 
-const NUDGE_STEPS = [-1, -0.5, -0.1, 0.1, 0.5, 1];
-const OFFSET_STEPS = [-1, -0.5, -0.1, 0.1, 0.5, 1];
 const LAYER_TYPE_OPTIONS: { value: LyricLayerType; label: string }[] = [
   { value: 'lyrics', label: 'Lyrics' },
   { value: 'backing', label: 'Backing' },
@@ -797,169 +763,42 @@ export function TimelineEditor({
 
   return (
     <div className="timeline-editor">
-      <header className="tl-topbar">
-        {!embedded && (
-          <div className="tl-topbar-left">
-            <h2>Timeline Editor</h2>
-            <span className="tl-track-chip">{trackName}</span>
-          </div>
-        )}
-        <div className="tl-topbar-center">
-          <span className="tl-time">{formatTimecode(currentTime, true)}</span>
-          <span className="tl-time-sep">/</span>
-          <span className="tl-time muted">{formatTimecode(effectiveDuration)}</span>
-        </div>
-        <div className="tl-topbar-right">
-          <button
-            className={`tl-btn tl-play-btn ${isPlaying ? 'active' : ''}`}
-            onClick={onPlayToggle}
-            title="Play / Pause  (Space)"
-          >
-            {isPlaying ? '⏸' : '▶'}
-          </button>
-          <div className="tl-zoom">
-            <button className="tl-btn small" onClick={zoomOut} title="Zoom out">−</button>
-            <span className="tl-zoom-value">{Math.round(pxPerSecond)} px/s</span>
-            <button className="tl-btn small" onClick={zoomIn} title="Zoom in">+</button>
-          </div>
-          {masterChannel && (
-            <label className="tl-snap">
-              Band
-              <select
-                value={bandMode}
-                onChange={(e) => {
-                  const next = e.target.value as AudioBandMode;
-                  setBandMode(next);
-                  try { localStorage.setItem('lyrixa_band_mode', next); } catch { /* ignore */ }
-                }}
-                title="Waveform band mode — which frequency range to emphasize in the master lane"
-              >
-                <option value="auto">Auto</option>
-                <option value="full-mix">Full Mix</option>
-                <option value="vocals">Vocals</option>
-                <option value="instrumental">Instrumental</option>
-                <option value="bass">Bass</option>
-                <option value="kick">Kick</option>
-                <option value="hihat">Hi-Hat</option>
-              </select>
-            </label>
-          )}
-          {(masterChannel || vocalsChannel) && (
-            <label className="tl-snap">
-              Waves
-              <select
-                value={waveformView}
-                onChange={(e) => setWaveformView(e.target.value as typeof waveformView)}
-                title="Which waveform rows to show"
-              >
-                <option value="both">Both</option>
-                <option value="master">Master</option>
-                {vocalsChannel && <option value="vocals">Vocals</option>}
-              </select>
-            </label>
-          )}
-          <label className="tl-snap">
-            Snap
-            <select
-              value={snapSeconds}
-              onChange={(e) => setSnapSeconds(parseFloat(e.target.value))}
-            >
-              <option value={0}>Off</option>
-              <option value={0.1}>0.1s</option>
-              <option value={0.25}>0.25s</option>
-              <option value={0.5}>0.5s</option>
-              <option value={1}>1s</option>
-            </select>
-          </label>
-          {onExit && (
-            <button className="tl-btn danger" onClick={onExit}>✕ Exit</button>
-          )}
-        </div>
-      </header>
+      <TimelineToolbar
+        embedded={embedded}
+        trackName={trackName}
+        currentTime={currentTime}
+        duration={effectiveDuration}
+        isPlaying={isPlaying}
+        pxPerSecond={pxPerSecond}
+        masterChannel={masterChannel}
+        vocalsChannel={vocalsChannel}
+        bandMode={bandMode}
+        waveformView={waveformView}
+        snapSeconds={snapSeconds}
+        onPlayToggle={onPlayToggle}
+        onZoomOut={zoomOut}
+        onZoomIn={zoomIn}
+        onBandModeChange={(next) => {
+          setBandMode(next);
+          try { localStorage.setItem('lyrixa_band_mode', next); } catch { /* ignore */ }
+        }}
+        onWaveformViewChange={setWaveformView}
+        onSnapSecondsChange={setSnapSeconds}
+        onExit={onExit}
+      />
 
-      {/* Selection toolbar — bulk shifting & alignment. */}
-      <div className="tl-selection-bar" role="toolbar" aria-label="Clip selection">
-        <div className="tl-sel-group">
-          <button className="tl-btn small" onClick={selectAll}>Select all</button>
-          <button className="tl-btn small" onClick={selectAfterPlayhead}>
-            After playhead
-          </button>
-          <button
-            className="tl-btn small ghost"
-            onClick={clearSelection}
-            disabled={!hasSelection}
-          >
-            Clear
-          </button>
-        </div>
-
-        <div className="tl-sel-stats">
-          {selectionBounds ? (
-            <>
-              <strong>{selectionBounds.count}</strong> clip{selectionBounds.count === 1 ? '' : 's'}
-              {' · '}
-              <span className="tl-sel-mono">
-                {formatTimecode(selectionBounds.startTime, true)}
-                {' → '}
-                {formatTimecode(selectionBounds.endTime, true)}
-              </span>
-              {' · span '}
-              <span className="tl-sel-mono">
-                {selectionBounds.span.toFixed(2)}s
-              </span>
-            </>
-          ) : (
-            <span className="muted">No selection</span>
-          )}
-        </div>
-
-        <div className="tl-sel-group" aria-label="Nudge selected">
-          <span className="tl-sel-label">Nudge</span>
-          {NUDGE_STEPS.map(step => (
-            <button
-              key={`nudge-${step}`}
-              className="tl-btn small"
-              onClick={() => nudgeSelected(step)}
-              disabled={!hasSelection}
-              title={`Shift selected clips by ${step > 0 ? '+' : ''}${step}s`}
-            >
-              {step > 0 ? `+${step}` : `${step}`}
-            </button>
-          ))}
-        </div>
-
-        <div className="tl-sel-group tl-sel-offset" aria-label="Lyrics offset">
-          <span className="tl-sel-label">Lyrics offset</span>
-          <input
-            type="number"
-            step="0.05"
-            value={offsetInput}
-            onChange={(e) => setOffsetInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') applyOffsetInput();
-            }}
-            className="tl-sel-offset-input"
-            aria-label="Lyrics offset seconds"
-          />
-          <button
-            className="tl-btn small primary"
-            onClick={applyOffsetInput}
-            title="Shift all unlocked clips by the value above"
-          >
-            Apply
-          </button>
-          {OFFSET_STEPS.map(step => (
-            <button
-              key={`offset-${step}`}
-              className="tl-btn small"
-              onClick={() => offsetAllUnlocked(step)}
-              title={`Shift all unlocked clips by ${step > 0 ? '+' : ''}${step}s`}
-            >
-              {step > 0 ? `+${step}` : `${step}`}
-            </button>
-          ))}
-        </div>
-      </div>
+      <TimelineSelectionToolbar
+        hasSelection={hasSelection}
+        selectionBounds={selectionBounds}
+        offsetInput={offsetInput}
+        onSelectAll={selectAll}
+        onSelectAfterPlayhead={selectAfterPlayhead}
+        onClearSelection={clearSelection}
+        onNudgeSelected={nudgeSelected}
+        onOffsetInputChange={setOffsetInput}
+        onApplyOffsetInput={applyOffsetInput}
+        onOffsetAllUnlocked={offsetAllUnlocked}
+      />
 
       <div
         className="tl-scroll"
@@ -974,70 +813,43 @@ export function TimelineEditor({
           ref={laneContainerRef}
           style={{ width: `${totalLaneContainerWidth}px` }}
         >
-          <div className="tl-track tl-ruler-row" style={{ height: `${RULER_HEIGHT}px` }}>
-            <TimelineTrackHeader title="Time" variant="thin" />
-            <div
-              className="tl-ruler-wrap"
-              style={{ width: `${laneWidth}px`, height: `${RULER_HEIGHT}px` }}
-              onClick={handleRulerClick}
-            >
-              <TimelineRuler duration={effectiveDuration} pxPerSecond={pxPerSecond} />
-            </div>
-          </div>
-
-          {(waveformView === 'master' || waveformView === 'both') && (
-            <TimelineAudioTrack
-              title="Master track"
-              color={BAND_MODE_COLORS[bandMode]}
-              duration={effectiveDuration}
-              pxPerSecond={pxPerSecond}
-              height={MASTER_WAVEFORM_HEIGHT}
-              peaks={displayPeaks}
-              badge={getBandBadge(bandMode, bandPeaksSource, bandPeaksLoading, !!masterChannel?.fileName)}
-              mockFallback={masterIsMock && !bandPeaks && !bandPeaksLoading}
-              onLaneClick={handleSeekClick}
-            />
-          )}
-
-          {vocalsChannel && (waveformView === 'vocals' || waveformView === 'both') && (
-            <TimelineAudioTrack
-              title="Vocals stem"
-              color="#5fc88e"
-              duration={effectiveDuration}
-              pxPerSecond={pxPerSecond}
-              height={VOCALS_WAVEFORM_HEIGHT}
-              peaks={vocalsChannel.waveformPeaks}
-              vocalActivity={vocalsChannel.vocalActivity}
-              badge={
-                vocalsChannel.vocalActivity?.length
-                  ? `${vocalsChannel.vocalActivity.length} vocal segments`
-                  : 'analyzing…'
-              }
-              mockFallback={!vocalsChannel.waveformPeaks?.length}
-              onLaneClick={handleSeekClick}
-            />
-          )}
+          <TimelineAudioLanes
+            duration={effectiveDuration}
+            pxPerSecond={pxPerSecond}
+            laneWidth={laneWidth}
+            rulerHeight={RULER_HEIGHT}
+            masterHeight={MASTER_WAVEFORM_HEIGHT}
+            vocalsHeight={VOCALS_WAVEFORM_HEIGHT}
+            waveformView={waveformView}
+            bandMode={bandMode}
+            bandPeaksSource={bandPeaksSource}
+            bandPeaksLoading={bandPeaksLoading}
+            masterChannel={masterChannel}
+            vocalsChannel={vocalsChannel}
+            displayPeaks={displayPeaks}
+            bandPeaks={bandPeaks}
+            masterIsMock={masterIsMock}
+            onRulerClick={handleRulerClick}
+            onLaneClick={handleSeekClick}
+          />
 
           <div className="tl-tracks" onClick={handleLaneBackgroundClick}>
-            {sortedLayers.map(layer => (
-              <LyricTrack
-                key={layer.id}
-                layer={layer}
-                clips={clipsByLayer.get(layer.id) ?? []}
-                pxPerSecond={pxPerSecond}
-                duration={effectiveDuration}
-                trackHeight={TRACK_HEIGHT}
-                selectedClipIds={selectedClipIds}
-                selectedLayer={selectedLayerId === layer.id}
-                isDropTarget={hoveredLayerId === layer.id}
-                laneRef={setLaneRef(layer.id)}
-                onClipPointerDown={handleClipPointerDown}
-                onLayerToggleVisible={toggleLayerVisible}
-                onLayerToggleLocked={toggleLayerLocked}
-                onLayerPositionChange={handleLayerPositionChange}
-                onLayerSelect={setSelectedLayerId}
-              />
-            ))}
+            <TimelineLayerList
+              layers={sortedLayers}
+              clipsByLayer={clipsByLayer}
+              pxPerSecond={pxPerSecond}
+              duration={effectiveDuration}
+              trackHeight={TRACK_HEIGHT}
+              selectedClipIds={selectedClipIds}
+              selectedLayerId={selectedLayerId}
+              hoveredLayerId={hoveredLayerId}
+              setLaneRef={setLaneRef}
+              onClipPointerDown={handleClipPointerDown}
+              onLayerToggleVisible={toggleLayerVisible}
+              onLayerToggleLocked={toggleLayerLocked}
+              onLayerPositionChange={handleLayerPositionChange}
+              onLayerSelect={setSelectedLayerId}
+            />
           </div>
 
           <TimelinePlayhead

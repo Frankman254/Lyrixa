@@ -3,15 +3,13 @@ import type { LyricClip } from '../types/clip';
 import { createDefaultLayers } from '../types/layer';
 import type { LyricLayer } from '../types/layer';
 import type { LyrixaProject } from '../types/project';
-import {
-  DEFAULT_LYRIC_ANIMATION,
-  resolveClipProgressIndicator,
-  resolveLyricAnimation,
-  resolveLyricFx,
-} from '../types/render';
+import { DEFAULT_LYRIC_ANIMATION } from '../types/render';
 import {
   normalizePartialLyricVisualStyle,
-  resolveLyricVisualStyle
+  resolveLyricAnimationConfig,
+  resolveLyricFxConfig,
+  resolveLyricVisualStyle,
+  resolveProgressIndicatorConfig
 } from '../render/resolveVisualStyle';
 
 export const LYRX_EXPORT_APP = 'Lyrixa';
@@ -73,9 +71,9 @@ export function normalizeProject(input: Partial<LyrixaProject>): LyrixaProject {
     layers: normalizeLayers(input.layers),
     clips: normalizeClips(input.clips),
     styleConfig: resolveLyricVisualStyle(input.styleConfig),
-    animationConfig: resolveLyricAnimation(input.animationConfig),
-    fxConfig: resolveLyricFx(input.fxConfig),
-    progressIndicatorConfig: resolveClipProgressIndicator(input.progressIndicatorConfig),
+    animationConfig: resolveLyricAnimationConfig(input.animationConfig),
+    fxConfig: resolveLyricFxConfig(input.fxConfig),
+    progressIndicatorConfig: resolveProgressIndicatorConfig(input.progressIndicatorConfig),
     currentTime: Number.isFinite(input.currentTime) ? input.currentTime! : 0,
     renderMode: input.renderMode ?? 'editor'
   };

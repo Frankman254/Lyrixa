@@ -3,10 +3,10 @@ import type {
   LyricAnimationConfig,
   LyricFxConfig,
   LyricVisualStyle,
-} from '../../../core/types/render';
-import './Inspectors.css';
+} from '../../core/types/render';
+import '../timeline-editor/inspectors/Inspectors.css';
 
-interface ProjectStylePanelProps {
+interface GlobalStylePanelProps {
   styleConfig: LyricVisualStyle;
   animationConfig: LyricAnimationConfig;
   fxConfig: LyricFxConfig;
@@ -17,7 +17,7 @@ interface ProjectStylePanelProps {
   onProgressChange: (next: ClipProgressIndicatorConfig) => void;
 }
 
-export function ProjectStylePanel({
+export function GlobalStylePanel({
   styleConfig,
   animationConfig,
   fxConfig,
@@ -26,7 +26,7 @@ export function ProjectStylePanel({
   onAnimationChange,
   onFxChange,
   onProgressChange
-}: ProjectStylePanelProps) {
+}: GlobalStylePanelProps) {
   const patchStyle = (patch: Partial<LyricVisualStyle>) =>
     onStyleChange({ ...styleConfig, ...patch });
 
