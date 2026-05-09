@@ -774,3 +774,58 @@
   background: #11141d;
   color: #e6e9f2;
 }
+
+/* ── Minimap / overview ───────────────────────────── */
+.tl-minimap {
+  position: relative;
+  width: 100%;
+  background: linear-gradient(to bottom, rgba(20, 24, 36, 0.9), rgba(12, 14, 22, 0.9));
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  cursor: pointer;
+  user-select: none;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.tl-minimap-tracks {
+  position: absolute;
+  inset: 0;
+}
+
+.tl-minimap-track {
+  position: absolute;
+  left: 0;
+  right: 0;
+  background: rgba(255, 255, 255, 0.025);
+  pointer-events: none;
+}
+
+.tl-minimap-clip {
+  position: absolute;
+  border-radius: 1px;
+  opacity: 0.85;
+  pointer-events: none;
+}
+
+.tl-minimap-viewport {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(46, 122, 251, 0.18);
+  border: 1px solid rgba(46, 122, 251, 0.55);
+  cursor: grab;
+}
+
+.tl-minimap-viewport:active {
+  cursor: grabbing;
+}
+
+.tl-minimap-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: #ff5b6e;
+  pointer-events: none;
+  box-shadow: 0 0 6px rgba(255, 91, 110, 0.7);
+}

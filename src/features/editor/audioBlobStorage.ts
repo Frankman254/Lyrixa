@@ -20,6 +20,10 @@ export interface StoredAudio {
   fileName: string;
   duration: number;
   storedAt: number;
+  /** File-level metadata captured at load time. Used by lyrics-bundle export. */
+  sizeBytes?: number;
+  lastModified?: number;
+  fileKey?: string;
 }
 
 function audioKey(projectId: string, role: AudioChannelRole): string {
@@ -71,13 +75,17 @@ export async function putAudio(
   role: AudioChannelRole,
   file: Blob,
   fileName: string,
-  duration: number
+  duration: number,
+  meta?: { sizeBytes?: number; lastModified?: number; fileKey?: string }
 ): Promise<void> {
   const record: StoredAudio = {
     blob: file,
     fileName,
     duration,
-    storedAt: Date.now()
+    storedAt: Date.now(),
+    sizeBytes: meta?.sizeBytes,
+    lastModified: meta?.lastModified,
+    fileKey: meta?.fileKey
   };
   await withStore('readwrite', store => store.put(record, audioKey(projectId, role)));
 }

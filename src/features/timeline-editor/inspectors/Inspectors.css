@@ -70,3 +70,51 @@
   background: rgba(255, 255, 255, 0.05);
   margin: 4px 0;
 }
+
+.lx-inspector-section {
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.lx-inspector-section-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: transparent;
+  border: 0;
+  color: #c9d0e2;
+  font-family: var(--font-family);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+
+.lx-inspector-section-toggle:hover {
+  color: #ffffff;
+}
+
+.lx-inspector-section-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 10px 10px;
+}
+
+.lx-inspector-target {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 2px;
+}
+
+.lx-inspector-target .lx-inspector-row {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+
+.lx-inspector input[type='range'] {
+  width: 100%;
+}

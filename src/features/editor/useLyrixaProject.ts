@@ -13,6 +13,7 @@ import type {
   AudioChannel,
   AudioChannelRole
 } from '../../core/types/audio';
+import { buildAudioFileKey } from '../../core/types/audio';
 import { MAIN_LAYER_ID } from '../../core/types/layer';
 import { normalizeLyricsText } from '../../core/lyrics/normalize';
 import type { NormalizeLyricsOptions } from '../../core/lyrics/normalize';
@@ -180,7 +181,10 @@ export function useLyrixaProject(): UseLyrixaProjectResult {
           ...current,
           objectUrl: url,
           duration: stored.duration || current.duration,
-          fileName: stored.fileName || current.fileName
+          fileName: stored.fileName || current.fileName,
+          sizeBytes: stored.sizeBytes ?? current.sizeBytes,
+          lastModified: stored.lastModified ?? current.lastModified,
+          fileKey: stored.fileKey ?? current.fileKey
         };
         return {
           ...p,
@@ -282,6 +286,9 @@ export function useLyrixaProject(): UseLyrixaProjectResult {
     const objectUrl = URL.createObjectURL(file);
     blobsRef.current[role] = file;
     const duration = await readAudioDuration(file).catch(() => 0);
+    const sizeBytes = file.size;
+    const lastModified = file.lastModified;
+    const fileKey = buildAudioFileKey(file.name, sizeBytes, lastModified);
 
     setProject(p => {
       const previous = p.audioTracks[role];
@@ -291,7 +298,10 @@ export function useLyrixaProject(): UseLyrixaProjectResult {
         objectUrl,
         duration,
         waveformPeaks: undefined,
-        vocalActivity: undefined
+        vocalActivity: undefined,
+        sizeBytes,
+        lastModified,
+        fileKey
       };
       return {
         ...p,
@@ -302,7 +312,11 @@ export function useLyrixaProject(): UseLyrixaProjectResult {
     if (role === 'vocals') setVocalExtractionStatus('ready');
 
     try {
-      await putAudio(projectIdRef.current, role, file, file.name, duration);
+      await putAudio(projectIdRef.current, role, file, file.name, duration, {
+        sizeBytes,
+        lastModified,
+        fileKey
+      });
     } catch (err) {
       console.warn(`[Lyrixa] Could not persist ${role} audio blob:`, err);
     }

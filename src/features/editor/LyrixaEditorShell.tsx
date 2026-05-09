@@ -142,9 +142,13 @@ export function LyrixaEditorShell() {
 
   const {
     projectImportInputRef,
+    lyricsBundleImportInputRef,
     openProjectImportPicker,
+    openLyricsBundleImportPicker,
     handleExportProject,
-    handleProjectFileSelected
+    handleExportLyricsBundle,
+    handleProjectFileSelected,
+    handleLyricsBundleFileSelected
   } = useProjectImportExport({
     project,
     importProject,
@@ -185,6 +189,7 @@ export function LyrixaEditorShell() {
         masterFileInputRef={masterFileInputRef}
         vocalsFileInputRef={vocalsFileInputRef}
         projectImportInputRef={projectImportInputRef}
+        lyricsBundleImportInputRef={lyricsBundleImportInputRef}
         onDraftNameChange={setDraftName}
         onStartNameEdit={() => setNameEditing(true)}
         onCommitName={commitName}
@@ -192,12 +197,15 @@ export function LyrixaEditorShell() {
         onOpenMasterPicker={openMasterPicker}
         onOpenVocalsPicker={openVocalsPicker}
         onOpenProjectImportPicker={openProjectImportPicker}
+        onOpenLyricsBundleImportPicker={openLyricsBundleImportPicker}
         onAudioFileSelected={handleAudioFileSelected}
         onProjectFileSelected={handleProjectFileSelected}
+        onLyricsBundleFileSelected={handleLyricsBundleFileSelected}
         onExtractVocals={handleExtractVocals}
         onRemoveVocals={() => removeAudio('vocals')}
         onOpenLyricsImport={() => setImportOpen(true)}
         onExportProject={handleExportProject}
+        onExportLyricsBundle={handleExportLyricsBundle}
         onRegenerateFromVocals={regenerateFromVocals}
         onTogglePreview={() => setPreviewOpen(p => !p)}
         onOpenOverlay={() => setTransparentPreviewOpen(true)}

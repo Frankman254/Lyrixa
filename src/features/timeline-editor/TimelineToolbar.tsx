@@ -16,6 +16,10 @@ interface TimelineToolbarProps {
   onPlayToggle: () => void;
   onZoomOut: () => void;
   onZoomIn: () => void;
+  onFitSong: () => void;
+  onFitSelection: () => void;
+  onCenterPlayhead: () => void;
+  fitSelectionEnabled: boolean;
   onBandModeChange: (mode: AudioBandMode) => void;
   onWaveformViewChange: (view: 'master' | 'vocals' | 'both') => void;
   onSnapSecondsChange: (seconds: number) => void;
@@ -37,6 +41,10 @@ export function TimelineToolbar({
   onPlayToggle,
   onZoomOut,
   onZoomIn,
+  onFitSong,
+  onFitSelection,
+  onCenterPlayhead,
+  fitSelectionEnabled,
   onBandModeChange,
   onWaveformViewChange,
   onSnapSecondsChange,
@@ -67,6 +75,30 @@ export function TimelineToolbar({
           <button className="tl-btn small" onClick={onZoomOut} title="Zoom out">−</button>
           <span className="tl-zoom-value">{Math.round(pxPerSecond)} px/s</span>
           <button className="tl-btn small" onClick={onZoomIn} title="Zoom in">+</button>
+          <button
+            className="tl-btn small"
+            onClick={onFitSong}
+            title="Fit the entire song into the visible timeline width"
+          >
+            Fit song
+          </button>
+          <button
+            className="tl-btn small"
+            onClick={onFitSelection}
+            disabled={!fitSelectionEnabled}
+            title={fitSelectionEnabled
+              ? 'Zoom to fit the current clip selection'
+              : 'Select one or more clips to enable fit-to-selection'}
+          >
+            Fit sel
+          </button>
+          <button
+            className="tl-btn small"
+            onClick={onCenterPlayhead}
+            title="Scroll the timeline so the playhead is centered"
+          >
+            Center
+          </button>
         </div>
         {masterChannel && (
           <label className="tl-snap">

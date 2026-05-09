@@ -1,7 +1,12 @@
 import type { AudioChannel, ProjectAudioTracks } from '../types/audio';
 import type { LyricClip } from '../types/clip';
-import { createDefaultLayers } from '../types/layer';
-import type { LyricLayer } from '../types/layer';
+import { createDefaultLayers, DEFAULT_LAYER_AUDIO_REACTIVE } from '../types/layer';
+import type {
+  LyricLayer,
+  LyricLayerAudioReactive,
+  LyricLayerAudioReactiveTarget,
+  LyricLayerAudioReactiveTargets
+} from '../types/layer';
 import type { LyrixaProject } from '../types/project';
 import { DEFAULT_LYRIC_ANIMATION } from '../types/render';
 import {
@@ -113,12 +118,66 @@ export function normalizeLayers(layers: LyricLayer[] | undefined): LyricLayer[] 
       animationDefaults,
       fxDefaults,
       progressIndicatorDefaults,
+      audioReactive: normalizeAudioReactive(layer.audioReactive),
       style: undefined,
       animation: undefined,
       fx: undefined,
       progressIndicator: undefined
     };
   });
+}
+
+/**
+ * Normalize a partially-supplied `audioReactive` into a fully-typed config.
+ * Returns `undefined` when the input is absent so layers without reactivity
+ * stay clean in the persisted JSON.
+ */
+export function normalizeAudioReactive(
+  input: Partial<LyricLayerAudioReactive> | undefined
+): LyricLayerAudioReactive | undefined {
+  if (!input) return undefined;
+  const targets = normalizeAudioReactiveTargets(input.targets);
+  return {
+    enabled: input.enabled ?? DEFAULT_LAYER_AUDIO_REACTIVE.enabled,
+    source: input.source ?? DEFAULT_LAYER_AUDIO_REACTIVE.source,
+    bandMode: input.bandMode ?? DEFAULT_LAYER_AUDIO_REACTIVE.bandMode,
+    responseMode: input.responseMode ?? DEFAULT_LAYER_AUDIO_REACTIVE.responseMode,
+    attackMs: clampNumber(input.attackMs, 0, 4000, DEFAULT_LAYER_AUDIO_REACTIVE.attackMs),
+    releaseMs: clampNumber(input.releaseMs, 0, 4000, DEFAULT_LAYER_AUDIO_REACTIVE.releaseMs),
+    threshold: clampNumber(input.threshold, 0, 1, DEFAULT_LAYER_AUDIO_REACTIVE.threshold),
+    softness: clampNumber(input.softness, 0, 1, DEFAULT_LAYER_AUDIO_REACTIVE.softness),
+    invert: input.invert ?? DEFAULT_LAYER_AUDIO_REACTIVE.invert,
+    targets
+  };
+}
+
+function normalizeAudioReactiveTargets(
+  raw: Partial<LyricLayerAudioReactiveTargets> | undefined
+): LyricLayerAudioReactiveTargets {
+  if (!raw) return {};
+  const out: LyricLayerAudioReactiveTargets = {};
+  for (const key of ['opacity', 'blur', 'glowIntensity', 'scale', 'offsetY'] as const) {
+    const target = raw[key];
+    if (!target) continue;
+    out[key] = normalizeAudioReactiveTarget(target);
+  }
+  return out;
+}
+
+function normalizeAudioReactiveTarget(
+  raw: Partial<LyricLayerAudioReactiveTarget>
+): LyricLayerAudioReactiveTarget {
+  return {
+    amount: clampNumber(raw.amount, -4, 4, 1),
+    min: typeof raw.min === 'number' && Number.isFinite(raw.min) ? raw.min : 0,
+    max: typeof raw.max === 'number' && Number.isFinite(raw.max) ? raw.max : 1
+  };
+}
+
+function clampNumber(value: unknown, min: number, max: number, fallback: number): number {
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(min, Math.min(max, n));
 }
 
 export function normalizeClips(clips: LyricClip[] | undefined): LyricClip[] {

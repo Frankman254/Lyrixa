@@ -32,10 +32,17 @@ import {
 import { TimelinePlayhead } from './TimelinePlayhead';
 import { TimelineAudioLanes } from './TimelineAudioLanes';
 import { TimelineLayerList } from './TimelineLayerList';
+import { TimelineMinimap } from './TimelineMinimap';
 import { TimelineSelectionToolbar } from './TimelineSelectionToolbar';
 import { TimelineToolbar } from './TimelineToolbar';
 import type { ClipPointerModifiers, DragMode } from './LyricClip';
-import { clampZoom, getTimelinePointerTime, TRACK_HEADER_WIDTH } from './timelineMath';
+import {
+  clampZoom,
+  getTimelinePointerTime,
+  pxPerSecondForRange,
+  scrollLeftForCenteredTime,
+  TRACK_HEADER_WIDTH
+} from './timelineMath';
 import { FloatingPanel } from '../../shared/components/FloatingPanel';
 import './TimelineEditor.css';
 
@@ -162,6 +169,8 @@ export function TimelineEditor({
   const [bandPeaks, setBandPeaks] = useState<AudioPeak[] | null>(null);
   const [bandPeaksLoading, setBandPeaksLoading] = useState(false);
   const [bandPeaksSource, setBandPeaksSource] = useState<'master' | 'vocals-stem' | 'estimated'>('master');
+  const [scrollMetrics, setScrollMetrics] = useState({ scrollLeft: 0, clientWidth: 0 });
+  const [minimapVisible, setMinimapVisible] = useState(true);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const laneContainerRef = useRef<HTMLDivElement>(null);
@@ -234,6 +243,21 @@ export function TimelineEditor({
     [clips, selectedClipIds]
   );
 
+  // Track scroll metrics so the minimap viewport rect stays in sync.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const update = () => setScrollMetrics({ scrollLeft: el.scrollLeft, clientWidth: el.clientWidth });
+    update();
+    el.addEventListener('scroll', update, { passive: true });
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    return () => {
+      el.removeEventListener('scroll', update);
+      observer.disconnect();
+    };
+  }, []);
+
   // Auto-follow playhead while playing.
   useEffect(() => {
     if (!isPlaying) return;
@@ -249,6 +273,38 @@ export function TimelineEditor({
 
   const zoomIn = () => setPxPerSecond(p => clampZoom(p * 1.4));
   const zoomOut = () => setPxPerSecond(p => clampZoom(p / 1.4));
+
+  const fitSong = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const next = pxPerSecondForRange(0, effectiveDuration, el.clientWidth, headerWidth, 24);
+    setPxPerSecond(next);
+    el.scrollLeft = 0;
+  }, [effectiveDuration, headerWidth]);
+
+  const fitSelection = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const bounds = getSelectionBounds(clipsRef.current, selectedIdsRef.current);
+    if (!bounds || bounds.span <= 0) return;
+    const padding = Math.max(0.25, bounds.span * 0.15);
+    const start = Math.max(0, bounds.startTime - padding);
+    const end = Math.min(effectiveDuration, bounds.endTime + padding);
+    const next = pxPerSecondForRange(start, end, el.clientWidth, headerWidth, 24);
+    setPxPerSecond(next);
+    // Scroll so the selection sits inside the lane.
+    requestAnimationFrame(() => {
+      const target = el;
+      if (!target) return;
+      target.scrollLeft = Math.max(0, start * next);
+    });
+  }, [effectiveDuration, headerWidth]);
+
+  const centerPlayhead = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollLeft = scrollLeftForCenteredTime(currentTime, pxPerSecond, el.clientWidth, headerWidth);
+  }, [currentTime, pxPerSecond, headerWidth]);
 
   /**
    * Single seek handler shared by the ruler, waveform lane, and track lane.
@@ -778,6 +834,10 @@ export function TimelineEditor({
         onPlayToggle={onPlayToggle}
         onZoomOut={zoomOut}
         onZoomIn={zoomIn}
+        onFitSong={fitSong}
+        onFitSelection={fitSelection}
+        onCenterPlayhead={centerPlayhead}
+        fitSelectionEnabled={selectedClipIds.size > 0}
         onBandModeChange={(next) => {
           setBandMode(next);
           try { localStorage.setItem('lyrixa_band_mode', next); } catch { /* ignore */ }
@@ -799,6 +859,33 @@ export function TimelineEditor({
         onApplyOffsetInput={applyOffsetInput}
         onOffsetAllUnlocked={offsetAllUnlocked}
       />
+
+      {minimapVisible && (
+        <TimelineMinimap
+          duration={effectiveDuration}
+          clips={clips}
+          layers={layers}
+          pxPerSecond={pxPerSecond}
+          scrollLeft={scrollMetrics.scrollLeft}
+          viewportPx={scrollMetrics.clientWidth}
+          headerPx={headerWidth}
+          currentTime={currentTime}
+          onSeek={onSeek}
+          onScrollTo={(left) => {
+            const el = scrollRef.current;
+            if (el) el.scrollLeft = left;
+          }}
+        />
+      )}
+      <button
+        type="button"
+        className="tl-btn small ghost"
+        style={{ alignSelf: 'flex-end', margin: '4px 12px' }}
+        onClick={() => setMinimapVisible(v => !v)}
+        title="Toggle minimap overview"
+      >
+        {minimapVisible ? 'Hide minimap' : 'Show minimap'}
+      </button>
 
       <div
         className="tl-scroll"

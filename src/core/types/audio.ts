@@ -40,6 +40,29 @@ export interface AudioChannel {
   waveformPeaks?: AudioPeak[];
   /** Set on vocals channels by the activity detector. Empty otherwise. */
   vocalActivity?: VocalActivitySegment[];
+  /**
+   * Stable identity for cross-app matching. Lyrixa exports this in the
+   * lyrics-bundle so a renderer (e.g. LiveWallpaper) can rebind the bundle
+   * to its own local copy of the audio without using Lyrixa's project id.
+   * Not used by Lyrixa internally for anything else.
+   */
+  fileKey?: string;
+  sizeBytes?: number;
+  /** Epoch ms — taken from File.lastModified at load time. */
+  lastModified?: number;
+}
+
+/**
+ * Build a stable per-file key from the File-level metadata available at
+ * load time. Format `${name}::${size}::${lastModified}` — collisions are
+ * acceptable because the renderer also matches on fileName + duration.
+ */
+export function buildAudioFileKey(
+  fileName: string,
+  sizeBytes: number,
+  lastModified: number
+): string {
+  return `${fileName}::${sizeBytes}::${lastModified}`;
 }
 
 /**

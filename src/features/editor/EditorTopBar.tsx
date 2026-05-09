@@ -25,6 +25,7 @@ interface EditorTopBarProps {
   masterFileInputRef: RefObject<HTMLInputElement | null>;
   vocalsFileInputRef: RefObject<HTMLInputElement | null>;
   projectImportInputRef: RefObject<HTMLInputElement | null>;
+  lyricsBundleImportInputRef: RefObject<HTMLInputElement | null>;
   onDraftNameChange: (value: string) => void;
   onStartNameEdit: () => void;
   onCommitName: () => void;
@@ -32,12 +33,15 @@ interface EditorTopBarProps {
   onOpenMasterPicker: () => void;
   onOpenVocalsPicker: () => void;
   onOpenProjectImportPicker: () => void;
+  onOpenLyricsBundleImportPicker: () => void;
   onAudioFileSelected: (role: AudioChannelRole) => (e: ChangeEvent<HTMLInputElement>) => void;
   onProjectFileSelected: (e: ChangeEvent<HTMLInputElement>) => void;
+  onLyricsBundleFileSelected: (e: ChangeEvent<HTMLInputElement>) => void;
   onExtractVocals: () => void;
   onRemoveVocals: () => void;
   onOpenLyricsImport: () => void;
   onExportProject: () => void;
+  onExportLyricsBundle: () => void;
   onRegenerateFromVocals: (options?: {
     layerId?: string;
     minDuration?: number;
@@ -67,6 +71,7 @@ export function EditorTopBar({
   masterFileInputRef,
   vocalsFileInputRef,
   projectImportInputRef,
+  lyricsBundleImportInputRef,
   onDraftNameChange,
   onStartNameEdit,
   onCommitName,
@@ -74,12 +79,15 @@ export function EditorTopBar({
   onOpenMasterPicker,
   onOpenVocalsPicker,
   onOpenProjectImportPicker,
+  onOpenLyricsBundleImportPicker,
   onAudioFileSelected,
   onProjectFileSelected,
+  onLyricsBundleFileSelected,
   onExtractVocals,
   onRemoveVocals,
   onOpenLyricsImport,
   onExportProject,
+  onExportLyricsBundle,
   onRegenerateFromVocals,
   onTogglePreview,
   onOpenOverlay,
@@ -175,6 +183,13 @@ export function EditorTopBar({
           style={{ display: 'none' }}
           onChange={onProjectFileSelected}
         />
+        <input
+          ref={lyricsBundleImportInputRef}
+          type="file"
+          accept=".lyrixa-lyrics.json,application/json"
+          style={{ display: 'none' }}
+          onChange={onLyricsBundleFileSelected}
+        />
         <button className="ls-btn" onClick={onOpenLyricsImport}>
           Import lyrics
         </button>
@@ -183,6 +198,20 @@ export function EditorTopBar({
         </button>
         <button className="ls-btn" onClick={onOpenProjectImportPicker}>
           Import Project
+        </button>
+        <button
+          className="ls-btn"
+          onClick={onExportLyricsBundle}
+          title="Export lyrics, layers, clips and styles for use in another renderer (e.g. LiveWallpaper). Audio is not included."
+        >
+          Export Lyrics Bundle
+        </button>
+        <button
+          className="ls-btn ghost small"
+          onClick={onOpenLyricsBundleImportPicker}
+          title="Import a .lyrixa-lyrics.json bundle (lyrics + layers + clips). Replaces current lyrics; keeps audio."
+        >
+          Import Bundle
         </button>
         {vocalsAnalysisReady && canGenerateTimings && (
           <button

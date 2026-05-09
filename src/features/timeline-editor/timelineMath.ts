@@ -61,3 +61,36 @@ export const MAX_PX_PER_SECOND = 400;
 export function clampZoom(pxPerSecond: number): number {
   return Math.max(MIN_PX_PER_SECOND, Math.min(MAX_PX_PER_SECOND, pxPerSecond));
 }
+
+/**
+ * Compute the px/second that makes a `[start, end]` time range fit inside
+ * the visible width of the timeline. `viewportPx` is the scroll container's
+ * clientWidth; the header column is reserved automatically. Returns a
+ * clamped value safe to feed back into `setPxPerSecond`.
+ */
+export function pxPerSecondForRange(
+  startSeconds: number,
+  endSeconds: number,
+  viewportPx: number,
+  headerWidth: number = TRACK_HEADER_WIDTH,
+  paddingPx: number = 32
+): number {
+  const span = Math.max(0.25, endSeconds - startSeconds);
+  const usable = Math.max(120, viewportPx - headerWidth - paddingPx * 2);
+  return clampZoom(usable / span);
+}
+
+/**
+ * Compute a `scrollLeft` that places `time` at the center of the visible
+ * lane (or as close as the bounds allow).
+ */
+export function scrollLeftForCenteredTime(
+  timeSeconds: number,
+  pxPerSecond: number,
+  viewportPx: number,
+  headerWidth: number = TRACK_HEADER_WIDTH
+): number {
+  const visible = Math.max(0, viewportPx - headerWidth);
+  const target = headerWidth + timeSeconds * pxPerSecond;
+  return Math.max(0, target - visible / 2 - headerWidth);
+}

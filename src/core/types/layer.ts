@@ -20,6 +20,79 @@ export interface LayerRenderSettings {
   zIndex?: number;
 }
 
+/** Where the reactive signal is sampled from when rendering. */
+export type LyricLayerAudioReactiveSource = 'master' | 'vocals-stem' | 'estimated';
+
+/** Frequency band emphasized for the reactive envelope. */
+export type LyricLayerAudioReactiveBandMode =
+  | 'full-mix'
+  | 'vocals'
+  | 'instrumental'
+  | 'kick'
+  | 'bass'
+  | 'hihat';
+
+/** How the reactive signal is converted into a 0..1 value over time. */
+export type LyricLayerAudioReactiveResponseMode = 'envelope' | 'peak';
+
+/**
+ * One reactive target. `amount` is how much the signal modulates the field;
+ * `min`/`max` clamp the resulting value so the renderer can't push past UX
+ * limits (e.g. opacity outside [0,1]).
+ */
+export interface LyricLayerAudioReactiveTarget {
+  amount: number;
+  min: number;
+  max: number;
+}
+
+/**
+ * Per-target opt-in. Renderers that don't yet support a given target
+ * should silently ignore it instead of failing the import.
+ */
+export interface LyricLayerAudioReactiveTargets {
+  opacity?: LyricLayerAudioReactiveTarget;
+  blur?: LyricLayerAudioReactiveTarget;
+  glowIntensity?: LyricLayerAudioReactiveTarget;
+  scale?: LyricLayerAudioReactiveTarget;
+  offsetY?: LyricLayerAudioReactiveTarget;
+}
+
+/**
+ * Audio-reactive configuration applied to the whole layer (not per clip).
+ * Lyrixa is the authoring surface; LiveWallpaper consumes this to drive
+ * envelope/peak modulation on the layer's children at render time.
+ */
+export interface LyricLayerAudioReactive {
+  enabled: boolean;
+  source: LyricLayerAudioReactiveSource;
+  bandMode: LyricLayerAudioReactiveBandMode;
+  responseMode: LyricLayerAudioReactiveResponseMode;
+  attackMs: number;
+  releaseMs: number;
+  /** 0..1 — values below this are treated as silence. */
+  threshold: number;
+  /** 0..1 — eases the transition near the threshold. */
+  softness: number;
+  /** When true, modulation pushes targets toward `min` instead of `max`. */
+  invert: boolean;
+  targets: LyricLayerAudioReactiveTargets;
+}
+
+/** Renderer-safe defaults. Used when the field is missing or partially supplied. */
+export const DEFAULT_LAYER_AUDIO_REACTIVE: LyricLayerAudioReactive = {
+  enabled: false,
+  source: 'master',
+  bandMode: 'full-mix',
+  responseMode: 'envelope',
+  attackMs: 35,
+  releaseMs: 220,
+  threshold: 0.08,
+  softness: 0.25,
+  invert: false,
+  targets: {}
+};
+
 /**
  * A horizontal track on the timeline editor.
  * Each lyric clip belongs to exactly one layer.
@@ -50,6 +123,12 @@ export interface LyricLayer {
   animationDefaults?: Partial<LyricAnimationConfig>;
   fxDefaults?: Partial<LyricFxConfig>;
   progressIndicatorDefaults?: Partial<ClipProgressIndicatorConfig>;
+  /**
+   * Audio-reactive modulation applied to this layer as a whole. Targets
+   * apply to the whole channel, not to individual clip boxes — that's the
+   * intentional contract with the renderer.
+   */
+  audioReactive?: LyricLayerAudioReactive;
   /** @deprecated Use styleDefaults. Kept for older saved projects. */
   style?: Partial<LyricVisualStyle>;
   /** @deprecated Use animationDefaults. Kept for older saved projects. */
