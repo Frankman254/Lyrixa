@@ -7,8 +7,10 @@ import { LyricsImportPanel } from './LyricsImportPanel';
 import { FloatingPreview } from './FloatingPreview';
 import { EditorAlerts } from './EditorAlerts';
 import { EditorTopBar } from './EditorTopBar';
+import { LayersSidebar } from './LayersSidebar';
 import { InspectorPanel } from '../inspector/InspectorPanel';
 import { useLyrixaProject } from './useLyrixaProject';
+import { useAccentTheme } from '../../shared/theme/useAccentTheme';
 import type { AudioChannelRole, AudioBandMode } from '../../core/types/audio';
 import { extractBandPeaksFromBlob } from './peakExtraction';
 import { usePlaybackController } from './usePlaybackController';
@@ -55,6 +57,11 @@ export function LyrixaEditorShell() {
   const [draftName, setDraftName] = useState(project.name);
   const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
   const [selectedLayerId, setSelectedLayerId] = useState<string | null>(project.layers[0]?.id ?? null);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() =>
+    safeGetLocalStorage('lyrixa_sidebar_collapsed') === '1'
+  );
+
+  const { accent, setAccent } = useAccentTheme();
 
   const masterChannel = project.audioTracks.master;
   const vocalsChannel = project.audioTracks.vocals;
@@ -170,8 +177,13 @@ export function LyrixaEditorShell() {
     try { window.localStorage.setItem('lyrixa_floating_preview_width', String(next)); } catch { /* ignore */ }
   };
 
+  const shellClass = [
+    'lyrixa-shell',
+    sidebarCollapsed ? 'sidebar-collapsed' : ''
+  ].filter(Boolean).join(' ');
+
   return (
-    <div className="lyrixa-shell">
+    <div className={shellClass}>
       <EditorTopBar
         projectName={project.name}
         nameEditing={nameEditing}
@@ -179,6 +191,9 @@ export function LyrixaEditorShell() {
         masterChannel={masterChannel ?? null}
         vocalsChannel={vocalsChannel ?? null}
         playbackMode={playbackMode}
+        isPlaying={isPlaying}
+        currentTime={playbackTime}
+        duration={effectiveDuration}
         saveStatus={saveStatus}
         vocalExtractionStatus={vocalExtractionStatus}
         vocalsAnalysisReady={vocalsAnalysisReady}
@@ -214,6 +229,8 @@ export function LyrixaEditorShell() {
           setIsPlaying(false);
           setPlaybackMode(mode);
         }}
+        onPlayToggle={handlePlayToggle}
+        onSeek={handleSeek}
         onResetProject={() => {
           if (window.confirm('Discard the current project and start a new one?')) {
             resetProject();
@@ -221,6 +238,8 @@ export function LyrixaEditorShell() {
             setPlaybackTime(0);
           }
         }}
+        accent={accent}
+        onAccentChange={setAccent}
       />
 
       <EditorAlerts
@@ -244,6 +263,25 @@ export function LyrixaEditorShell() {
           onEnded={() => setIsPlaying(false)}
         />
       )}
+
+      <LayersSidebar
+        layers={project.layers}
+        clips={project.clips}
+        selectedLayerId={selectedLayerId}
+        collapsed={sidebarCollapsed}
+        onSelectLayer={(id) => {
+          setSelectedLayerId(id);
+          setSelectedClipId(null);
+        }}
+        onLayersChange={setLayers}
+        onToggleCollapsed={() => {
+          setSidebarCollapsed(v => {
+            const next = !v;
+            try { window.localStorage.setItem('lyrixa_sidebar_collapsed', next ? '1' : '0'); } catch { /* ignore */ }
+            return next;
+          });
+        }}
+      />
 
       <main className="ls-main">
         <section className="ls-stage">
@@ -305,23 +343,23 @@ export function LyrixaEditorShell() {
             />
           )}
         </section>
-
-        <InspectorPanel
-          project={project}
-          selectedClipId={selectedClipId}
-          selectedLayerId={selectedLayerId}
-          onProjectNameChange={setProjectName}
-          onStyleChange={setStyleConfig}
-          onAnimationChange={setAnimationConfig}
-          onFxChange={setFxConfig}
-          onProgressChange={setProgressIndicatorConfig}
-          onClipsChange={setClips}
-          onLayersChange={setLayers}
-          onImportLyrics={() => setImportOpen(true)}
-          onExportProject={handleExportProject}
-          onImportProject={openProjectImportPicker}
-        />
       </main>
+
+      <InspectorPanel
+        project={project}
+        selectedClipId={selectedClipId}
+        selectedLayerId={selectedLayerId}
+        onProjectNameChange={setProjectName}
+        onStyleChange={setStyleConfig}
+        onAnimationChange={setAnimationConfig}
+        onFxChange={setFxConfig}
+        onProgressChange={setProgressIndicatorConfig}
+        onClipsChange={setClips}
+        onLayersChange={setLayers}
+        onImportLyrics={() => setImportOpen(true)}
+        onExportProject={handleExportProject}
+        onImportProject={openProjectImportPicker}
+      />
 
       <LyricsImportPanel
         open={importOpen}

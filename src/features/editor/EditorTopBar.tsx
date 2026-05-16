@@ -1,11 +1,19 @@
 import type { ChangeEvent, RefObject } from 'react';
 import type { AudioChannel, AudioChannelRole } from '../../core/types/audio';
 import type { SaveStatus, VocalExtractionStatus } from './useLyrixaProject';
+import { ACCENT_OPTIONS } from '../../shared/theme/useAccentTheme';
+import type { AccentName } from '../../shared/theme/useAccentTheme';
 
 const SAVE_LABEL: Record<SaveStatus, string> = {
   idle: 'Saved',
-  pending: 'Saving...',
-  saved: 'Saved ✓'
+  pending: 'Saving…',
+  saved: 'Saved'
+};
+
+const SAVE_TONE: Record<SaveStatus, 'live' | 'dirty' | 'idle'> = {
+  idle: 'live',
+  pending: 'dirty',
+  saved: 'live'
 };
 
 interface EditorTopBarProps {
@@ -15,6 +23,9 @@ interface EditorTopBarProps {
   masterChannel: AudioChannel | null;
   vocalsChannel: AudioChannel | null;
   playbackMode: 'master' | 'vocals';
+  isPlaying: boolean;
+  currentTime: number;
+  duration: number;
   saveStatus: SaveStatus;
   vocalExtractionStatus: VocalExtractionStatus;
   vocalsAnalysisReady: boolean;
@@ -22,6 +33,7 @@ interface EditorTopBarProps {
   previewOpen: boolean;
   transparentPreviewOpen: boolean;
   miniPreviewVisible: boolean;
+  accent: AccentName;
   masterFileInputRef: RefObject<HTMLInputElement | null>;
   vocalsFileInputRef: RefObject<HTMLInputElement | null>;
   projectImportInputRef: RefObject<HTMLInputElement | null>;
@@ -42,16 +54,15 @@ interface EditorTopBarProps {
   onOpenLyricsImport: () => void;
   onExportProject: () => void;
   onExportLyricsBundle: () => void;
-  onRegenerateFromVocals: (options?: {
-    layerId?: string;
-    minDuration?: number;
-    maxDuration?: number;
-  }) => void;
+  onRegenerateFromVocals: (options?: { layerId?: string; minDuration?: number; maxDuration?: number }) => void;
   onTogglePreview: () => void;
   onOpenOverlay: () => void;
   onShowMiniPreview: () => void;
   onPlaybackModeChange: (mode: 'master' | 'vocals') => void;
+  onPlayToggle: () => void;
+  onSeek: (time: number) => void;
   onResetProject: () => void;
+  onAccentChange: (next: AccentName) => void;
 }
 
 export function EditorTopBar({
@@ -61,6 +72,9 @@ export function EditorTopBar({
   masterChannel,
   vocalsChannel,
   playbackMode,
+  isPlaying,
+  currentTime,
+  duration,
   saveStatus,
   vocalExtractionStatus,
   vocalsAnalysisReady,
@@ -68,6 +82,7 @@ export function EditorTopBar({
   previewOpen,
   transparentPreviewOpen,
   miniPreviewVisible,
+  accent,
   masterFileInputRef,
   vocalsFileInputRef,
   projectImportInputRef,
@@ -93,201 +108,271 @@ export function EditorTopBar({
   onOpenOverlay,
   onShowMiniPreview,
   onPlaybackModeChange,
-  onResetProject
+  onPlayToggle,
+  onSeek,
+  onResetProject,
+  onAccentChange
 }: EditorTopBarProps) {
+  const saveTone = SAVE_TONE[saveStatus];
+  const masterLabel = masterChannel?.fileName ?? 'No master loaded';
+  const masterDuration = masterChannel ? formatDuration(masterChannel.duration) : '—:—';
+
   return (
-    <header className="ls-topbar">
-      <div className="ls-topbar-section ls-brand">
-        <span className="ls-logo">LYRIXA</span>
-        {nameEditing ? (
-          <input
-            className="ls-name-input"
-            autoFocus
-            value={draftName}
-            onChange={(e) => onDraftNameChange(e.target.value)}
-            onBlur={onCommitName}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') onCommitName();
-              else if (e.key === 'Escape') onCancelNameEdit();
-            }}
-          />
-        ) : (
-          <button
-            className="ls-name"
-            onClick={onStartNameEdit}
-            title="Rename project"
-          >
-            {projectName}
-          </button>
-        )}
+    <header className="transport">
+      <div className="brand">
+        <span className="brand-mark">L</span>
+        <span className="brand-text">Lyrixa</span>
       </div>
 
-      <div className="ls-topbar-section ls-actions">
+      <div className="tr-divider" />
+
+      {nameEditing ? (
+        <input
+          className="tr-name-input"
+          autoFocus
+          value={draftName}
+          onChange={(e) => onDraftNameChange(e.target.value)}
+          onBlur={onCommitName}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') onCommitName();
+            else if (e.key === 'Escape') onCancelNameEdit();
+          }}
+        />
+      ) : (
+        <button className="tr-name" onClick={onStartNameEdit} title="Rename project">
+          {projectName}
+        </button>
+      )}
+
+      <div className="tr-divider" />
+
+      <button
+        className="song-chip"
+        onClick={onOpenMasterPicker}
+        title={masterChannel ? `Master track: ${masterChannel.fileName}` : 'Load the main audio file'}
+      >
+        <span className="song-chip-icon" aria-hidden>♪</span>
+        <span className="title">{masterLabel}</span>
+        <span className="duration mono">{masterDuration}</span>
+      </button>
+
+      <button
+        className="tr-btn"
+        onClick={onExtractVocals}
+        disabled={!masterChannel?.objectUrl || vocalExtractionStatus === 'extracting'}
+        title="Isolate a vocals stem from the master track"
+      >
+        {vocalExtractionStatus === 'extracting' ? 'Isolating…' : vocalsChannel ? '↻ Isolate vocals' : '✦ Isolate vocals'}
+      </button>
+      <button
+        className="tr-btn ghost"
+        onClick={onOpenVocalsPicker}
+        title="Upload a clean isolated vocals stem"
+      >
+        Upload stem
+      </button>
+      {vocalsChannel && (
+        <button className="tr-btn ghost icon-only" onClick={onRemoveVocals} title="Remove vocals stem">✕</button>
+      )}
+
+      <div className="tr-divider" />
+
+      <div className="playback-cluster">
         <button
-          className="ls-btn"
-          onClick={onOpenMasterPicker}
-          title={masterChannel
-            ? `Master track: ${masterChannel.fileName}`
-            : 'Load the main audio file (MP3, WAV, etc.)'}
+          className="tr-btn ghost icon-only"
+          onClick={() => onSeek(0)}
+          title="Back to start"
+          disabled={!masterChannel?.objectUrl}
         >
-          {masterChannel ? `↻ ${masterChannel.fileName}` : '+ Load master track'}
+          ⏮
         </button>
         <button
-          className={`ls-btn ${vocalsChannel ? 'active' : ''}`}
-          onClick={onExtractVocals}
-          disabled={!masterChannel?.objectUrl || vocalExtractionStatus === 'extracting'}
-          title={vocalsChannel
-            ? `Re-isolate vocals from the master track. Current vocals helper: ${vocalsChannel.fileName}.`
-            : 'Isolate a vocal-focused helper track from the loaded master audio.'}
+          className={`play-btn ${isPlaying ? 'playing' : ''}`}
+          onClick={onPlayToggle}
+          title={isPlaying ? 'Pause (Space)' : 'Play (Space)'}
+          disabled={!masterChannel?.objectUrl}
         >
-          {vocalExtractionStatus === 'extracting'
-            ? 'Isolating vocals...'
-            : vocalsChannel
-              ? '↻ Isolate vocals'
-              : '✦ Isolate vocals'}
+          {isPlaying ? '⏸' : '▶'}
         </button>
         <button
-          className="ls-btn ghost small"
-          onClick={onOpenVocalsPicker}
-          title="Upload a clean isolated vocals stem instead of using automatic extraction."
+          className="tr-btn ghost icon-only"
+          onClick={() => onSeek(Math.max(0, duration - 0.01))}
+          title="Skip to end"
+          disabled={!masterChannel?.objectUrl}
         >
-          Upload stem
+          ⏭
         </button>
-        {vocalsChannel && (
+        <span className="time-readout">
+          <span className="mono">{formatTimecode(currentTime)}</span>
+          <span className="total mono"> / {formatTimecode(duration)}</span>
+        </span>
+      </div>
+
+      <div className="tr-divider" />
+
+      {vocalsAnalysisReady && canGenerateTimings && (
+        <button
+          className="tr-btn primary"
+          onClick={() => onRegenerateFromVocals()}
+          title="Use detected vocal activity regions to retime all lyric clips."
+        >
+          ⟲ Generate timings from vocals
+        </button>
+      )}
+      <button className="tr-btn" onClick={onOpenLyricsImport} title="Paste or import lyrics text">
+        Import lyrics
+      </button>
+
+      <div className="transport-spacer" />
+
+      {vocalsAnalysisReady && (
+        <div className="stem-indicator">
+          <span className="dot" />
+          Vocals stem active
+        </div>
+      )}
+      {vocalsChannel && !vocalsAnalysisReady && (
+        <div className="stem-indicator analyzing">
+          <span className="dot" />
+          Analyzing vocals…
+        </div>
+      )}
+      {vocalExtractionStatus === 'failed' && (
+        <div className="stem-indicator error">
+          <span className="dot" />
+          Vocal isolation failed
+        </div>
+      )}
+
+      <div className={`save-status ${saveTone}`}>
+        <span className="dot" />
+        {SAVE_LABEL[saveStatus]}
+      </div>
+
+      {vocalsChannel?.objectUrl && (
+        <div className="tr-group" role="tablist" aria-label="Playback source">
           <button
-            className="ls-btn ghost small"
-            onClick={onRemoveVocals}
-            title="Remove vocals stem"
+            className={`tr-btn small ${playbackMode === 'master' ? 'active' : ''}`}
+            onClick={() => onPlaybackModeChange('master')}
+            title="Listen to the original master track"
           >
-            ✕
+            Master
           </button>
-        )}
-        <input
-          ref={masterFileInputRef}
-          type="file"
-          accept="audio/*,.mp3,.wav,.ogg,.flac,.m4a"
-          style={{ display: 'none' }}
-          onChange={onAudioFileSelected('master')}
-        />
-        <input
-          ref={vocalsFileInputRef}
-          type="file"
-          accept="audio/*,.mp3,.wav,.ogg,.flac,.m4a"
-          style={{ display: 'none' }}
-          onChange={onAudioFileSelected('vocals')}
-        />
-        <input
-          ref={projectImportInputRef}
-          type="file"
-          accept=".lyrixa.json,application/json"
-          style={{ display: 'none' }}
-          onChange={onProjectFileSelected}
-        />
-        <input
-          ref={lyricsBundleImportInputRef}
-          type="file"
-          accept=".lyrixa-lyrics.json,application/json"
-          style={{ display: 'none' }}
-          onChange={onLyricsBundleFileSelected}
-        />
-        <button className="ls-btn" onClick={onOpenLyricsImport}>
-          Import lyrics
+          <button
+            className={`tr-btn small ${playbackMode === 'vocals' ? 'active' : ''}`}
+            onClick={() => onPlaybackModeChange('vocals')}
+            title="Listen to the isolated vocals helper"
+          >
+            Vocals
+          </button>
+        </div>
+      )}
+
+      <div className="tr-group">
+        <button className="tr-btn small" onClick={onOpenProjectImportPicker} title="Import a .lyrixa.json project">
+          Import
         </button>
-        <button className="ls-btn" onClick={onExportProject}>
-          Export Project
-        </button>
-        <button className="ls-btn" onClick={onOpenProjectImportPicker}>
-          Import Project
+        <button className="tr-btn small" onClick={onExportProject} title="Export the full Lyrixa project">
+          Export
         </button>
         <button
-          className="ls-btn"
+          className="tr-btn small"
           onClick={onExportLyricsBundle}
-          title="Export lyrics, layers, clips and styles for use in another renderer (e.g. LiveWallpaper). Audio is not included."
+          title="Export the cross-app lyrics bundle (.lyrixa-lyrics.json)"
         >
-          Export Lyrics Bundle
+          Bundle
         </button>
         <button
-          className="ls-btn ghost small"
+          className="tr-btn small ghost"
           onClick={onOpenLyricsBundleImportPicker}
-          title="Import a .lyrixa-lyrics.json bundle (lyrics + layers + clips). Replaces current lyrics; keeps audio."
+          title="Import a .lyrixa-lyrics.json bundle"
         >
-          Import Bundle
+          ⤓
         </button>
-        {vocalsAnalysisReady && canGenerateTimings && (
-          <button
-            className="ls-btn primary"
-            onClick={() => onRegenerateFromVocals()}
-            title="Use detected vocal activity regions from the vocals stem to retime all lyric clips. You can still adjust manually after."
-          >
-            ⟲ Generate timings from vocals
-          </button>
-        )}
+      </div>
+
+      <div className="tr-group">
         <button
-          className={`ls-btn ${previewOpen ? 'active' : ''}`}
+          className={`tr-btn small ${previewOpen ? 'active' : ''}`}
           onClick={onTogglePreview}
+          title="Toggle the large preview overlay"
         >
-          {previewOpen ? '✕ Close preview' : '◉ Preview'}
+          {previewOpen ? '✕ Preview' : '◉ Preview'}
         </button>
         <button
-          className={`ls-btn ${transparentPreviewOpen ? 'active' : ''}`}
+          className={`tr-btn small ${transparentPreviewOpen ? 'active' : ''}`}
           onClick={onOpenOverlay}
-          title="Transparent in-editor overlay. Real always-on-top over other apps requires a desktop wrapper."
+          title="Open the transparent overlay preview"
         >
-          ⧉ Overlay
+          ⧉
         </button>
         {!miniPreviewVisible && !previewOpen && (
-          <button className="ls-btn" onClick={onShowMiniPreview}>
-            ◳ Live preview
+          <button className="tr-btn small" onClick={onShowMiniPreview} title="Show the floating preview">
+            ◳
           </button>
-        )}
-        {vocalsChannel?.objectUrl && (
-          <div className="ls-monitor-toggle" aria-label="Playback source">
-            <button
-              className={playbackMode === 'master' ? 'active' : ''}
-              onClick={() => onPlaybackModeChange('master')}
-              title="Listen to the original master track"
-            >
-              Master
-            </button>
-            <button
-              className={playbackMode === 'vocals' ? 'active' : ''}
-              onClick={() => onPlaybackModeChange('vocals')}
-              title="Listen to the isolated vocals helper"
-            >
-              Vocals
-            </button>
-          </div>
         )}
       </div>
 
-      <div className="ls-topbar-section ls-meta">
-        {vocalsAnalysisReady && (
-          <span
-            className="ls-vocals-chip"
-            title="Vocals stem is loaded and analyzed. Vocal activity regions are shown on the vocals waveform lane. Use 'Generate timings from vocals' to auto-time your lyrics."
-          >
-            ◐ Vocals stem active
-          </span>
-        )}
-        {vocalsChannel && !vocalsAnalysisReady && (
-          <span className="ls-vocals-chip" title="Analyzing vocals stem waveform...">
-            ◌ Analyzing vocals...
-          </span>
-        )}
-        {vocalExtractionStatus === 'failed' && (
-          <span className="ls-vocals-chip error" title="Automatic vocal isolation failed. Try uploading a clean vocals stem.">
-            Vocal isolation failed
-          </span>
-        )}
-        <span className={`ls-save-chip ${saveStatus}`}>{SAVE_LABEL[saveStatus]}</span>
-        <button
-          className="ls-btn ghost danger"
-          onClick={onResetProject}
-          title="Reset project"
+      <label className="accent-picker" title="Accent color">
+        <span aria-hidden style={{ background: 'var(--accent)' }} />
+        <select
+          value={accent}
+          onChange={(e) => onAccentChange(e.target.value as AccentName)}
         >
-          New
-        </button>
-      </div>
+          {ACCENT_OPTIONS.map(o => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+      </label>
+
+      <button className="tr-btn danger" onClick={onResetProject} title="Discard project and start a new one">
+        New
+      </button>
+
+      <input
+        ref={masterFileInputRef}
+        type="file"
+        accept="audio/*,.mp3,.wav,.ogg,.flac,.m4a"
+        style={{ display: 'none' }}
+        onChange={onAudioFileSelected('master')}
+      />
+      <input
+        ref={vocalsFileInputRef}
+        type="file"
+        accept="audio/*,.mp3,.wav,.ogg,.flac,.m4a"
+        style={{ display: 'none' }}
+        onChange={onAudioFileSelected('vocals')}
+      />
+      <input
+        ref={projectImportInputRef}
+        type="file"
+        accept=".lyrixa.json,application/json"
+        style={{ display: 'none' }}
+        onChange={onProjectFileSelected}
+      />
+      <input
+        ref={lyricsBundleImportInputRef}
+        type="file"
+        accept=".lyrixa-lyrics.json,application/json"
+        style={{ display: 'none' }}
+        onChange={onLyricsBundleFileSelected}
+      />
     </header>
   );
+}
+
+function formatDuration(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) return '0:00';
+  const total = Math.round(seconds);
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+/** mm:ss.cs — high-precision timecode for the playback time readout. */
+function formatTimecode(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 0) return '0:00.00';
+  const m = Math.floor(seconds / 60);
+  const rest = seconds - m * 60;
+  return `${m}:${rest.toFixed(2).padStart(5, '0')}`;
 }

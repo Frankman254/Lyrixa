@@ -1,31 +1,94 @@
+/* ================================================================
+   Lyrixa — Design tokens (warm-neutral dark, amber accent default)
+   Imported once from main.tsx. All component CSS reads from these
+   variables; never hard-code a hex you can pull from a token.
+   ================================================================ */
+
 :root {
-  --font-family: 'Inter', system-ui, Avenir, Helvetica, Arial, sans-serif;
-  --bg-color: #0f0f13;
-  --text-main: #ffffff;
-  --text-muted: #8e8e93;
-  --accent: #2e7afb;
-  --glass-bg: rgba(255, 255, 255, 0.05);
-  --glass-border: rgba(255, 255, 255, 0.1);
+  /* Surface tiers — warm neutral, intentionally not blue/purple. */
+  --bg-0: oklch(0.135 0.004 60);
+  --bg-1: oklch(0.165 0.005 60);
+  --bg-2: oklch(0.195 0.006 60);
+  --bg-3: oklch(0.235 0.007 60);
+  --bg-4: oklch(0.285 0.008 60);
+  --border: oklch(0.265 0.008 60);
+  --border-strong: oklch(0.36 0.01 60);
+
+  /* Text */
+  --fg-0: oklch(0.97 0.003 60);
+  --fg-1: oklch(0.86 0.005 60);
+  --fg-2: oklch(0.66 0.008 60);
+  --fg-3: oklch(0.48 0.008 60);
+  --fg-4: oklch(0.36 0.008 60);
+
+  /* Accent — overridden at runtime by useAccentTheme. Amber default. */
+  --accent: oklch(0.82 0.155 75);
+  --accent-strong: oklch(0.85 0.18 75);
+  --accent-soft: oklch(0.82 0.155 75 / 0.14);
+  --accent-fg: oklch(0.20 0.04 75);
+
+  /* Semantic lane colors */
+  --c-master: oklch(0.70 0.10 230);
+  --c-vocals: oklch(0.78 0.14 145);
+  --c-main: oklch(0.78 0.13 90);
+  --c-backing: oklch(0.72 0.10 320);
+  --c-fx: oklch(0.76 0.15 50);
+
+  --live: oklch(0.78 0.16 145);
+  --danger: oklch(0.70 0.18 25);
+  --warning: oklch(0.80 0.14 80);
+
+  /* Typography */
+  --font-family: 'Geist', -apple-system, BlinkMacSystemFont, 'Inter', system-ui, sans-serif;
+  --font-sans: var(--font-family);
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  --font-display: 'Geist', system-ui, sans-serif;
+
+  /* Radii */
+  --r-1: 3px;
+  --r-2: 5px;
+  --r-3: 8px;
+  --r-4: 12px;
+
+  /* Spacing — 4px scale */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 20px;
+  --s-6: 24px;
+  --s-8: 32px;
+
+  /* Shadows — minimal; lean on borders for separation. */
+  --shadow-panel: 0 1px 0 oklch(1 0 0 / 0.04) inset, 0 12px 32px -16px oklch(0 0 0 / 0.5);
+  --shadow-pop: 0 24px 60px -20px oklch(0 0 0 / 0.7), 0 2px 0 oklch(1 0 0 / 0.04) inset;
+
+  /* Motion */
+  --easing: cubic-bezier(0.2, 0.6, 0.2, 1);
+  --easing-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* Legacy aliases kept while older component CSS migrates. */
+  --bg-color: var(--bg-0);
+  --text-main: var(--fg-0);
+  --text-muted: var(--fg-2);
+  --glass-bg: oklch(1 0 0 / 0.04);
+  --glass-border: oklch(1 0 0 / 0.08);
 }
 
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
-
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; }
 body {
   margin: 0;
-  display: flex;
-  place-items: center;
-  min-width: 320px;
-  min-height: 100vh;
-  background-color: var(--bg-color);
-  color: var(--text-main);
   font-family: var(--font-family);
-  overflow: hidden; /* App like */
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--fg-1);
+  background: var(--bg-0);
+  overflow: hidden;
+  letter-spacing: -0.005em;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 #root {
@@ -34,11 +97,24 @@ body {
   position: relative;
 }
 
-/* Base Glass Utilities */
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+input, select, textarea { font: inherit; color: inherit; }
+
+/* Mono / eyebrow helpers shared across panels */
+.mono { font-family: var(--font-mono); font-feature-settings: 'tnum', 'zero'; }
+.label-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--fg-3);
+}
+
+/* Legacy glass utility (kept for older callers) */
 .glass-panel {
   background: var(--glass-bg);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid var(--glass-border);
-  border-radius: 16px;
+  border-radius: var(--r-4);
 }

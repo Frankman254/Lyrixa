@@ -8,7 +8,12 @@
       "Bash(echo \"EXIT=$?\")",
       "Bash(echo \"TSEXIT=$?\")",
       "Bash(npx eslint *)",
-      "Bash(echo \"LINTEXIT=$?\")"
+      "Bash(echo \"LINTEXIT=$?\")",
+      "Bash(mkdir -p /tmp/lyrixa-design)",
+      "Bash(unzip -q -o \"/Users/frankman254/Desktop/Personal-Projects/Lyrixa/Lyrixa \\(1\\).zip\" -d /tmp/lyrixa-design)",
+      "Read(//tmp/**)",
+      "Read(//private/tmp/lyrixa-design/screenshots/**)",
+      "Read(//private/tmp/lyrixa-design/**)"
     ]
   }
 }
