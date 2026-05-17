@@ -1,5 +1,10 @@
 import { useEffect, useRef, useImperativeHandle, forwardRef } from 'react';
 
+type AudioContextConstructor = typeof AudioContext;
+type WindowWithWebkitAudio = Window & {
+  webkitAudioContext?: AudioContextConstructor;
+};
+
 export interface AudioEngineRef {
   /** Set the underlying <audio>'s currentTime. */
   seekTo: (time: number) => void;
@@ -41,7 +46,8 @@ export const AudioEngine = forwardRef<AudioEngineRef, AudioEngineProps>(({
 
   const initWebAudio = () => {
     if (!audioCtxRef.current) {
-      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      const AudioCtx = window.AudioContext || (window as WindowWithWebkitAudio).webkitAudioContext;
+      if (!AudioCtx) return;
       audioCtxRef.current = new AudioCtx();
       analyserRef.current = audioCtxRef.current.createAnalyser();
       analyserRef.current.fftSize = 256;

@@ -1,5 +1,10 @@
 import type { AudioPeak, AudioBandMode } from '../../core/types/audio';
 
+type AudioContextConstructor = typeof AudioContext;
+type WindowWithWebkitAudio = Window & {
+  webkitAudioContext?: AudioContextConstructor;
+};
+
 export interface ExtractPeaksOptions {
   /** How dense the peaks should be. Default: 25/s — enough for activity detection. */
   peaksPerSecond?: number;
@@ -21,7 +26,7 @@ export async function extractPeaksFromBlob(
 ): Promise<AudioPeak[] | null> {
   const { peaksPerSecond = 25 } = options;
   if (typeof window === 'undefined') return null;
-  const Ctor = window.AudioContext || (window as any).webkitAudioContext;
+  const Ctor = window.AudioContext || (window as WindowWithWebkitAudio).webkitAudioContext;
   if (!Ctor) return null;
 
   let ctx: AudioContext | null = null;

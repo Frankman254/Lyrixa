@@ -18,11 +18,14 @@ export function usePlaybackController({
   const audioEngineRef = useRef<AudioEngineRef>(null);
   const rafRef = useRef<number | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [playbackTime, setPlaybackTime] = useState(initialTime);
+  const [playbackState, setPlaybackState] = useState(() => ({
+    projectId,
+    time: initialTime
+  }));
+  const playbackTime = playbackState.projectId === projectId ? playbackState.time : initialTime;
 
-  useEffect(() => {
-    setPlaybackTime(initialTime);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  const setPlaybackTime = useCallback((time: number) => {
+    setPlaybackState({ projectId, time });
   }, [projectId]);
 
   useEffect(() => {
@@ -41,7 +44,7 @@ export function usePlaybackController({
       if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
     };
-  }, [isPlaying]);
+  }, [isPlaying, setPlaybackTime]);
 
   useEffect(() => {
     if (isPlaying) return;
@@ -54,7 +57,7 @@ export function usePlaybackController({
     setPlaybackTime(time);
     onCurrentTimeCommit(time);
     audioEngineRef.current?.seekTo(time);
-  }, [onCurrentTimeCommit]);
+  }, [onCurrentTimeCommit, setPlaybackTime]);
 
   const handlePlayToggle = useCallback(() => {
     if (!activeAudioChannel?.objectUrl) return;

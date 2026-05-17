@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { normalizeLyricsText } from '../../core/lyrics/normalize';
 import type { LyricLayer } from '../../core/types/layer';
 import type { ClipDurationStrategy } from '../../core/timeline/durationStrategies';
@@ -39,17 +39,8 @@ export function LyricsImportPanel({
   const [layerId, setLayerId] = useState(layers[0]?.id ?? 'layer-main');
   const [strategy, setStrategy] = useState<ClipDurationStrategy>('line-length-weighted');
 
-  useEffect(() => {
-    if (open) setText(initialText);
-  }, [open, initialText]);
-
-  // If vocals aren't available, force the picker off the vocal-energy option.
-  useEffect(() => {
-    if (!vocalsAvailable && strategy === 'vocal-energy') {
-      setStrategy('line-length-weighted');
-    }
-  }, [vocalsAvailable, strategy]);
-
+  const effectiveStrategy =
+    !vocalsAvailable && strategy === 'vocal-energy' ? 'line-length-weighted' : strategy;
   const preview = useMemo(() => normalizeLyricsText(text), [text]);
 
   if (!open) return null;
@@ -61,7 +52,7 @@ export function LyricsImportPanel({
       maxDuration,
       preserveExistingTiming: preserveTiming,
       layerId,
-      strategy
+      strategy: effectiveStrategy
     });
     onClose();
   };
@@ -118,7 +109,7 @@ export function LyricsImportPanel({
             <label>
               Strategy
               <select
-                value={strategy}
+                value={effectiveStrategy}
                 onChange={(e) => setStrategy(e.target.value as ClipDurationStrategy)}
               >
                 <option value="fixed">Fixed duration</option>
@@ -129,7 +120,7 @@ export function LyricsImportPanel({
               </select>
             </label>
 
-            {strategy === 'fixed' && (
+            {effectiveStrategy === 'fixed' && (
               <label>
                 Duration
                 <input
@@ -146,7 +137,7 @@ export function LyricsImportPanel({
               </label>
             )}
 
-            {strategy !== 'fixed' && (
+            {effectiveStrategy !== 'fixed' && (
               <>
                 <label>
                   Min
@@ -193,13 +184,13 @@ export function LyricsImportPanel({
                 type="checkbox"
                 checked={preserveTiming}
                 onChange={(e) => setPreserveTiming(e.target.checked)}
-                disabled={strategy === 'vocal-energy'}
+                disabled={effectiveStrategy === 'vocal-energy'}
               />
               Preserve existing timing
             </label>
           </div>
 
-          <p className="lip-strategy-hint">{STRATEGY_DESCRIPTIONS[strategy]}</p>
+          <p className="lip-strategy-hint">{STRATEGY_DESCRIPTIONS[effectiveStrategy]}</p>
 
           <div className="lip-actions">
             <button className="lip-btn ghost" onClick={onClose}>Cancel</button>

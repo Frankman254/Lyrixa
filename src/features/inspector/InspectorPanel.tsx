@@ -1,30 +1,26 @@
 import { useMemo, useState } from 'react';
-import type { ReactNode } from 'react';
-import type { LyricClip, ClipPositionPreset } from '../../core/types/clip';
-import type {
-  LyricLayer,
-  LyricLayerAudioReactive,
-  LyricLayerAudioReactiveBandMode,
-  LyricLayerAudioReactiveResponseMode,
-  LyricLayerAudioReactiveSource
-} from '../../core/types/layer';
-import { DEFAULT_LAYER_AUDIO_REACTIVE } from '../../core/types/layer';
+import type { LyricClip } from '../../core/types/clip';
+import type { LyricLayer } from '../../core/types/layer';
 import type {
   ClipProgressIndicatorConfig,
   LyricAnimationConfig,
   LyricFxConfig,
-  LyricFxPreset,
   LyricVisualStyle
 } from '../../core/types/render';
 import type { TextFillConfig } from '../../core/types/texture';
-import { DEFAULT_TEXT_FILL } from '../../core/types/texture';
 import type { LyrixaProject } from '../../core/types/project';
 import {
   resolveLyricAnimationConfig,
   resolveLyricFxConfig,
   resolveLyricVisualStyle
 } from '../../core/render/resolveVisualStyle';
-import { putTextureAsset } from '../assets/textureAssetStorage';
+import { AnimationInspector } from './AnimationInspector';
+import { ClipInspector } from './ClipInspector';
+import { FxInspector } from './FxInspector';
+import { LayerInspector } from './LayerInspector';
+import { ProjectInspector } from './ProjectInspector';
+import { StyleInspector } from './StyleInspector';
+import { TextureInspector } from './TextureInspector';
 import './InspectorPanel.css';
 
 type InspectorTab = 'project' | 'layer' | 'clip' | 'style' | 'texture' | 'fx' | 'animation';
@@ -45,31 +41,13 @@ interface InspectorPanelProps {
   onImportProject: () => void;
 }
 
-const FONT_PRESETS = [
-  { label: 'Inter', value: 'Inter, system-ui, sans-serif' },
-  { label: 'Impact', value: 'Impact, Haettenschweiler, Arial Narrow Bold, sans-serif' },
-  { label: 'Arial Black', value: '"Arial Black", Arial, sans-serif' },
-  { label: 'Condensed', value: '"Avenir Next Condensed", "Roboto Condensed", Arial Narrow, sans-serif' },
-  { label: 'Rounded', value: '"Arial Rounded MT Bold", "Trebuchet MS", system-ui, sans-serif' },
-  { label: 'Serif', value: 'Georgia, "Times New Roman", serif' },
-  { label: 'Mono', value: '"SFMono-Regular", Menlo, Consolas, monospace' }
-];
-
-const FX_PRESETS: LyricFxPreset[] = [
-  'none',
-  'neon-glow',
-  'soft-bloom',
-  'prism-shader',
-  'liquid-shimmer',
-  'heat-haze',
-  'rgb-shift',
-  'glitch',
-  'scanline',
-  'blur-flicker',
-  'shadow-trail',
-  'energy-pulse'
-];
-
+/**
+ * Context-aware editor for project, layer, and clip settings.
+ *
+ * The panel chooses the active edit scope and delegates actual form controls
+ * to tab components. Final render values still come from core resolver helpers,
+ * so UI editing does not duplicate inheritance logic.
+ */
 export function InspectorPanel({
   project,
   selectedClipId,
@@ -169,61 +147,6 @@ export function InspectorPanel({
   };
 
   const patchFill = (fill: TextFillConfig) => patchScopedStyle({ textFill: fill });
-  const textureValue = useMemo(() => styleTarget.textFill.imageTexture ?? {
-    id: crypto.randomUUID(),
-    opacity: 1,
-    scale: 1,
-    offsetX: 0,
-    offsetY: 0,
-    fit: 'cover' as const,
-    missing: true
-  }, [styleTarget.textFill.imageTexture]);
-
-  const setFillType = (type: TextFillConfig['type']) => {
-    if (type === 'solid') {
-      patchFill({
-        ...styleTarget.textFill,
-        type,
-        solidColor: styleTarget.textFill.solidColor ?? styleTarget.textColor
-      });
-      return;
-    }
-    if (type === 'gradient') {
-      patchFill({
-        ...styleTarget.textFill,
-        type,
-        gradient: styleTarget.textFill.gradient ?? DEFAULT_TEXT_FILL.gradient
-      });
-      return;
-    }
-    patchFill({
-      ...styleTarget.textFill,
-      type,
-      imageTexture: textureValue
-    });
-  };
-
-  const handleTextureFile = async (file: File | undefined) => {
-    if (!file) return;
-    const id = textureValue.id;
-    await putTextureAsset(project.id, id, file, file.name);
-    const objectUrl = URL.createObjectURL(file);
-    patchFill({
-      ...styleTarget.textFill,
-      type: 'image-texture',
-      imageTexture: {
-        id,
-        objectUrl,
-        opacity: textureValue.opacity,
-        scale: textureValue.scale,
-        offsetX: textureValue.offsetX,
-        offsetY: textureValue.offsetY,
-        fit: textureValue.fit,
-        fileName: file.name,
-        missing: false
-      }
-    });
-  };
 
   return (
     <aside className="inspector-panel">
@@ -240,254 +163,60 @@ export function InspectorPanel({
       </nav>
       <div className="insp-body">
         {tab === 'project' && (
-          <section className="insp-stack">
-            <Group title="Basic" open>
-              <label>Project name<input className="form-control form-input" value={project.name} onChange={(e) => onProjectNameChange(e.target.value)} /></label>
-              <div className="insp-button-row">
-                <button className="ls-btn small" onClick={onImportLyrics}>Import lyrics</button>
-                <button className="ls-btn small" onClick={onExportProject}>Export project</button>
-                <button className="ls-btn small" onClick={onImportProject}>Import project</button>
-              </div>
-            </Group>
-            <Group title="Preview settings">
-              <label className="tl-inline-check"><input type="checkbox" checked={project.progressIndicatorConfig.enabled} onChange={(e) => onProgressChange({ ...project.progressIndicatorConfig, enabled: e.target.checked })} />Show progress dot by default</label>
-            </Group>
-          </section>
+          <ProjectInspector
+            project={project}
+            onProjectNameChange={onProjectNameChange}
+            onProgressChange={onProgressChange}
+            onImportLyrics={onImportLyrics}
+            onExportProject={onExportProject}
+            onImportProject={onImportProject}
+          />
         )}
 
         {tab === 'layer' && (
-          <section className="insp-stack">
-            {selectedLayer ? (
-              <>
-                <Group title="Basic" open>
-                  <label>Name<input className="form-control form-input" value={selectedLayer.name} onChange={(e) => patchLayer({ name: e.target.value })} /></label>
-                  <label>Default position<select className="form-control form-select" value={selectedLayer.renderSettings?.positionPreset ?? 'center'} onChange={(e) => patchLayer({ renderSettings: { ...selectedLayer.renderSettings, positionPreset: e.target.value as ClipPositionPreset } })}>
-                    {['center', 'top', 'bottom', 'top-left', 'top-right', 'bottom-left', 'bottom-right'].map(pos => <option key={pos} value={pos}>{pos}</option>)}
-                  </select></label>
-                </Group>
-                <Group title="Audio reactive">
-                  <LayerAudioReactiveEditor
-                    value={selectedLayer.audioReactive}
-                    onChange={(next) => patchLayer({ audioReactive: next })}
-                  />
-                </Group>
-              </>
-            ) : <EmptyText text="Select a layer to edit layer defaults." />}
-          </section>
+          <LayerInspector
+            selectedLayer={selectedLayer}
+            onPatchLayer={patchLayer}
+          />
         )}
 
         {tab === 'clip' && (
-          <section className="insp-stack">
-            {selectedClip ? (
-              <>
-                <Group title="Clip" open>
-                  <label>Text<textarea className="form-control form-input" rows={3} value={selectedClip.text} onChange={(e) => patchClip({ text: e.target.value })} /></label>
-                  <div className="inspector-grid">
-                    <label>Start<input className="form-control form-input" type="number" step="0.01" value={Number(selectedClip.startTime.toFixed(2))} onChange={(e) => patchClip({ startTime: Math.max(0, Math.min(selectedClip.endTime - 0.25, parseFloat(e.target.value) || 0)) })} /></label>
-                    <label>End<input className="form-control form-input" type="number" step="0.01" value={Number(selectedClip.endTime.toFixed(2))} onChange={(e) => patchClip({ endTime: Math.max(selectedClip.startTime + 0.25, parseFloat(e.target.value) || selectedClip.endTime) })} /></label>
-                  </div>
-                  <label>Assigned layer<select className="form-control form-select" value={selectedClip.layerId} onChange={(e) => patchClip({ layerId: e.target.value })}>{project.layers.map(layer => <option key={layer.id} value={layer.id}>{layer.name}</option>)}</select></label>
-                </Group>
-                <Group title="Overrides" open>
-                  <label className="tl-inline-check"><input type="checkbox" checked={!!selectedClip.styleOverride} onChange={(e) => patchClip({ styleOverride: e.target.checked ? {} : undefined })} />Style override</label>
-                  <label className="tl-inline-check"><input type="checkbox" checked={!!selectedClip.animationOverride} onChange={(e) => patchClip({ animationOverride: e.target.checked ? {} : undefined })} />Animation override</label>
-                  <label className="tl-inline-check"><input type="checkbox" checked={!!selectedClip.fxOverride} onChange={(e) => patchClip({ fxOverride: e.target.checked ? {} : undefined })} />FX override</label>
-                </Group>
-              </>
-            ) : <EmptyText text="Select a clip to edit clip text, timing and override toggles." />}
-          </section>
+          <ClipInspector
+            selectedClip={selectedClip}
+            layers={project.layers}
+            onPatchClip={patchClip}
+          />
         )}
 
         {tab === 'style' && (
-          <section className="insp-stack">
-            <Group title="Typography" open>
-              <div className="inspector-grid">
-                <label>Font<select className="form-control form-select" value={styleTarget.fontFamily} onChange={(e) => patchScopedStyle({ fontFamily: e.target.value })}>{FONT_PRESETS.map(font => <option key={font.label} value={font.value}>{font.label}</option>)}</select></label>
-                <label>Size<input className="form-control form-input" type="number" step="0.1" min={0.5} value={parseFloat(styleTarget.fontSize) || 2.5} onChange={(e) => patchScopedStyle({ fontSize: `${e.target.value}rem` })} /></label>
-                <label>Weight<input className="form-control form-input" type="number" step="100" min={100} max={1000} value={parseInt(String(styleTarget.fontWeight), 10) || 800} onChange={(e) => patchScopedStyle({ fontWeight: parseInt(e.target.value, 10) || 800 })} /></label>
-                <label>Line height<input className="form-control form-input" type="number" step="0.05" value={parseFloat(styleTarget.lineHeight) || 1.2} onChange={(e) => patchScopedStyle({ lineHeight: e.target.value, lineSpacing: e.target.value })} /></label>
-              </div>
-              <label>Letter spacing<input className="form-control form-input" value={styleTarget.letterSpacing} onChange={(e) => patchScopedStyle({ letterSpacing: e.target.value })} /></label>
-            </Group>
-            <Group title="Glow & Shadow">
-              <label>Glow<input className="form-range" type="range" min={0} max={2.5} step={0.05} value={styleTarget.glowIntensity} onChange={(e) => patchScopedStyle({ glowIntensity: parseFloat(e.target.value) })} /></label>
-              <label>Blur<input className="form-range" type="range" min={0} max={24} step={0.5} value={styleTarget.blurAmount} onChange={(e) => patchScopedStyle({ blurAmount: parseFloat(e.target.value) })} /></label>
-              <label>Stroke<input className="form-control form-input" type="number" min={0} max={12} step={0.5} value={styleTarget.strokeWidth} onChange={(e) => patchScopedStyle({ strokeWidth: parseFloat(e.target.value) || 0 })} /></label>
-            </Group>
-          </section>
+          <StyleInspector
+            style={styleTarget}
+            onPatchStyle={patchScopedStyle}
+          />
         )}
 
         {tab === 'texture' && (
-          <section className="insp-stack">
-            <Group title="Fill / Texture" open>
-              <label>Fill type<select className="form-control form-select" value={styleTarget.textFill.type} onChange={(e) => setFillType(e.target.value as TextFillConfig['type'])}><option value="solid">Solid</option><option value="gradient">Gradient</option><option value="image-texture">Image texture</option></select></label>
-              {styleTarget.textFill.type === 'solid' && <label>Solid color<input className="form-color" type="color" value={toColorInput(styleTarget.textFill.solidColor ?? styleTarget.textColor)} onChange={(e) => patchFill({ ...styleTarget.textFill, solidColor: e.target.value })} /></label>}
-              {styleTarget.textFill.type === 'gradient' && (
-                <div className="inspector-grid">
-                  <label>Color A<input className="form-color" type="color" value={toColorInput(styleTarget.textFill.gradient?.colorA)} onChange={(e) => patchFill({ ...styleTarget.textFill, gradient: { ...(styleTarget.textFill.gradient ?? DEFAULT_TEXT_FILL.gradient!), colorA: e.target.value } })} /></label>
-                  <label>Color B<input className="form-color" type="color" value={toColorInput(styleTarget.textFill.gradient?.colorB)} onChange={(e) => patchFill({ ...styleTarget.textFill, gradient: { ...(styleTarget.textFill.gradient ?? DEFAULT_TEXT_FILL.gradient!), colorB: e.target.value } })} /></label>
-                  <label>Angle<input className="form-control form-input" type="number" value={styleTarget.textFill.gradient?.angle ?? 110} onChange={(e) => patchFill({ ...styleTarget.textFill, gradient: { ...(styleTarget.textFill.gradient ?? DEFAULT_TEXT_FILL.gradient!), angle: parseFloat(e.target.value) || 0 } })} /></label>
-                </div>
-              )}
-              {styleTarget.textFill.type === 'image-texture' && (
-                <>
-                  {(textureValue.missing || !textureValue.objectUrl) && <div className="insp-warning">Reload texture image</div>}
-                  <label>Texture image<input className="form-control form-input" type="file" accept="image/*" onChange={(e) => void handleTextureFile(e.target.files?.[0])} /></label>
-                  <label>Opacity<input className="form-range" type="range" min={0} max={1} step={0.05} value={textureValue.opacity} onChange={(e) => patchFill({ ...styleTarget.textFill, imageTexture: { ...textureValue, opacity: parseFloat(e.target.value) } })} /></label>
-                  <label>Scale<input className="form-range" type="range" min={0.25} max={4} step={0.05} value={textureValue.scale} onChange={(e) => patchFill({ ...styleTarget.textFill, imageTexture: { ...textureValue, scale: parseFloat(e.target.value) } })} /></label>
-                  <label>Fit<select className="form-control form-select" value={textureValue.fit} onChange={(e) => patchFill({ ...styleTarget.textFill, imageTexture: { ...textureValue, fit: e.target.value as 'cover' | 'contain' } })}><option value="cover">Cover</option><option value="contain">Contain</option></select></label>
-                  <div className="inspector-grid">
-                    <label>Offset X<input className="form-control form-input" type="number" value={textureValue.offsetX} onChange={(e) => patchFill({ ...styleTarget.textFill, imageTexture: { ...textureValue, offsetX: parseFloat(e.target.value) || 0 } })} /></label>
-                    <label>Offset Y<input className="form-control form-input" type="number" value={textureValue.offsetY} onChange={(e) => patchFill({ ...styleTarget.textFill, imageTexture: { ...textureValue, offsetY: parseFloat(e.target.value) || 0 } })} /></label>
-                  </div>
-                </>
-              )}
-            </Group>
-          </section>
+          <TextureInspector
+            projectId={project.id}
+            style={styleTarget}
+            onPatchFill={patchFill}
+          />
         )}
 
         {tab === 'fx' && (
-          <section className="insp-stack">
-            <Group title="FX" open>
-              <label>Preset<select className="form-control form-select" value={fxTarget.preset} onChange={(e) => {
-                const preset = e.target.value as LyricFxPreset;
-                patchScopedFx({ preset, enabled: preset !== 'none' });
-              }}>{FX_PRESETS.map(fx => <option key={fx} value={fx}>{fx}</option>)}</select></label>
-              <label>Intensity<input className="form-range" type="range" min={0} max={2.5} step={0.05} value={fxTarget.intensity} onChange={(e) => patchScopedFx({ intensity: parseFloat(e.target.value), enabled: fxTarget.preset !== 'none' })} /></label>
-              <label>Blur<input className="form-range" type="range" min={0} max={18} step={0.5} value={fxTarget.blur} onChange={(e) => patchScopedFx({ blur: parseFloat(e.target.value), enabled: fxTarget.preset !== 'none' })} /></label>
-            </Group>
-          </section>
+          <FxInspector
+            fx={fxTarget}
+            onPatchFx={patchScopedFx}
+          />
         )}
 
         {tab === 'animation' && (
-          <section className="insp-stack">
-            <Group title="Animation" open>
-              <label>Active<select className="form-control form-select" value={animationTarget.activeAnimation} onChange={(e) => patchScopedAnimation({ activeAnimation: e.target.value as LyricAnimationConfig['activeAnimation'] })}>{['none', 'pulse', 'glow-pulse', 'breathing', 'shake-light', 'wave', 'flicker'].map(value => <option key={value} value={value}>{value}</option>)}</select></label>
-              <label>Intensity<input className="form-range" type="range" min={0} max={2.5} step={0.05} value={animationTarget.intensity} onChange={(e) => patchScopedAnimation({ intensity: parseFloat(e.target.value) })} /></label>
-              <label>Speed<input className="form-range" type="range" min={0.25} max={4} step={0.05} value={animationTarget.speed} onChange={(e) => patchScopedAnimation({ speed: parseFloat(e.target.value) })} /></label>
-            </Group>
-          </section>
+          <AnimationInspector
+            animation={animationTarget}
+            onPatchAnimation={patchScopedAnimation}
+          />
         )}
       </div>
     </aside>
-  );
-}
-
-function Group({ title, open, children }: { title: string; open?: boolean; children: ReactNode }) {
-  return <details className="insp-group" open={open}><summary>{title}</summary><div>{children}</div></details>;
-}
-
-function EmptyText({ text }: { text: string }) {
-  return <div className="insp-empty">{text}</div>;
-}
-
-function toColorInput(color: string | undefined): string {
-  if (color && /^#[0-9a-f]{6}$/i.test(color)) return color;
-  return '#ffffff';
-}
-
-const REACTIVE_SOURCES: LyricLayerAudioReactiveSource[] = ['master', 'vocals-stem', 'estimated'];
-const REACTIVE_BANDS: LyricLayerAudioReactiveBandMode[] = [
-  'full-mix',
-  'vocals',
-  'instrumental',
-  'kick',
-  'bass',
-  'hihat'
-];
-const REACTIVE_RESPONSES: LyricLayerAudioReactiveResponseMode[] = ['envelope', 'peak'];
-const REACTIVE_TARGETS = ['opacity', 'blur', 'glowIntensity', 'scale', 'offsetY'] as const;
-
-interface LayerAudioReactiveEditorProps {
-  value: LyricLayerAudioReactive | undefined;
-  onChange: (next: LyricLayerAudioReactive | undefined) => void;
-}
-
-function LayerAudioReactiveEditor({ value, onChange }: LayerAudioReactiveEditorProps) {
-  const reactive: LyricLayerAudioReactive = value ?? DEFAULT_LAYER_AUDIO_REACTIVE;
-  const isPresent = !!value;
-
-  const patch = (next: Partial<LyricLayerAudioReactive>) => {
-    onChange({
-      ...reactive,
-      ...next,
-      targets: { ...reactive.targets, ...(next.targets ?? {}) }
-    });
-  };
-
-  if (!isPresent) {
-    return (
-      <div>
-        <button
-          type="button"
-          className="ls-btn small"
-          onClick={() => onChange({ ...DEFAULT_LAYER_AUDIO_REACTIVE, enabled: true })}
-        >
-          Enable audio-reactive on this layer
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <>
-      <label className="tl-inline-check">
-        <input
-          type="checkbox"
-          checked={reactive.enabled}
-          onChange={(e) => patch({ enabled: e.target.checked })}
-        />
-        Drive this layer from audio
-      </label>
-      <div className="inspector-grid">
-        <label>Source<select className="form-control form-select" value={reactive.source} onChange={(e) => patch({ source: e.target.value as LyricLayerAudioReactiveSource })}>{REACTIVE_SOURCES.map(s => <option key={s} value={s}>{s}</option>)}</select></label>
-        <label>Band<select className="form-control form-select" value={reactive.bandMode} onChange={(e) => patch({ bandMode: e.target.value as LyricLayerAudioReactiveBandMode })}>{REACTIVE_BANDS.map(b => <option key={b} value={b}>{b}</option>)}</select></label>
-        <label>Response<select className="form-control form-select" value={reactive.responseMode} onChange={(e) => patch({ responseMode: e.target.value as LyricLayerAudioReactiveResponseMode })}>{REACTIVE_RESPONSES.map(r => <option key={r} value={r}>{r}</option>)}</select></label>
-        <label className="tl-inline-check"><input type="checkbox" checked={reactive.invert} onChange={(e) => patch({ invert: e.target.checked })} />Invert</label>
-      </div>
-      <div className="inspector-grid">
-        <label>Attack ms<input className="form-control form-input" type="number" min={0} max={4000} step={5} value={reactive.attackMs} onChange={(e) => { const n = parseFloat(e.target.value); if (Number.isFinite(n)) patch({ attackMs: n }); }} /></label>
-        <label>Release ms<input className="form-control form-input" type="number" min={0} max={4000} step={5} value={reactive.releaseMs} onChange={(e) => { const n = parseFloat(e.target.value); if (Number.isFinite(n)) patch({ releaseMs: n }); }} /></label>
-      </div>
-      <label>Threshold ({reactive.threshold.toFixed(2)})<input className="form-range" type="range" min={0} max={1} step={0.01} value={reactive.threshold} onChange={(e) => patch({ threshold: parseFloat(e.target.value) })} /></label>
-      <label>Softness ({reactive.softness.toFixed(2)})<input className="form-range" type="range" min={0} max={1} step={0.01} value={reactive.softness} onChange={(e) => patch({ softness: parseFloat(e.target.value) })} /></label>
-      <details className="insp-group" open>
-        <summary>Targets</summary>
-        <div>
-          {REACTIVE_TARGETS.map(key => {
-            const target = reactive.targets[key];
-            const enabled = !!target;
-            const tValue = target ?? { amount: 1, min: 0, max: 1 };
-            return (
-              <div key={key}>
-                <label className="tl-inline-check">
-                  <input
-                    type="checkbox"
-                    checked={enabled}
-                    onChange={(e) => {
-                      const nextTargets = { ...reactive.targets };
-                      if (e.target.checked) nextTargets[key] = tValue;
-                      else delete nextTargets[key];
-                      onChange({ ...reactive, targets: nextTargets });
-                    }}
-                  />
-                  {key}
-                </label>
-                {enabled && (
-                  <div className="inspector-grid">
-                    <label>Amount<input className="form-control form-input" type="number" step="0.05" min={-4} max={4} value={tValue.amount} onChange={(e) => { const n = parseFloat(e.target.value); if (Number.isFinite(n)) onChange({ ...reactive, targets: { ...reactive.targets, [key]: { ...tValue, amount: n } } }); }} /></label>
-                    <label>Min<input className="form-control form-input" type="number" step="0.05" value={tValue.min} onChange={(e) => { const n = parseFloat(e.target.value); if (Number.isFinite(n)) onChange({ ...reactive, targets: { ...reactive.targets, [key]: { ...tValue, min: n } } }); }} /></label>
-                    <label>Max<input className="form-control form-input" type="number" step="0.05" value={tValue.max} onChange={(e) => { const n = parseFloat(e.target.value); if (Number.isFinite(n)) onChange({ ...reactive, targets: { ...reactive.targets, [key]: { ...tValue, max: n } } }); }} /></label>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </details>
-      <button type="button" className="ls-btn small ghost" onClick={() => onChange(undefined)}>
-        Remove audio-reactive
-      </button>
-    </>
   );
 }

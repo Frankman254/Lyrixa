@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import './FloatingPanel.css';
 
@@ -66,7 +66,9 @@ export function FloatingPanel({
 
   const panelRef    = useRef<HTMLDivElement>(null);
   const posRef      = useRef<Position>(pos);
-  posRef.current    = pos;          // always reflects latest render
+  useEffect(() => {
+    posRef.current = pos;
+  }, [pos]);
 
   // ── Drag logic ────────────────────────────────────────
   const isDragging  = useRef(false);
@@ -99,6 +101,7 @@ export function FloatingPanel({
       x: Math.max(0, Math.min(window.innerWidth  - panelW, px + e.clientX - cx)),
       y: Math.max(0, Math.min(window.innerHeight - panelH, py + e.clientY - cy))
     };
+    posRef.current = next;
     setPos(next);
   };
 

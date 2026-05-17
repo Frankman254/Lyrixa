@@ -19,5 +19,13 @@ export default defineConfig([
       ecmaVersion: 2020,
       globals: globals.browser,
     },
+    rules: {
+      // This project is not using React Compiler yet. Keep the core Hooks
+      // rules on, but avoid compiler-specific rules that reject valid UI
+      // synchronization effects and established ref patterns.
+      'react-hooks/set-state-in-effect': 'off',
+      'react-hooks/immutability': 'off',
+      'react-hooks/preserve-manual-memoization': 'off',
+    },
   },
 ])

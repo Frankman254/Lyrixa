@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
 import { AudioEngine } from '../player/AudioEngine';
 import { TimelineEditor } from '../timeline-editor/TimelineEditor';
@@ -54,7 +54,7 @@ export function LyrixaEditorShell() {
   );
   const [miniPreviewVisible, setMiniPreviewVisible] = useState(true);
   const [nameEditing, setNameEditing] = useState(false);
-  const [draftName, setDraftName] = useState(project.name);
+  const [draftName, setDraftName] = useState('');
   const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
   const [selectedLayerId, setSelectedLayerId] = useState<string | null>(project.layers[0]?.id ?? null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() =>
@@ -65,8 +65,10 @@ export function LyrixaEditorShell() {
 
   const masterChannel = project.audioTracks.master;
   const vocalsChannel = project.audioTracks.vocals;
+  const effectivePlaybackMode =
+    playbackMode === 'vocals' && vocalsChannel?.objectUrl ? 'vocals' : 'master';
   const activeAudioChannel =
-    playbackMode === 'vocals' && vocalsChannel?.objectUrl ? vocalsChannel : masterChannel;
+    effectivePlaybackMode === 'vocals' ? vocalsChannel : masterChannel;
 
   const {
     audioEngineRef,
@@ -83,18 +85,8 @@ export function LyrixaEditorShell() {
     onCurrentTimeCommit: setCurrentTime
   });
 
-  useEffect(() => {
-    setDraftName(project.name);
-  }, [project.name]);
-
   const openMasterPicker = () => masterFileInputRef.current?.click();
   const openVocalsPicker = () => vocalsFileInputRef.current?.click();
-
-  useEffect(() => {
-    if (playbackMode === 'vocals' && !vocalsChannel?.objectUrl) {
-      setPlaybackMode('master');
-    }
-  }, [playbackMode, vocalsChannel?.objectUrl]);
 
   const handleAudioFileSelected = (role: AudioChannelRole) =>
     async (e: ChangeEvent<HTMLInputElement>) => {
@@ -121,7 +113,7 @@ export function LyrixaEditorShell() {
       console.error('[Lyrixa] Vocal isolation failed:', err);
       window.alert(err instanceof Error ? err.message : 'Could not isolate vocals from this track.');
     }
-  }, [extractVocalsFromMaster, isPlaying, masterChannel?.objectUrl, vocalExtractionStatus]);
+  }, [extractVocalsFromMaster, isPlaying, masterChannel?.objectUrl, setIsPlaying, vocalExtractionStatus]);
 
   const commitName = () => {
     const trimmed = draftName.trim();
@@ -187,10 +179,10 @@ export function LyrixaEditorShell() {
       <EditorTopBar
         projectName={project.name}
         nameEditing={nameEditing}
-        draftName={draftName}
+        draftName={nameEditing ? draftName : project.name}
         masterChannel={masterChannel ?? null}
         vocalsChannel={vocalsChannel ?? null}
-        playbackMode={playbackMode}
+        playbackMode={effectivePlaybackMode}
         isPlaying={isPlaying}
         currentTime={playbackTime}
         duration={effectiveDuration}
@@ -206,7 +198,10 @@ export function LyrixaEditorShell() {
         projectImportInputRef={projectImportInputRef}
         lyricsBundleImportInputRef={lyricsBundleImportInputRef}
         onDraftNameChange={setDraftName}
-        onStartNameEdit={() => setNameEditing(true)}
+        onStartNameEdit={() => {
+          setDraftName(project.name);
+          setNameEditing(true);
+        }}
         onCommitName={commitName}
         onCancelNameEdit={cancelNameEdit}
         onOpenMasterPicker={openMasterPicker}
@@ -217,7 +212,10 @@ export function LyrixaEditorShell() {
         onProjectFileSelected={handleProjectFileSelected}
         onLyricsBundleFileSelected={handleLyricsBundleFileSelected}
         onExtractVocals={handleExtractVocals}
-        onRemoveVocals={() => removeAudio('vocals')}
+        onRemoveVocals={() => {
+          setPlaybackMode('master');
+          removeAudio('vocals');
+        }}
         onOpenLyricsImport={() => setImportOpen(true)}
         onExportProject={handleExportProject}
         onExportLyricsBundle={handleExportLyricsBundle}
@@ -250,7 +248,10 @@ export function LyrixaEditorShell() {
         onReloadMaster={openMasterPicker}
         onClearMaster={() => removeAudio('master')}
         onReloadVocals={openVocalsPicker}
-        onClearVocals={() => removeAudio('vocals')}
+        onClearVocals={() => {
+          setPlaybackMode('master');
+          removeAudio('vocals');
+        }}
       />
 
       {activeAudioChannel?.objectUrl && (
@@ -259,7 +260,7 @@ export function LyrixaEditorShell() {
           audioUrl={activeAudioChannel.objectUrl}
           isPlaying={isPlaying}
           sourceSyncTime={playbackTime}
-          onDurationChange={playbackMode === 'master' ? setMasterDuration : () => undefined}
+          onDurationChange={effectivePlaybackMode === 'master' ? setMasterDuration : () => undefined}
           onEnded={() => setIsPlaying(false)}
         />
       )}
@@ -361,14 +362,16 @@ export function LyrixaEditorShell() {
         onImportProject={openProjectImportPicker}
       />
 
-      <LyricsImportPanel
-        open={importOpen}
-        initialText={project.rawLyricsText}
-        layers={project.layers}
-        vocalsAvailable={vocalsAnalysisReady}
-        onClose={() => setImportOpen(false)}
-        onApply={applyLyrics}
-      />
+      {importOpen && (
+        <LyricsImportPanel
+          open={importOpen}
+          initialText={project.rawLyricsText}
+          layers={project.layers}
+          vocalsAvailable={vocalsAnalysisReady}
+          onClose={() => setImportOpen(false)}
+          onApply={applyLyrics}
+        />
+      )}
 
       {previewOpen && (
         <div className="ls-preview-overlay" onClick={() => setPreviewOpen(false)}>

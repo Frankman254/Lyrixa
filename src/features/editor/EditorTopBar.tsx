@@ -3,6 +3,8 @@ import type { AudioChannel, AudioChannelRole } from '../../core/types/audio';
 import type { SaveStatus, VocalExtractionStatus } from './useLyrixaProject';
 import { ACCENT_OPTIONS } from '../../shared/theme/useAccentTheme';
 import type { AccentName } from '../../shared/theme/useAccentTheme';
+import { EditorHiddenFileInputs } from './EditorHiddenFileInputs';
+import { EditorPlaybackControls } from './EditorPlaybackControls';
 
 const SAVE_LABEL: Record<SaveStatus, string> = {
   idle: 'Saved',
@@ -177,36 +179,14 @@ export function EditorTopBar({
 
       <div className="tr-divider" />
 
-      <div className="playback-cluster">
-        <button
-          className="tr-btn ghost icon-only"
-          onClick={() => onSeek(0)}
-          title="Back to start"
-          disabled={!masterChannel?.objectUrl}
-        >
-          ⏮
-        </button>
-        <button
-          className={`play-btn ${isPlaying ? 'playing' : ''}`}
-          onClick={onPlayToggle}
-          title={isPlaying ? 'Pause (Space)' : 'Play (Space)'}
-          disabled={!masterChannel?.objectUrl}
-        >
-          {isPlaying ? '⏸' : '▶'}
-        </button>
-        <button
-          className="tr-btn ghost icon-only"
-          onClick={() => onSeek(Math.max(0, duration - 0.01))}
-          title="Skip to end"
-          disabled={!masterChannel?.objectUrl}
-        >
-          ⏭
-        </button>
-        <span className="time-readout">
-          <span className="mono">{formatTimecode(currentTime)}</span>
-          <span className="total mono"> / {formatTimecode(duration)}</span>
-        </span>
-      </div>
+      <EditorPlaybackControls
+        isPlaying={isPlaying}
+        currentTime={currentTime}
+        duration={duration}
+        enabled={!!masterChannel?.objectUrl}
+        onPlayToggle={onPlayToggle}
+        onSeek={onSeek}
+      />
 
       <div className="tr-divider" />
 
@@ -329,33 +309,14 @@ export function EditorTopBar({
         New
       </button>
 
-      <input
-        ref={masterFileInputRef}
-        type="file"
-        accept="audio/*,.mp3,.wav,.ogg,.flac,.m4a"
-        style={{ display: 'none' }}
-        onChange={onAudioFileSelected('master')}
-      />
-      <input
-        ref={vocalsFileInputRef}
-        type="file"
-        accept="audio/*,.mp3,.wav,.ogg,.flac,.m4a"
-        style={{ display: 'none' }}
-        onChange={onAudioFileSelected('vocals')}
-      />
-      <input
-        ref={projectImportInputRef}
-        type="file"
-        accept=".lyrixa.json,application/json"
-        style={{ display: 'none' }}
-        onChange={onProjectFileSelected}
-      />
-      <input
-        ref={lyricsBundleImportInputRef}
-        type="file"
-        accept=".lyrixa-lyrics.json,application/json"
-        style={{ display: 'none' }}
-        onChange={onLyricsBundleFileSelected}
+      <EditorHiddenFileInputs
+        masterFileInputRef={masterFileInputRef}
+        vocalsFileInputRef={vocalsFileInputRef}
+        projectImportInputRef={projectImportInputRef}
+        lyricsBundleImportInputRef={lyricsBundleImportInputRef}
+        onAudioFileSelected={onAudioFileSelected}
+        onProjectFileSelected={onProjectFileSelected}
+        onLyricsBundleFileSelected={onLyricsBundleFileSelected}
       />
     </header>
   );
@@ -367,12 +328,4 @@ function formatDuration(seconds: number): string {
   const m = Math.floor(total / 60);
   const s = total % 60;
   return `${m}:${String(s).padStart(2, '0')}`;
-}
-
-/** mm:ss.cs — high-precision timecode for the playback time readout. */
-function formatTimecode(seconds: number): string {
-  if (!Number.isFinite(seconds) || seconds < 0) return '0:00.00';
-  const m = Math.floor(seconds / 60);
-  const rest = seconds - m * 60;
-  return `${m}:${rest.toFixed(2).padStart(5, '0')}`;
 }
