@@ -19,7 +19,9 @@ import { normalizeLyricsText } from '../../core/lyrics/normalize';
 import type { NormalizeLyricsOptions } from '../../core/lyrics/normalize';
 import { createClipsFromNormalizedLyrics } from '../../core/timeline/clipsFromLyrics';
 import type { ClipDurationStrategy } from '../../core/timeline/durationStrategies';
+import { createTapSyncSourceId } from '../../core/timeline/tapSync';
 import {
+  clearLyrixaLocalStorage,
   createEmptyProject,
   loadProject,
   saveProject
@@ -31,11 +33,15 @@ import {
   deleteAllProjectAudio
 } from './audioBlobStorage';
 import { extractPeaksFromBlob } from './peakExtraction';
-import { getTextureAsset } from '../assets/textureAssetStorage';
+import {
+  deleteAllProjectTextures,
+  getTextureAsset
+} from '../assets/textureAssetStorage';
 
 const AUTOSAVE_DEBOUNCE_MS = 400;
 
 export type SaveStatus = 'idle' | 'pending' | 'saved';
+export type ClipUpdate = LyricClip[] | ((previous: LyricClip[]) => LyricClip[]);
 
 export interface ApplyLyricsOptions {
   /** Default duration in seconds. Used by `fixed` and as fallback. */
@@ -66,7 +72,7 @@ export interface UseLyrixaProjectResult {
   setRawLyricsText: (text: string) => void;
   applyLyrics: (rawText: string, options?: ApplyLyricsOptions) => void;
 
-  setClips: (next: LyricClip[]) => void;
+  setClips: (next: ClipUpdate) => void;
   updateClip: (clipId: string, patch: Partial<LyricClip>) => void;
   setLayers: (next: LyricLayer[]) => void;
   setStyleConfig: (next: LyricVisualStyle) => void;
@@ -79,6 +85,7 @@ export interface UseLyrixaProjectResult {
   importProject: (next: LyrixaProject) => void;
 
   resetProject: () => Promise<void>;
+  hardResetProject: () => Promise<void>;
 }
 
 /**
@@ -367,7 +374,12 @@ export function useLyrixaProject(): UseLyrixaProjectResult {
         trackDuration,
         strategy,
         idPrefix
-      });
+      }).map((clip, index) => ({
+        ...clip,
+        sourceIndex: index,
+        sourceId: createTapSyncSourceId(index, clip.text),
+        createdBy: 'import' as const
+      }));
 
       let nextClips: LyricClip[] = fresh;
 
@@ -377,7 +389,14 @@ export function useLyrixaProject(): UseLyrixaProjectResult {
         nextClips = fresh.map((generated, index) => {
           const reused = existingLayerClips[index];
           if (reused) {
-            return { ...reused, text: generated.text, muted: generated.muted };
+            return {
+              ...reused,
+              text: generated.text,
+              muted: generated.muted,
+              sourceIndex: generated.sourceIndex,
+              sourceId: generated.sourceId,
+              createdBy: reused.createdBy ?? 'import'
+            };
           }
           return generated;
         });
@@ -392,8 +411,11 @@ export function useLyrixaProject(): UseLyrixaProjectResult {
     });
   }, []);
 
-  const setClips = useCallback((next: LyricClip[]) => {
-    setProject(p => ({ ...p, clips: next }));
+  const setClips = useCallback((next: ClipUpdate) => {
+    setProject(p => ({
+      ...p,
+      clips: typeof next === 'function' ? next(p.clips) : next
+    }));
   }, []);
 
   const updateClip = useCallback((clipId: string, patch: Partial<LyricClip>) => {
@@ -448,6 +470,31 @@ export function useLyrixaProject(): UseLyrixaProjectResult {
     await deleteAllProjectAudio(oldId);
   }, []);
 
+  const hardResetProject = useCallback(async () => {
+    const oldId = projectIdRef.current;
+    if (saveTimerRef.current != null) {
+      window.clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+
+    blobsRef.current = { master: null };
+    setProject(p => {
+      const m = p.audioTracks.master?.objectUrl;
+      if (m) URL.revokeObjectURL(m);
+      collectTextureObjectUrls(p).forEach(url => URL.revokeObjectURL(url));
+      return createEmptyProject();
+    });
+    textureObjectUrlsRef.current.forEach(url => URL.revokeObjectURL(url));
+    textureObjectUrlsRef.current.clear();
+    setAudioNeedsReload(false);
+    setSaveStatus('idle');
+    clearLyrixaLocalStorage();
+    await Promise.all([
+      deleteAllProjectAudio(oldId),
+      deleteAllProjectTextures(oldId)
+    ]);
+  }, []);
+
   const importProject = useCallback((next: LyrixaProject) => {
     blobsRef.current = { master: null };
     setProject(p => {
@@ -479,7 +526,8 @@ export function useLyrixaProject(): UseLyrixaProjectResult {
     setRenderMode,
     setMasterDuration,
     importProject,
-    resetProject
+    resetProject,
+    hardResetProject
   };
 }
 

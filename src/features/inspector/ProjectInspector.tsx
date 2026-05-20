@@ -9,6 +9,7 @@ interface ProjectInspectorProps {
   onImportLyrics: () => void;
   onExportProject: () => void;
   onImportProject: () => void;
+  onHardResetProject: () => void;
 }
 
 export function ProjectInspector({
@@ -17,7 +18,8 @@ export function ProjectInspector({
   onProgressChange,
   onImportLyrics,
   onExportProject,
-  onImportProject
+  onImportProject,
+  onHardResetProject
 }: ProjectInspectorProps) {
   return (
     <section className="insp-stack">
@@ -46,6 +48,12 @@ export function ProjectInspector({
           />
           Show progress dot by default
         </label>
+      </Group>
+
+      <Group title="Danger zone">
+        <button className="ls-btn small danger" onClick={onHardResetProject}>
+          Hard Reset Project
+        </button>
       </Group>
     </section>
   );

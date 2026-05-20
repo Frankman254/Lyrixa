@@ -39,6 +39,7 @@ interface InspectorPanelProps {
   onImportLyrics: () => void;
   onExportProject: () => void;
   onImportProject: () => void;
+  onHardResetProject: () => void;
 }
 
 /**
@@ -61,7 +62,8 @@ export function InspectorPanel({
   onLayersChange,
   onImportLyrics,
   onExportProject,
-  onImportProject
+  onImportProject,
+  onHardResetProject
 }: InspectorPanelProps) {
   const selectedClip = useMemo(
     () => selectedClipId ? project.clips.find(clip => clip.id === selectedClipId) ?? null : null,
@@ -170,6 +172,7 @@ export function InspectorPanel({
             onImportLyrics={onImportLyrics}
             onExportProject={onExportProject}
             onImportProject={onImportProject}
+            onHardResetProject={onHardResetProject}
           />
         )}
 

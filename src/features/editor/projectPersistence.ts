@@ -221,3 +221,20 @@ export function clearPersistedProject(): void {
     /* ignore */
   }
 }
+
+export function clearLyrixaLocalStorage(): void {
+  if (typeof window === 'undefined' || !window.localStorage) return;
+  try {
+    const keys: string[] = [];
+    for (let i = 0; i < window.localStorage.length; i += 1) {
+      const key = window.localStorage.key(i);
+      if (!key) continue;
+      if (key === STORAGE_KEY || key.startsWith('lyrixa:') || key.startsWith('lyrixa_')) {
+        keys.push(key);
+      }
+    }
+    keys.forEach(key => window.localStorage.removeItem(key));
+  } catch {
+    /* ignore */
+  }
+}

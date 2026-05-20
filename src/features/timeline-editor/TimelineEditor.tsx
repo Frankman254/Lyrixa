@@ -22,6 +22,7 @@ import { TimelineMinimap } from './TimelineMinimap';
 import { TimelineSelectionToolbar } from './TimelineSelectionToolbar';
 import { TimelineToolbar } from './TimelineToolbar';
 import { useTimelineBandPeaks } from './useTimelineBandPeaks';
+import { syncDebug } from '../sync/syncDebug';
 import type { ClipPointerModifiers, DragMode } from './LyricClip';
 import {
   clampZoom,
@@ -162,6 +163,19 @@ export function TimelineEditor({
     }
     return map;
   }, [clips, layers]);
+
+  useEffect(() => {
+    const groupedByLayer = Object.fromEntries(
+      layers.map(layer => [layer.id, clips.filter(clip => clip.layerId === layer.id).length])
+    );
+    syncDebug('TIMELINE_RECEIVED_CLIPS', {
+      totalClips: clips.length,
+      groupedByLayer,
+      selectedLayerClipCount: effectiveSelectedLayerId
+        ? clips.filter(clip => clip.layerId === effectiveSelectedLayerId).length
+        : 0
+    });
+  }, [clips, layers, effectiveSelectedLayerId]);
 
   const audioRowHeights = MASTER_WAVEFORM_HEIGHT;
   const totalTracksHeight = layers.length * TRACK_HEIGHT;

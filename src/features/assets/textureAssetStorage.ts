@@ -78,3 +78,28 @@ export async function deleteTextureAsset(projectId: string, textureId: string): 
     /* ignore */
   }
 }
+
+export async function deleteAllProjectTextures(projectId: string): Promise<void> {
+  try {
+    if (!isAvailable()) return;
+    const db = await openDB();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(STORE_TEXTURES, 'readwrite');
+      const store = tx.objectStore(STORE_TEXTURES);
+      const cursor = store.openCursor();
+      cursor.onsuccess = () => {
+        const current = cursor.result;
+        if (!current) return;
+        if (typeof current.key === 'string' && current.key.startsWith(`${projectId}:texture:`)) {
+          current.delete();
+        }
+        current.continue();
+      };
+      cursor.onerror = () => reject(cursor.error);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch {
+    /* ignore */
+  }
+}

@@ -15,6 +15,7 @@ import { TapSyncPanel } from '../sync/TapSyncPanel';
 import { useTapSync } from '../sync/useTapSync';
 import type { TapSyncLine } from '../../core/timeline/tapSync';
 import {
+  createTapSyncSourceId,
   findNextUnpublishedLineIndex,
   orderedLayerClips
 } from '../../core/timeline/tapSync';
@@ -47,7 +48,8 @@ export function LyrixaEditorShell() {
     setCurrentTime,
     setMasterDuration,
     importProject,
-    resetProject
+    resetProject,
+    hardResetProject
   } = useLyrixaProject();
 
   const masterFileInputRef = useRef<HTMLInputElement>(null);
@@ -184,14 +186,15 @@ export function LyrixaEditorShell() {
       : fallbackSourceClips.map(clip => clip.text);
 
     return sourceTexts.map((text, index) => {
-      const generatedId = `sync-${layerId}-${index}`;
+      const sourceId = fallbackSourceClips[index]?.sourceId ?? createTapSyncSourceId(index, text);
       const sameTextAtIndex = layerClips[index]?.text.trim() === text.trim()
         ? layerClips[index]
         : undefined;
-      const existing = layerClips.find(clip => clip.id === generatedId) ?? sameTextAtIndex;
+      const existing = layerClips.find(clip => clip.sourceId === sourceId) ?? sameTextAtIndex;
       const template = existing ?? fallbackSourceClips[index];
       return {
-        id: existing?.id ?? generatedId,
+        sourceIndex: index,
+        sourceId,
         text,
         template
       };
@@ -200,20 +203,24 @@ export function LyrixaEditorShell() {
 
   const clearSyncLayer = useCallback((layerId = syncLayerId) => {
     if (!layerId) return;
-    setClips(project.clips.filter(clip => clip.layerId !== layerId));
-  }, [project.clips, syncLayerId, setClips]);
+    setClips(previous => previous.filter(clip => clip.layerId !== layerId));
+  }, [syncLayerId, setClips]);
 
   const startSyncForLayer = useCallback((layerId: string) => {
     if (!layerId) return;
     const lines = buildSyncLines(layerId);
+    const hydratedClips = attachSourceIdentityToLayerClips(project.clips, layerId, lines);
     if (project.rawLyricsText.trim().length === 0 && lines.length > 0) {
       setRawLyricsText(lines.map(line => line.text).join('\n'));
     }
+    if (hydratedClips !== project.clips) {
+      setClips(hydratedClips);
+    }
     setSyncLines(lines);
-    setSyncInitialCursor(findNextUnpublishedLineIndex(lines, project.clips, layerId));
+    setSyncInitialCursor(findNextUnpublishedLineIndex(lines, hydratedClips, layerId));
     setSelectedLayerId(layerId);
     tapSync.reset();
-  }, [buildSyncLines, project.clips, project.rawLyricsText, setRawLyricsText, tapSync]);
+  }, [buildSyncLines, project.clips, project.rawLyricsText, setClips, setRawLyricsText, tapSync]);
 
   const handleToggleSync = useCallback(() => {
     if (syncMode) {
@@ -233,8 +240,7 @@ export function LyrixaEditorShell() {
 
   const handleSyncLayerChange = useCallback((layerId: string) => {
     startSyncForLayer(layerId);
-    handleSeek(0);
-  }, [handleSeek, startSyncForLayer]);
+  }, [startSyncForLayer]);
 
   const handleSyncRestart = useCallback(() => {
     clearSyncLayer();
@@ -242,6 +248,25 @@ export function LyrixaEditorShell() {
     tapSync.reset();
     handleSeek(0);
   }, [clearSyncLayer, tapSync, handleSeek]);
+
+  const handleHardResetProject = useCallback(async () => {
+    const confirmed = window.confirm(
+      'Esto borrará el proyecto actual, clips, lyrics, audio guardado, texturas, preferencias y datos locales. ¿Deseas continuar?'
+    );
+    if (!confirmed) return;
+    setIsPlaying(false);
+    setPlaybackTime(0);
+    setSyncMode(false);
+    setSyncLines([]);
+    setSyncInitialCursor(0);
+    setPreviewOpen(false);
+    setTransparentPreviewOpen(false);
+    setMiniPreviewVisible(true);
+    setSelectedClipId(null);
+    setSelectedLayerId(null);
+    await hardResetProject();
+    window.alert('Project reset complete');
+  }, [hardResetProject, setIsPlaying, setPlaybackTime]);
 
   const handleFloatingPreviewSize = (width: number) => {
     const next = Math.max(320, Math.min(760, width));
@@ -419,6 +444,7 @@ export function LyrixaEditorShell() {
         onImportLyrics={() => setImportOpen(true)}
         onExportProject={handleExportProject}
         onImportProject={openProjectImportPicker}
+        onHardResetProject={handleHardResetProject}
       />
 
       {importOpen && (
@@ -549,4 +575,40 @@ function findBestLyricSourceClips(
     if (candidate.length > best.length) best = candidate;
   }
   return best;
+}
+
+function attachSourceIdentityToLayerClips(
+  clips: LyricClip[],
+  layerId: string,
+  lines: TapSyncLine[]
+): LyricClip[] {
+  const layerClips = orderedLayerClips(clips, layerId);
+  const patches = new Map<string, Partial<LyricClip>>();
+
+  for (const line of lines) {
+    const sameSource = layerClips.find(clip => clip.sourceId === line.sourceId);
+    const sameTextAtIndex = layerClips[line.sourceIndex]?.text.trim() === line.text.trim()
+      ? layerClips[line.sourceIndex]
+      : undefined;
+    const clip = sameSource ?? sameTextAtIndex;
+    if (!clip) continue;
+    if (
+      clip.sourceId === line.sourceId &&
+      clip.sourceIndex === line.sourceIndex &&
+      clip.createdBy
+    ) {
+      continue;
+    }
+    patches.set(clip.id, {
+      sourceId: line.sourceId,
+      sourceIndex: line.sourceIndex,
+      createdBy: clip.createdBy ?? 'import'
+    });
+  }
+
+  if (patches.size === 0) return clips;
+  return clips.map(clip => {
+    const patch = patches.get(clip.id);
+    return patch ? { ...clip, ...patch } : clip;
+  });
 }

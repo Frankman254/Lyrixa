@@ -48,6 +48,13 @@ export interface LyricClip {
   /** The layer/track this clip lives on. */
   layerId: string;
 
+  /** Original normalized lyric line index, when the clip came from a lyric source. */
+  sourceIndex?: number;
+  /** Stable source identity shared by the same lyric line across layers. */
+  sourceId?: string;
+  /** Creation path used by sync/import tooling. */
+  createdBy?: 'tap-sync' | 'manual' | 'import';
+
   /** Reference to a shared style preset. */
   styleId?: string;
   /** Per-clip overrides applied on top of the shared style. */

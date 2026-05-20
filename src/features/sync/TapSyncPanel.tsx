@@ -70,8 +70,12 @@ export function TapSyncPanel({
   onRestart,
   onClose
 }: TapSyncPanelProps) {
-  const publishedById = useMemo(
-    () => new Map(clips.filter(clip => clip.layerId === layerId).map(clip => [clip.id, clip])),
+  const publishedBySourceId = useMemo(
+    () => new Map(
+      clips
+        .filter(clip => clip.layerId === layerId && clip.sourceId)
+        .map(clip => [clip.sourceId!, clip])
+    ),
     [clips, layerId]
   );
 
@@ -92,6 +96,13 @@ export function TapSyncPanel({
   const { cursorIndex, total, done, canUndo, isHolding } = sync;
   const current = lines[cursorIndex];
   const nextUp = lines[cursorIndex + 1];
+  const doneCount = useMemo(
+    () => layerId
+      ? lines.filter(line => isTapSyncLinePublished(clips, layerId, line)).length
+      : 0,
+    [clips, layerId, lines]
+  );
+  const pendingCount = Math.max(0, total - doneCount);
 
   // Pointer-based hold so mouse users get the same press-and-release timing.
   const handlePointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
@@ -153,6 +164,16 @@ export function TapSyncPanel({
           </select>
         </label>
 
+        <div className="tapsync-status" aria-label="Sync status">
+          <span>Layer <strong>{layerName}</strong></span>
+          <span>Paragraph <strong>{total > 0 ? Math.min(cursorIndex + 1, total) : 0}/{total}</strong></span>
+          <span>Done <strong>{doneCount}</strong></span>
+          <span>Pending <strong>{pendingCount}</strong></span>
+          <span>Holding <strong>{isHolding ? 'yes' : 'no'}</strong></span>
+          <span>Last clip <strong>{sync.lastCreatedClipId ?? 'none'}</strong></span>
+          <span>Committed <strong>{sync.lastCommittedTime == null ? 'none' : formatTime(sync.lastCommittedTime)}</strong></span>
+        </div>
+
         <div className="tapsync-controls">
           <button className="tapsync-btn primary" onClick={onPlayToggle} title="Play / pause (P)">
             {isPlaying ? '❚❚ Pause' : '▶ Play'}
@@ -165,7 +186,7 @@ export function TapSyncPanel({
             <button className="tapsync-btn icon" onClick={() => sync.nudge(-0.05)} title="Nudge earlier (←)">−</button>
             <button className="tapsync-btn icon" onClick={() => sync.nudge(0.05)} title="Nudge later (→)">+</button>
           </div>
-          <button className="tapsync-btn ghost" onClick={onRestart} title="Clear this layer and tap from the first line">↻ Restart</button>
+          <button className="tapsync-btn ghost" onClick={onRestart} title="Clear only the selected layer and tap from the first line">Clear layer</button>
         </div>
 
         <div className="tapsync-speed" title="Slow the song down so fast lines are easier to time precisely">
@@ -192,13 +213,13 @@ export function TapSyncPanel({
                 : layerId && isTapSyncLinePublished(clips, layerId, line)
                   ? 'done'
                   : 'pending';
-            const published = publishedById.get(line.id);
+            const published = publishedBySourceId.get(line.sourceId);
             const duration = published ? Math.max(0, published.endTime - published.startTime) : 0;
             const hasTiming = !!published && !published.muted && published.text.trim().length > 0 && duration > 0;
             const timingLabel = hasTiming ? formatDuration(duration) : '·';
             return (
               <button
-                key={line.id}
+                key={line.sourceId}
                 ref={idx === cursorIndex ? activeRef : undefined}
                 className={`tapsync-row ${state}`}
                 onClick={() => published && onSeek(published.startTime)}
