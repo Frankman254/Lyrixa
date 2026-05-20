@@ -10,9 +10,10 @@ import { MIN_CLIP_DURATION } from '../types/clip';
  * Because both edges are captured per line, real gaps (instrumental breaks)
  * survive and short lines get their true short duration.
  *
- * Clips are addressed in their array order *within a layer* — that order is the
- * line order produced by `createClipsFromNormalizedLyrics`, so cursor `i` always
- * maps to lyric line `i`.
+ * The lyric source (`TapSyncLine[]`) is the single source of truth for what to
+ * time; each line carries a stable `id`. Timing a line writes/updates a real
+ * clip in `project.clips` keyed by that id on the selected layer, so sync never
+ * keeps a private clip copy that can diverge from the timeline.
  */
 
 export interface TapOptions {
@@ -81,37 +82,9 @@ function createLineClip(
 }
 
 /**
- * Begin a line at `time` (key-down): stamp the start of the clip at
- * `cursorIndex` and give it a provisional minimum window until the matching
- * key-up sets its real end. Returns a new clips array (cursor does not advance).
- */
-export function setLineStart(
-  clips: LyricClip[],
-  layerId: string,
-  cursorIndex: number,
-  time: number,
-  options: TapOptions = {}
-): LyricClip[] {
-  const { minDuration = MIN_CLIP_DURATION, trackDuration } = options;
-  const targets = orderedLayerClips(clips, layerId);
-  const current = targets[cursorIndex];
-  if (!current) return clips;
-
-  const cap = trackDuration != null ? Math.max(0, trackDuration - minDuration) : Infinity;
-  const start = Math.min(Math.max(0, time), cap);
-  // Timing a line makes it visible again (blank lines stay muted).
-  const muted = current.text.trim().length === 0;
-  return clips.map(clip =>
-    clip.id === current.id
-      ? { ...clip, startTime: start, endTime: start + minDuration, muted }
-      : clip
-  );
-}
-
-/**
  * Publish a source line into the destination layer and stamp its start.
- * Unlike `setLineStart`, this does not require pending clips to already exist
- * on the timeline; sync can build the destination layer line by line.
+ * Does not require pending clips to already exist on the timeline; sync can
+ * build the destination layer line by line.
  */
 export function publishLineStart(
   clips: LyricClip[],
@@ -129,35 +102,6 @@ export function publishLineStart(
     return clips.map(clip => (clip.id === line.id ? nextClip : clip));
   }
   return [...clips, nextClip];
-}
-
-/**
- * End a line at `time` (key-up): stamp the end of the clip at `cursorIndex`,
- * clamped to at least `minDuration` after its start. Returns a new clips array;
- * the caller advances the cursor.
- */
-export function setLineEnd(
-  clips: LyricClip[],
-  layerId: string,
-  cursorIndex: number,
-  time: number,
-  options: TapOptions = {}
-): LyricClip[] {
-  const { minDuration = MIN_CLIP_DURATION, trackDuration } = options;
-  const targets = orderedLayerClips(clips, layerId);
-  const current = targets[cursorIndex];
-  if (!current) return clips;
-
-  let end = Math.max(current.startTime + minDuration, time);
-  if (trackDuration != null) end = Math.min(end, trackDuration);
-  if (end - current.startTime < minDuration) end = current.startTime + minDuration;
-
-  // Ending a line should keep the same visibility rule as starting it. This
-  // makes live stretch updates safe even if they run from a parked snapshot.
-  const muted = current.text.trim().length === 0;
-  return clips.map(clip =>
-    clip.id === current.id ? { ...clip, endTime: end, muted } : clip
-  );
 }
 
 /** Update the end time of a line that has already been published. */
@@ -178,20 +122,6 @@ export function publishLineEnd(
   const muted = current.text.trim().length === 0;
   return clips.map(clip =>
     clip.id === current.id ? { ...clip, endTime: end, muted } : clip
-  );
-}
-
-/**
- * Reset every clip on `layerId` to a parked, un-timed state at t=0 so the lane
- * starts clean for a fresh sync pass. Parked clips are muted so they don't all
- * pile onto the live preview at once — each becomes visible when it's timed.
- * Text and all other metadata are kept.
- */
-export function parkLayerClips(clips: LyricClip[], layerId: string): LyricClip[] {
-  return clips.map(clip =>
-    clip.layerId === layerId
-      ? { ...clip, startTime: 0, endTime: MIN_CLIP_DURATION, muted: true }
-      : clip
   );
 }
 
