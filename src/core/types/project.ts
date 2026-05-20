@@ -30,10 +30,7 @@ export interface LyrixaTrack {
 export interface LyrixaProject {
   id: string;
   name: string;
-  /**
-   * Audio channels bound to this project. `master` is what plays;
-   * `vocals` is an optional analysis stem.
-   */
+  /** Audio channels bound to this project. `master` is the track that plays. */
   audioTracks: ProjectAudioTracks;
   /** Raw paste from the user, kept verbatim for re-normalization. */
   rawLyricsText: string;

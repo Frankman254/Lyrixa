@@ -6,8 +6,7 @@ import type { AudioChannelRole } from '../../core/types/audio';
  * Audio blobs are too large for localStorage. localStorage holds the lightweight
  * project JSON (lyrics, clips, layers, style); the actual files live here.
  *
- * Records are keyed by `${projectId}:${role}` so a project can hold a master
- * track and an optional vocals stem side by side. Bare-projectId keys from
+ * Records are keyed by `${projectId}:${role}`. Bare-projectId keys from
  * the previous schema are still readable as `master` via a legacy fallback.
  */
 
@@ -138,10 +137,13 @@ export async function deleteAudio(
 }
 
 export async function deleteAllProjectAudio(projectId: string): Promise<void> {
-  await Promise.all([
-    deleteAudio(projectId, 'master'),
-    deleteAudio(projectId, 'vocals')
-  ]);
+  await deleteAudio(projectId, 'master');
+  // Tidy any legacy vocals-stem blob left by older project versions.
+  try {
+    await withStore('readwrite', store => store.delete(`${projectId}:vocals`));
+  } catch {
+    /* ignore — no legacy record */
+  }
 }
 
 export function audioStorageAvailable(): boolean {

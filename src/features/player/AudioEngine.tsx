@@ -17,6 +17,8 @@ export interface AudioEngineRef {
 interface AudioEngineProps {
   audioUrl: string;
   isPlaying: boolean;
+  /** Playback speed multiplier. 1 = normal. Used by tap-sync to slow fast songs. */
+  playbackRate?: number;
   /** Position to restore when the underlying audio source URL changes. */
   sourceSyncTime?: number;
   /** Optional ~4Hz tick from the <audio> element. Use rAF for smooth playhead. */
@@ -28,6 +30,7 @@ interface AudioEngineProps {
 export const AudioEngine = forwardRef<AudioEngineRef, AudioEngineProps>(({
   audioUrl,
   isPlaying,
+  playbackRate = 1,
   sourceSyncTime = 0,
   onTimeUpdate,
   onDurationChange,
@@ -43,6 +46,10 @@ export const AudioEngine = forwardRef<AudioEngineRef, AudioEngineProps>(({
   useEffect(() => {
     sourceSyncTimeRef.current = sourceSyncTime;
   }, [sourceSyncTime]);
+
+  useEffect(() => {
+    if (audioRef.current) audioRef.current.playbackRate = playbackRate;
+  }, [playbackRate, audioUrl]);
 
   const initWebAudio = () => {
     if (!audioCtxRef.current) {

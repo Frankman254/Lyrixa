@@ -11,10 +11,10 @@ npm run lint
 npm run build
 ```
 
-The main editor route is:
+The app mounts the editor directly at the dev server root:
 
 ```text
-http://localhost:5173/#/editor
+http://localhost:5173/
 ```
 
 ## Code Map

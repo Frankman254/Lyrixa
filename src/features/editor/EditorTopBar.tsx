@@ -1,6 +1,6 @@
 import type { ChangeEvent, RefObject } from 'react';
 import type { AudioChannel, AudioChannelRole } from '../../core/types/audio';
-import type { SaveStatus, VocalExtractionStatus } from './useLyrixaProject';
+import type { SaveStatus } from './useLyrixaProject';
 import { ACCENT_OPTIONS } from '../../shared/theme/useAccentTheme';
 import type { AccentName } from '../../shared/theme/useAccentTheme';
 import { EditorHiddenFileInputs } from './EditorHiddenFileInputs';
@@ -23,21 +23,17 @@ interface EditorTopBarProps {
   nameEditing: boolean;
   draftName: string;
   masterChannel: AudioChannel | null;
-  vocalsChannel: AudioChannel | null;
-  playbackMode: 'master' | 'vocals';
   isPlaying: boolean;
   currentTime: number;
   duration: number;
   saveStatus: SaveStatus;
-  vocalExtractionStatus: VocalExtractionStatus;
-  vocalsAnalysisReady: boolean;
-  canGenerateTimings: boolean;
+  syncMode: boolean;
+  canSync: boolean;
   previewOpen: boolean;
   transparentPreviewOpen: boolean;
   miniPreviewVisible: boolean;
   accent: AccentName;
   masterFileInputRef: RefObject<HTMLInputElement | null>;
-  vocalsFileInputRef: RefObject<HTMLInputElement | null>;
   projectImportInputRef: RefObject<HTMLInputElement | null>;
   lyricsBundleImportInputRef: RefObject<HTMLInputElement | null>;
   onDraftNameChange: (value: string) => void;
@@ -45,22 +41,18 @@ interface EditorTopBarProps {
   onCommitName: () => void;
   onCancelNameEdit: () => void;
   onOpenMasterPicker: () => void;
-  onOpenVocalsPicker: () => void;
   onOpenProjectImportPicker: () => void;
   onOpenLyricsBundleImportPicker: () => void;
   onAudioFileSelected: (role: AudioChannelRole) => (e: ChangeEvent<HTMLInputElement>) => void;
   onProjectFileSelected: (e: ChangeEvent<HTMLInputElement>) => void;
   onLyricsBundleFileSelected: (e: ChangeEvent<HTMLInputElement>) => void;
-  onExtractVocals: () => void;
-  onRemoveVocals: () => void;
   onOpenLyricsImport: () => void;
+  onToggleSync: () => void;
   onExportProject: () => void;
   onExportLyricsBundle: () => void;
-  onRegenerateFromVocals: (options?: { layerId?: string; minDuration?: number; maxDuration?: number }) => void;
   onTogglePreview: () => void;
   onOpenOverlay: () => void;
   onShowMiniPreview: () => void;
-  onPlaybackModeChange: (mode: 'master' | 'vocals') => void;
   onPlayToggle: () => void;
   onSeek: (time: number) => void;
   onResetProject: () => void;
@@ -72,21 +64,17 @@ export function EditorTopBar({
   nameEditing,
   draftName,
   masterChannel,
-  vocalsChannel,
-  playbackMode,
   isPlaying,
   currentTime,
   duration,
   saveStatus,
-  vocalExtractionStatus,
-  vocalsAnalysisReady,
-  canGenerateTimings,
+  syncMode,
+  canSync,
   previewOpen,
   transparentPreviewOpen,
   miniPreviewVisible,
   accent,
   masterFileInputRef,
-  vocalsFileInputRef,
   projectImportInputRef,
   lyricsBundleImportInputRef,
   onDraftNameChange,
@@ -94,22 +82,18 @@ export function EditorTopBar({
   onCommitName,
   onCancelNameEdit,
   onOpenMasterPicker,
-  onOpenVocalsPicker,
   onOpenProjectImportPicker,
   onOpenLyricsBundleImportPicker,
   onAudioFileSelected,
   onProjectFileSelected,
   onLyricsBundleFileSelected,
-  onExtractVocals,
-  onRemoveVocals,
   onOpenLyricsImport,
+  onToggleSync,
   onExportProject,
   onExportLyricsBundle,
-  onRegenerateFromVocals,
   onTogglePreview,
   onOpenOverlay,
   onShowMiniPreview,
-  onPlaybackModeChange,
   onPlayToggle,
   onSeek,
   onResetProject,
@@ -158,25 +142,6 @@ export function EditorTopBar({
         <span className="duration mono">{masterDuration}</span>
       </button>
 
-      <button
-        className="tr-btn"
-        onClick={onExtractVocals}
-        disabled={!masterChannel?.objectUrl || vocalExtractionStatus === 'extracting'}
-        title="Isolate a vocals stem from the master track"
-      >
-        {vocalExtractionStatus === 'extracting' ? 'Isolating…' : vocalsChannel ? '↻ Isolate vocals' : '✦ Isolate vocals'}
-      </button>
-      <button
-        className="tr-btn ghost"
-        onClick={onOpenVocalsPicker}
-        title="Upload a clean isolated vocals stem"
-      >
-        Upload stem
-      </button>
-      {vocalsChannel && (
-        <button className="tr-btn ghost icon-only" onClick={onRemoveVocals} title="Remove vocals stem">✕</button>
-      )}
-
       <div className="tr-divider" />
 
       <EditorPlaybackControls
@@ -190,63 +155,26 @@ export function EditorTopBar({
 
       <div className="tr-divider" />
 
-      {vocalsAnalysisReady && canGenerateTimings && (
-        <button
-          className="tr-btn primary"
-          onClick={() => onRegenerateFromVocals()}
-          title="Use detected vocal activity regions to retime all lyric clips."
-        >
-          ⟲ Generate timings from vocals
-        </button>
-      )}
       <button className="tr-btn" onClick={onOpenLyricsImport} title="Paste or import lyrics text">
         Import lyrics
       </button>
+      <button
+        className={`tr-btn primary ${syncMode ? 'active' : ''}`}
+        onClick={onToggleSync}
+        disabled={!canSync}
+        title={canSync
+          ? 'Tap-to-sync: play the song and press Space on each line'
+          : 'Load audio and import lyrics first'}
+      >
+        {syncMode ? '✕ Exit sync' : '⊙ Sync lyrics'}
+      </button>
 
       <div className="transport-spacer" />
-
-      {vocalsAnalysisReady && (
-        <div className="stem-indicator">
-          <span className="dot" />
-          Vocals stem active
-        </div>
-      )}
-      {vocalsChannel && !vocalsAnalysisReady && (
-        <div className="stem-indicator analyzing">
-          <span className="dot" />
-          Analyzing vocals…
-        </div>
-      )}
-      {vocalExtractionStatus === 'failed' && (
-        <div className="stem-indicator error">
-          <span className="dot" />
-          Vocal isolation failed
-        </div>
-      )}
 
       <div className={`save-status ${saveTone}`}>
         <span className="dot" />
         {SAVE_LABEL[saveStatus]}
       </div>
-
-      {vocalsChannel?.objectUrl && (
-        <div className="tr-group" role="tablist" aria-label="Playback source">
-          <button
-            className={`tr-btn small ${playbackMode === 'master' ? 'active' : ''}`}
-            onClick={() => onPlaybackModeChange('master')}
-            title="Listen to the original master track"
-          >
-            Master
-          </button>
-          <button
-            className={`tr-btn small ${playbackMode === 'vocals' ? 'active' : ''}`}
-            onClick={() => onPlaybackModeChange('vocals')}
-            title="Listen to the isolated vocals helper"
-          >
-            Vocals
-          </button>
-        </div>
-      )}
 
       <div className="tr-group">
         <button className="tr-btn small" onClick={onOpenProjectImportPicker} title="Import a .lyrixa.json project">
@@ -311,7 +239,6 @@ export function EditorTopBar({
 
       <EditorHiddenFileInputs
         masterFileInputRef={masterFileInputRef}
-        vocalsFileInputRef={vocalsFileInputRef}
         projectImportInputRef={projectImportInputRef}
         lyricsBundleImportInputRef={lyricsBundleImportInputRef}
         onAudioFileSelected={onAudioFileSelected}

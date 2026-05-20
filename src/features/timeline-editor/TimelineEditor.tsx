@@ -40,11 +40,10 @@ interface TimelineEditorProps {
   isPlaying: boolean;
   trackName: string;
   masterChannel?: AudioChannel | null;
-  vocalsChannel?: AudioChannel | null;
   peaks?: AudioPeak[];
   embedded?: boolean;
-  /** Already-decoded peaks from the vocals stem. Used for vocals + instrumental band modes. */
-  vocalsBandPeaks?: AudioPeak[] | null;
+  /** When true, the timeline's global keyboard shortcuts are suspended (e.g. during tap-sync). */
+  disableShortcuts?: boolean;
   /** Async callback to extract frequency-filtered peaks for a given band mode. */
   onExtractBandPeaks?: (mode: AudioBandMode) => Promise<AudioPeak[] | null>;
   onClipsChange: (next: LyricClipModel[]) => void;
@@ -66,7 +65,6 @@ interface DragState {
 
 const TRACK_HEIGHT = 64;
 const MASTER_WAVEFORM_HEIGHT = 96;
-const VOCALS_WAVEFORM_HEIGHT = 72;
 const RULER_HEIGHT = 28;
 
 export function TimelineEditor({
@@ -77,10 +75,9 @@ export function TimelineEditor({
   isPlaying,
   trackName,
   masterChannel,
-  vocalsChannel,
   peaks,
   embedded = false,
-  vocalsBandPeaks,
+  disableShortcuts = false,
   onExtractBandPeaks,
   onClipsChange,
   onLayersChange,
@@ -95,8 +92,6 @@ export function TimelineEditor({
   const [snapSeconds, setSnapSeconds] = useState(0);
   const [hoveredLayerId, setHoveredLayerId] = useState<string | null>(null);
   const [offsetInput, setOffsetInput] = useState<string>('0');
-  /** Which audio waveform rows to display. */
-  const [waveformView, setWaveformView] = useState<'master' | 'vocals' | 'both'>('both');
   /** Which frequency band to emphasize in the master waveform. */
   const [bandMode, setBandMode] = useState<AudioBandMode>(() => {
     try { return (localStorage.getItem('lyrixa_band_mode') as AudioBandMode | null) ?? 'auto'; }
@@ -116,6 +111,9 @@ export function TimelineEditor({
   // Stable ref so the keyboard handler can call onPlayToggle without stale closure.
   const onPlayToggleRef = useRef(onPlayToggle);
   useEffect(() => { onPlayToggleRef.current = onPlayToggle; }, [onPlayToggle]);
+  // Suspend timeline shortcuts while another mode (tap-sync) owns the keyboard.
+  const disableShortcutsRef = useRef(disableShortcuts);
+  useEffect(() => { disableShortcutsRef.current = disableShortcuts; }, [disableShortcuts]);
 
   useEffect(() => { clipsRef.current = clips; }, [clips]);
   useEffect(() => { layersRef.current = layers; }, [layers]);
@@ -165,8 +163,7 @@ export function TimelineEditor({
     return map;
   }, [clips, layers]);
 
-  const audioRowHeights =
-    MASTER_WAVEFORM_HEIGHT + (vocalsChannel ? VOCALS_WAVEFORM_HEIGHT : 0);
+  const audioRowHeights = MASTER_WAVEFORM_HEIGHT;
   const totalTracksHeight = layers.length * TRACK_HEIGHT;
   const playheadHeight = RULER_HEIGHT + audioRowHeights + totalTracksHeight;
 
@@ -529,6 +526,7 @@ export function TimelineEditor({
   // ── Keyboard shortcuts ─────────────────────────────────────────
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (disableShortcutsRef.current) return;
       const target = e.target as HTMLElement | null;
       if (target) {
         const tag = target.tagName;
@@ -582,13 +580,11 @@ export function TimelineEditor({
     displayPeaks,
     bandPeaks,
     bandPeaksLoading,
-    bandPeaksSource,
     masterIsMock
   } = useTimelineBandPeaks({
     bandMode,
     masterChannel,
     fallbackPeaks: peaks,
-    vocalsBandPeaks,
     onExtractBandPeaks
   });
 
@@ -612,9 +608,7 @@ export function TimelineEditor({
         isPlaying={isPlaying}
         pxPerSecond={pxPerSecond}
         masterChannel={masterChannel}
-        vocalsChannel={vocalsChannel}
         bandMode={bandMode}
-        waveformView={waveformView}
         snapSeconds={snapSeconds}
         onPlayToggle={onPlayToggle}
         onZoomOut={zoomOut}
@@ -627,7 +621,6 @@ export function TimelineEditor({
           setBandMode(next);
           try { localStorage.setItem('lyrixa_band_mode', next); } catch { /* ignore */ }
         }}
-        onWaveformViewChange={setWaveformView}
         onSnapSecondsChange={setSnapSeconds}
         onExit={onExit}
       />
@@ -691,13 +684,9 @@ export function TimelineEditor({
             laneWidth={laneWidth}
             rulerHeight={RULER_HEIGHT}
             masterHeight={MASTER_WAVEFORM_HEIGHT}
-            vocalsHeight={VOCALS_WAVEFORM_HEIGHT}
-            waveformView={waveformView}
             bandMode={bandMode}
-            bandPeaksSource={bandPeaksSource}
             bandPeaksLoading={bandPeaksLoading}
             masterChannel={masterChannel}
-            vocalsChannel={vocalsChannel}
             displayPeaks={displayPeaks}
             bandPeaks={bandPeaks}
             masterIsMock={masterIsMock}

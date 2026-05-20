@@ -332,44 +332,6 @@
   box-shadow: 0 0 8px var(--warning);
 }
 
-.stem-indicator {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--s-2);
-  height: 30px;
-  padding: 0 10px;
-  border-radius: var(--r-2);
-  background: oklch(0.78 0.14 145 / 0.08);
-  border: 1px solid oklch(0.78 0.14 145 / 0.25);
-  color: var(--c-vocals);
-  font-size: 11px;
-  font-family: var(--font-mono);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-.stem-indicator.analyzing {
-  background: oklch(0.80 0.14 80 / 0.08);
-  border-color: oklch(0.80 0.14 80 / 0.25);
-  color: var(--warning);
-}
-.stem-indicator.error {
-  background: oklch(from var(--danger) l c h / 0.10);
-  border-color: oklch(from var(--danger) l c h / 0.35);
-  color: var(--danger);
-}
-.stem-indicator .dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 999px;
-  background: currentColor;
-  box-shadow: 0 0 10px currentColor;
-  animation: pulse-soft 2.4s ease-in-out infinite;
-}
-@keyframes pulse-soft {
-  0%, 100% { opacity: 0.6; }
-  50% { opacity: 1; }
-}
 
 .accent-picker {
   display: inline-flex;

@@ -40,7 +40,6 @@ export interface HydratedProject {
 type PersistedAudioChannel = Omit<AudioChannel, 'objectUrl'>;
 interface PersistedAudioTracks {
   master: PersistedAudioChannel | null;
-  vocals?: PersistedAudioChannel | null;
 }
 
 interface PersistedProject extends Omit<LyrixaProject, 'audioTracks'> {
@@ -155,9 +154,6 @@ function rehydrateV2(persisted: PersistedProject): LyrixaProject {
     audioTracks: {
       master: persisted.audioTracks?.master
         ? { ...persisted.audioTracks.master, objectUrl: undefined }
-        : null,
-      vocals: persisted.audioTracks?.vocals
-        ? { ...persisted.audioTracks.vocals, objectUrl: undefined }
         : null
     }
   });
@@ -171,8 +167,7 @@ function migrateV1(legacy: LegacyV1Project): LyrixaProject {
           duration: legacy.track.duration,
           waveformPeaks: legacy.track.waveformPeaks
         }
-      : null,
-    vocals: null
+      : null
   };
   return {
     id: legacy.id,
@@ -202,8 +197,7 @@ export function saveProject(project: LyrixaProject): void {
   const persisted: PersistedProject = {
     ...serializableProject,
     audioTracks: {
-      master: stripObjectUrls(serializableProject.audioTracks.master),
-      vocals: stripObjectUrls(serializableProject.audioTracks.vocals)
+      master: stripObjectUrls(serializableProject.audioTracks.master)
     }
   };
 

@@ -29,7 +29,6 @@ export interface LyrixaExportEnvelope {
   project: Omit<LyrixaProject, 'audioTracks'> & {
     audioTracks: {
       master: SerializableAudioChannel | null;
-      vocals?: SerializableAudioChannel | null;
     };
     uiPreferences?: {
       bandMode?: string;
@@ -48,8 +47,7 @@ export function createProjectExportEnvelope(
     project: {
       ...stripRuntimeTextureUrls(normalizeProject(project)),
       audioTracks: {
-        master: stripObjectUrl(project.audioTracks.master),
-        vocals: stripObjectUrl(project.audioTracks.vocals)
+        master: stripObjectUrl(project.audioTracks.master)
       },
       uiPreferences
     }
@@ -137,9 +135,14 @@ export function normalizeAudioReactive(
 ): LyricLayerAudioReactive | undefined {
   if (!input) return undefined;
   const targets = normalizeAudioReactiveTargets(input.targets);
+  // Older projects used a 'vocals-stem' source that no longer exists.
+  const source =
+    input.source === 'master' || input.source === 'estimated'
+      ? input.source
+      : DEFAULT_LAYER_AUDIO_REACTIVE.source;
   return {
     enabled: input.enabled ?? DEFAULT_LAYER_AUDIO_REACTIVE.enabled,
-    source: input.source ?? DEFAULT_LAYER_AUDIO_REACTIVE.source,
+    source,
     bandMode: input.bandMode ?? DEFAULT_LAYER_AUDIO_REACTIVE.bandMode,
     responseMode: input.responseMode ?? DEFAULT_LAYER_AUDIO_REACTIVE.responseMode,
     attackMs: clampNumber(input.attackMs, 0, 4000, DEFAULT_LAYER_AUDIO_REACTIVE.attackMs),
@@ -191,9 +194,9 @@ export function normalizeClips(clips: LyricClip[] | undefined): LyricClip[] {
 }
 
 function normalizeAudioTracks(audioTracks: ProjectAudioTracks | undefined): ProjectAudioTracks {
+  // Older projects may carry a `vocals` channel; it is intentionally dropped.
   return {
-    master: stripObjectUrl(audioTracks?.master),
-    vocals: stripObjectUrl(audioTracks?.vocals)
+    master: stripObjectUrl(audioTracks?.master)
   };
 }
 

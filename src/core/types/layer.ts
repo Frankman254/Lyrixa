@@ -21,7 +21,7 @@ export interface LayerRenderSettings {
 }
 
 /** Where the reactive signal is sampled from when rendering. */
-export type LyricLayerAudioReactiveSource = 'master' | 'vocals-stem' | 'estimated';
+export type LyricLayerAudioReactiveSource = 'master' | 'estimated';
 
 /** Frequency band emphasized for the reactive envelope. */
 export type LyricLayerAudioReactiveBandMode =

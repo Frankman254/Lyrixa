@@ -9,6 +9,9 @@ import { EditorAlerts } from './EditorAlerts';
 import { EditorTopBar } from './EditorTopBar';
 import { LayersSidebar } from './LayersSidebar';
 import { InspectorPanel } from '../inspector/InspectorPanel';
+import { TapSyncPanel } from '../sync/TapSyncPanel';
+import { useTapSync } from '../sync/useTapSync';
+import { parkLayerClips } from '../../core/timeline/tapSync';
 import { useLyrixaProject } from './useLyrixaProject';
 import { useAccentTheme } from '../../shared/theme/useAccentTheme';
 import type { AudioChannelRole, AudioBandMode } from '../../core/types/audio';
@@ -22,14 +25,11 @@ export function LyrixaEditorShell() {
     project,
     saveStatus,
     audioNeedsReload,
-    vocalExtractionStatus,
     setProjectName,
     loadAudioFile,
-    extractVocalsFromMaster,
     removeAudio,
     getAudioBlob,
     applyLyrics,
-    regenerateFromVocals,
     setClips,
     setLayers,
     setStyleConfig,
@@ -43,9 +43,9 @@ export function LyrixaEditorShell() {
   } = useLyrixaProject();
 
   const masterFileInputRef = useRef<HTMLInputElement>(null);
-  const vocalsFileInputRef = useRef<HTMLInputElement>(null);
 
-  const [playbackMode, setPlaybackMode] = useState<'master' | 'vocals'>('master');
+  const [syncMode, setSyncMode] = useState(false);
+  const [syncSpeed, setSyncSpeed] = useState(1);
   const [importOpen, setImportOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [transparentPreviewOpen, setTransparentPreviewOpen] = useState(false);
@@ -64,11 +64,6 @@ export function LyrixaEditorShell() {
   const { accent, setAccent } = useAccentTheme();
 
   const masterChannel = project.audioTracks.master;
-  const vocalsChannel = project.audioTracks.vocals;
-  const effectivePlaybackMode =
-    playbackMode === 'vocals' && vocalsChannel?.objectUrl ? 'vocals' : 'master';
-  const activeAudioChannel =
-    effectivePlaybackMode === 'vocals' ? vocalsChannel : masterChannel;
 
   const {
     audioEngineRef,
@@ -81,12 +76,11 @@ export function LyrixaEditorShell() {
   } = usePlaybackController({
     projectId: project.id,
     initialTime: project.currentTime ?? 0,
-    activeAudioChannel,
+    activeAudioChannel: masterChannel,
     onCurrentTimeCommit: setCurrentTime
   });
 
   const openMasterPicker = () => masterFileInputRef.current?.click();
-  const openVocalsPicker = () => vocalsFileInputRef.current?.click();
 
   const handleAudioFileSelected = (role: AudioChannelRole) =>
     async (e: ChangeEvent<HTMLInputElement>) => {
@@ -99,21 +93,6 @@ export function LyrixaEditorShell() {
         console.error(`[Lyrixa] Failed to load ${role} audio file:`, err);
       }
     };
-
-  const handleExtractVocals = useCallback(async () => {
-    if (!masterChannel?.objectUrl || vocalExtractionStatus === 'extracting') return;
-    const wasPlaying = isPlaying;
-    setIsPlaying(false);
-    try {
-      await extractVocalsFromMaster();
-      setPlaybackMode('vocals');
-      setMiniPreviewVisible(true);
-      if (wasPlaying) setIsPlaying(true);
-    } catch (err) {
-      console.error('[Lyrixa] Vocal isolation failed:', err);
-      window.alert(err instanceof Error ? err.message : 'Could not isolate vocals from this track.');
-    }
-  }, [extractVocalsFromMaster, isPlaying, masterChannel?.objectUrl, setIsPlaying, vocalExtractionStatus]);
 
   const commitName = () => {
     const trimmed = draftName.trim();
@@ -160,8 +139,52 @@ export function LyrixaEditorShell() {
 
   const effectiveDuration = masterChannel?.duration ?? 60;
   const showMini = miniPreviewVisible && !previewOpen;
-  const vocalsAnalysisReady = !!vocalsChannel?.vocalActivity?.length;
-  const vocalsNeedsReload = !!vocalsChannel && !vocalsChannel.objectUrl;
+
+  const syncLayerId = selectedLayerId ?? project.layers[0]?.id ?? null;
+  const syncLayerName =
+    project.layers.find(l => l.id === syncLayerId)?.name ?? 'Lyrics';
+  const canSync =
+    !!masterChannel?.objectUrl &&
+    project.clips.some(c => c.layerId === syncLayerId);
+
+  const tapSync = useTapSync({
+    enabled: syncMode,
+    clips: project.clips,
+    layerId: syncLayerId,
+    trackDuration: masterChannel?.duration,
+    playbackTime,
+    onClipsChange: setClips,
+    onPlayToggle: handlePlayToggle,
+    onSeek: handleSeek
+  });
+
+  const clearSyncLayer = useCallback(() => {
+    if (!syncLayerId) return;
+    setClips(parkLayerClips(project.clips, syncLayerId));
+  }, [project.clips, syncLayerId, setClips]);
+
+  const handleToggleSync = useCallback(() => {
+    setSyncMode(prev => {
+      const next = !prev;
+      if (next) {
+        setIsPlaying(false);
+        setMiniPreviewVisible(true);
+        // Start every sync pass from a clean lane at the top of the song — the
+        // heuristic import timings are throwaway; tapping rebuilds them precisely.
+        if (syncLayerId) setClips(parkLayerClips(project.clips, syncLayerId));
+        handleSeek(0);
+      } else {
+        setSyncSpeed(1);
+      }
+      return next;
+    });
+  }, [setIsPlaying, syncLayerId, setClips, project.clips, handleSeek]);
+
+  const handleSyncRestart = useCallback(() => {
+    clearSyncLayer();
+    tapSync.reset();
+    handleSeek(0);
+  }, [clearSyncLayer, tapSync, handleSeek]);
 
   const handleFloatingPreviewSize = (width: number) => {
     const next = Math.max(320, Math.min(760, width));
@@ -181,20 +204,16 @@ export function LyrixaEditorShell() {
         nameEditing={nameEditing}
         draftName={nameEditing ? draftName : project.name}
         masterChannel={masterChannel ?? null}
-        vocalsChannel={vocalsChannel ?? null}
-        playbackMode={effectivePlaybackMode}
         isPlaying={isPlaying}
         currentTime={playbackTime}
         duration={effectiveDuration}
         saveStatus={saveStatus}
-        vocalExtractionStatus={vocalExtractionStatus}
-        vocalsAnalysisReady={vocalsAnalysisReady}
-        canGenerateTimings={project.normalizedLyrics.length > 0}
+        syncMode={syncMode}
+        canSync={canSync}
         previewOpen={previewOpen}
         transparentPreviewOpen={transparentPreviewOpen}
         miniPreviewVisible={miniPreviewVisible}
         masterFileInputRef={masterFileInputRef}
-        vocalsFileInputRef={vocalsFileInputRef}
         projectImportInputRef={projectImportInputRef}
         lyricsBundleImportInputRef={lyricsBundleImportInputRef}
         onDraftNameChange={setDraftName}
@@ -205,28 +224,18 @@ export function LyrixaEditorShell() {
         onCommitName={commitName}
         onCancelNameEdit={cancelNameEdit}
         onOpenMasterPicker={openMasterPicker}
-        onOpenVocalsPicker={openVocalsPicker}
         onOpenProjectImportPicker={openProjectImportPicker}
         onOpenLyricsBundleImportPicker={openLyricsBundleImportPicker}
         onAudioFileSelected={handleAudioFileSelected}
         onProjectFileSelected={handleProjectFileSelected}
         onLyricsBundleFileSelected={handleLyricsBundleFileSelected}
-        onExtractVocals={handleExtractVocals}
-        onRemoveVocals={() => {
-          setPlaybackMode('master');
-          removeAudio('vocals');
-        }}
         onOpenLyricsImport={() => setImportOpen(true)}
+        onToggleSync={handleToggleSync}
         onExportProject={handleExportProject}
         onExportLyricsBundle={handleExportLyricsBundle}
-        onRegenerateFromVocals={regenerateFromVocals}
         onTogglePreview={() => setPreviewOpen(p => !p)}
         onOpenOverlay={() => setTransparentPreviewOpen(true)}
         onShowMiniPreview={() => setMiniPreviewVisible(true)}
-        onPlaybackModeChange={(mode) => {
-          setIsPlaying(false);
-          setPlaybackMode(mode);
-        }}
         onPlayToggle={handlePlayToggle}
         onSeek={handleSeek}
         onResetProject={() => {
@@ -243,24 +252,18 @@ export function LyrixaEditorShell() {
       <EditorAlerts
         audioNeedsReload={audioNeedsReload}
         masterChannel={masterChannel}
-        vocalsNeedsReload={vocalsNeedsReload}
-        vocalsChannel={vocalsChannel}
         onReloadMaster={openMasterPicker}
         onClearMaster={() => removeAudio('master')}
-        onReloadVocals={openVocalsPicker}
-        onClearVocals={() => {
-          setPlaybackMode('master');
-          removeAudio('vocals');
-        }}
       />
 
-      {activeAudioChannel?.objectUrl && (
+      {masterChannel?.objectUrl && (
         <AudioEngine
           ref={audioEngineRef}
-          audioUrl={activeAudioChannel.objectUrl}
+          audioUrl={masterChannel.objectUrl}
           isPlaying={isPlaying}
+          playbackRate={syncMode ? syncSpeed : 1}
           sourceSyncTime={playbackTime}
-          onDurationChange={effectivePlaybackMode === 'master' ? setMasterDuration : () => undefined}
+          onDurationChange={setMasterDuration}
           onEnded={() => setIsPlaying(false)}
         />
       )}
@@ -288,6 +291,7 @@ export function LyrixaEditorShell() {
         <section className="ls-stage">
           <TimelineEditor
             embedded
+            disableShortcuts={syncMode}
             clips={project.clips}
             layers={project.layers}
             currentTime={playbackTime}
@@ -295,8 +299,6 @@ export function LyrixaEditorShell() {
             isPlaying={isPlaying}
             trackName={masterChannel?.fileName ?? 'No audio loaded'}
             masterChannel={masterChannel}
-            vocalsChannel={vocalsChannel}
-            vocalsBandPeaks={vocalsChannel?.waveformPeaks}
             onExtractBandPeaks={extractBandPeaksForMode}
             onClipsChange={setClips}
             onLayersChange={setLayers}
@@ -367,9 +369,25 @@ export function LyrixaEditorShell() {
           open={importOpen}
           initialText={project.rawLyricsText}
           layers={project.layers}
-          vocalsAvailable={vocalsAnalysisReady}
           onClose={() => setImportOpen(false)}
           onApply={applyLyrics}
+        />
+      )}
+
+      {syncMode && (
+        <TapSyncPanel
+          clips={project.clips}
+          layerId={syncLayerId}
+          layerName={syncLayerName}
+          isPlaying={isPlaying}
+          playbackTime={playbackTime}
+          speed={syncSpeed}
+          sync={tapSync}
+          onPlayToggle={handlePlayToggle}
+          onSeek={handleSeek}
+          onSpeedChange={setSyncSpeed}
+          onRestart={handleSyncRestart}
+          onClose={handleToggleSync}
         />
       )}
 

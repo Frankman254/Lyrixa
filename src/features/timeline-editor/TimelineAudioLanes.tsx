@@ -10,13 +10,9 @@ interface TimelineAudioLanesProps {
   laneWidth: number;
   rulerHeight: number;
   masterHeight: number;
-  vocalsHeight: number;
-  waveformView: 'master' | 'vocals' | 'both';
   bandMode: AudioBandMode;
-  bandPeaksSource: 'master' | 'vocals-stem' | 'estimated';
   bandPeaksLoading: boolean;
   masterChannel?: AudioChannel | null;
-  vocalsChannel?: AudioChannel | null;
   displayPeaks?: AudioPeak[];
   bandPeaks: AudioPeak[] | null;
   masterIsMock: boolean;
@@ -40,13 +36,9 @@ export function TimelineAudioLanes({
   laneWidth,
   rulerHeight,
   masterHeight,
-  vocalsHeight,
-  waveformView,
   bandMode,
-  bandPeaksSource,
   bandPeaksLoading,
   masterChannel,
-  vocalsChannel,
   displayPeaks,
   bandPeaks,
   masterIsMock,
@@ -66,45 +58,23 @@ export function TimelineAudioLanes({
         </div>
       </div>
 
-      {(waveformView === 'master' || waveformView === 'both') && (
-        <TimelineAudioTrack
-          title="Master track"
-          color={BAND_MODE_COLORS[bandMode]}
-          duration={duration}
-          pxPerSecond={pxPerSecond}
-          height={masterHeight}
-          peaks={displayPeaks}
-          badge={getBandBadge(bandMode, bandPeaksSource, bandPeaksLoading, !!masterChannel?.fileName)}
-          mockFallback={masterIsMock && !bandPeaks && !bandPeaksLoading}
-          onLaneClick={onLaneClick}
-        />
-      )}
-
-      {vocalsChannel && (waveformView === 'vocals' || waveformView === 'both') && (
-        <TimelineAudioTrack
-          title="Vocals stem"
-          color="#5fc88e"
-          duration={duration}
-          pxPerSecond={pxPerSecond}
-          height={vocalsHeight}
-          peaks={vocalsChannel.waveformPeaks}
-          vocalActivity={vocalsChannel.vocalActivity}
-          badge={
-            vocalsChannel.vocalActivity?.length
-              ? `${vocalsChannel.vocalActivity.length} vocal segments`
-              : 'analyzing...'
-          }
-          mockFallback={!vocalsChannel.waveformPeaks?.length}
-          onLaneClick={onLaneClick}
-        />
-      )}
+      <TimelineAudioTrack
+        title="Master track"
+        color={BAND_MODE_COLORS[bandMode]}
+        duration={duration}
+        pxPerSecond={pxPerSecond}
+        height={masterHeight}
+        peaks={displayPeaks}
+        badge={getBandBadge(bandMode, bandPeaksLoading, !!masterChannel?.fileName)}
+        mockFallback={masterIsMock && !bandPeaks && !bandPeaksLoading}
+        onLaneClick={onLaneClick}
+      />
     </>
   );
 }
 
 function getBandBadge(
   mode: AudioBandMode,
-  source: 'master' | 'vocals-stem' | 'estimated',
   loading: boolean,
   hasMasterFile: boolean
 ): string | undefined {
@@ -113,10 +83,8 @@ function getBandBadge(
     case 'auto':
     case 'full-mix':
       return hasMasterFile ? undefined : 'mock';
-    case 'vocals':
-      return source === 'vocals-stem' ? 'Vocals Stem' : 'Est. Vocals';
-    case 'instrumental':
-      return source === 'master' ? 'Instrumental ≈' : 'Est. Instrumental';
+    case 'vocals': return 'Vocals Band ≈';
+    case 'instrumental': return 'Instrumental Band ≈';
     case 'bass': return 'Bass Band';
     case 'kick': return 'Kick Band';
     case 'hihat': return 'Hi-Hat Band';

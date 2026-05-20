@@ -1,11 +1,7 @@
 import type { LyricClip, ClipPositionPreset, ClipTransition } from '../types/clip';
 import { MIN_CLIP_DURATION } from '../types/clip';
 import { MAIN_LAYER_ID } from '../types/layer';
-import type { VocalActivitySegment } from '../types/audio';
-import {
-  durationForLine,
-  durationFromVocalSegment
-} from './durationStrategies';
+import { durationForLine } from './durationStrategies';
 import type {
   ClipDurationStrategy,
   DurationStrategyContext
@@ -29,11 +25,6 @@ export interface CreateClipsFromLyricsOptions {
   gap?: number;
   /** How clip durations are decided. Default: 'fixed'. */
   strategy?: ClipDurationStrategy;
-  /**
-   * Vocal segments. Required for the `vocal-energy` strategy to actually
-   * change behavior; otherwise ignored.
-   */
-  vocalActivity?: VocalActivitySegment[];
   transitionIn?: ClipTransition;
   transitionOut?: ClipTransition;
   position?: ClipPositionPreset;
@@ -49,11 +40,9 @@ export interface CreateClipsFromLyricsOptions {
 /**
  * Build LyricClips from already-normalized lyric lines.
  *
- * - `fixed` and `line-length-weighted` strategies lay clips out sequentially
- *   from `startTime`, never overlapping themselves.
- * - `vocal-energy` strategy maps line[i] → vocalActivity[i] and uses the
- *   segment's window directly. Lines without a segment fall back to
- *   line-length-weighted duration appended after the last placed clip.
+ * Both strategies lay clips out sequentially from `startTime`, never
+ * overlapping themselves. These are quick first-pass estimates — precise
+ * timing is set afterwards with tap-to-sync.
  *
  * Pure: no React, DOM, or persistence side effects.
  */
@@ -70,7 +59,6 @@ export function createClipsFromNormalizedLyrics(
     startTime = 0,
     gap = 0,
     strategy = 'fixed',
-    vocalActivity,
     transitionIn = 'fade',
     transitionOut = 'fade',
     position = 'center',
@@ -87,32 +75,14 @@ export function createClipsFromNormalizedLyrics(
     trackDuration
   };
 
-  const useVocals =
-    strategy === 'vocal-energy' && vocalActivity && vocalActivity.length > 0;
-
   const clips: LyricClip[] = [];
   let cursor = Math.max(0, startTime);
 
   for (let i = 0; i < lines.length; i++) {
     const text = (lines[i] ?? '').trim();
 
-    let clipStart: number;
-    let clipEnd: number;
-
-    if (useVocals) {
-      const seg = vocalActivity![i];
-      if (seg) {
-        const window = durationFromVocalSegment(seg, ctx);
-        clipStart = Math.max(window.startTime, cursor);
-        clipEnd = Math.max(clipStart + ctx.minDuration, window.endTime);
-      } else {
-        clipStart = cursor;
-        clipEnd = clipStart + durationForLine('line-length-weighted', text, ctx);
-      }
-    } else {
-      clipStart = cursor;
-      clipEnd = clipStart + durationForLine(strategy, text, ctx);
-    }
+    let clipStart = cursor;
+    let clipEnd = clipStart + durationForLine(strategy, text, ctx);
 
     if (trackDuration != null && clipEnd > trackDuration) {
       clipEnd = trackDuration;

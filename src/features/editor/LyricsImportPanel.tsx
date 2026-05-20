@@ -9,8 +9,6 @@ interface LyricsImportPanelProps {
   open: boolean;
   initialText: string;
   layers: LyricLayer[];
-  /** When true, the vocal-energy strategy is enabled in the picker. */
-  vocalsAvailable?: boolean;
   onClose: () => void;
   onApply: (rawText: string, options: ApplyLyricsOptions) => void;
 }
@@ -18,16 +16,13 @@ interface LyricsImportPanelProps {
 const STRATEGY_DESCRIPTIONS: Record<ClipDurationStrategy, string> = {
   fixed: 'Every clip gets the same duration. Quickest baseline.',
   'line-length-weighted':
-    'Short lines get short clips, long lines get longer clips.',
-  'vocal-energy':
-    'Use the vocals stem to place each clip on the matching vocal segment.'
+    'Short lines get short clips, long lines get longer clips.'
 };
 
 export function LyricsImportPanel({
   open,
   initialText,
   layers,
-  vocalsAvailable = false,
   onClose,
   onApply
 }: LyricsImportPanelProps) {
@@ -39,8 +34,7 @@ export function LyricsImportPanel({
   const [layerId, setLayerId] = useState(layers[0]?.id ?? 'layer-main');
   const [strategy, setStrategy] = useState<ClipDurationStrategy>('line-length-weighted');
 
-  const effectiveStrategy =
-    !vocalsAvailable && strategy === 'vocal-energy' ? 'line-length-weighted' : strategy;
+  const effectiveStrategy = strategy;
   const preview = useMemo(() => normalizeLyricsText(text), [text]);
 
   if (!open) return null;
@@ -114,9 +108,6 @@ export function LyricsImportPanel({
               >
                 <option value="fixed">Fixed duration</option>
                 <option value="line-length-weighted">Line-length weighted</option>
-                <option value="vocal-energy" disabled={!vocalsAvailable}>
-                  Vocal energy{vocalsAvailable ? '' : ' (load vocals stem)'}
-                </option>
               </select>
             </label>
 
@@ -184,7 +175,6 @@ export function LyricsImportPanel({
                 type="checkbox"
                 checked={preserveTiming}
                 onChange={(e) => setPreserveTiming(e.target.checked)}
-                disabled={effectiveStrategy === 'vocal-energy'}
               />
               Preserve existing timing
             </label>

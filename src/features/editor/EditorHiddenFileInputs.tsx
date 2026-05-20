@@ -3,7 +3,6 @@ import type { AudioChannelRole } from '../../core/types/audio';
 
 interface EditorHiddenFileInputsProps {
   masterFileInputRef: RefObject<HTMLInputElement | null>;
-  vocalsFileInputRef: RefObject<HTMLInputElement | null>;
   projectImportInputRef: RefObject<HTMLInputElement | null>;
   lyricsBundleImportInputRef: RefObject<HTMLInputElement | null>;
   onAudioFileSelected: (role: AudioChannelRole) => (e: ChangeEvent<HTMLInputElement>) => void;
@@ -13,7 +12,6 @@ interface EditorHiddenFileInputsProps {
 
 export function EditorHiddenFileInputs({
   masterFileInputRef,
-  vocalsFileInputRef,
   projectImportInputRef,
   lyricsBundleImportInputRef,
   onAudioFileSelected,
@@ -28,13 +26,6 @@ export function EditorHiddenFileInputs({
         accept="audio/*,.mp3,.wav,.ogg,.flac,.m4a"
         style={{ display: 'none' }}
         onChange={onAudioFileSelected('master')}
-      />
-      <input
-        ref={vocalsFileInputRef}
-        type="file"
-        accept="audio/*,.mp3,.wav,.ogg,.flac,.m4a"
-        style={{ display: 'none' }}
-        onChange={onAudioFileSelected('vocals')}
       />
       <input
         ref={projectImportInputRef}

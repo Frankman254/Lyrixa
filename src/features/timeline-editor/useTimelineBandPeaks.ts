@@ -5,7 +5,6 @@ interface UseTimelineBandPeaksArgs {
   bandMode: AudioBandMode;
   masterChannel?: AudioChannel | null;
   fallbackPeaks?: AudioPeak[];
-  vocalsBandPeaks?: AudioPeak[] | null;
   onExtractBandPeaks?: (mode: AudioBandMode) => Promise<AudioPeak[] | null>;
 }
 
@@ -13,41 +12,23 @@ interface UseTimelineBandPeaksArgs {
  * Keeps waveform band extraction out of TimelineEditor.
  *
  * The hook decides which peak array should be displayed for the current band
- * mode and caches async extraction results per master track.
+ * mode and caches async extraction results per master track. All bands are
+ * derived from the master track via frequency filtering.
  */
 export function useTimelineBandPeaks({
   bandMode,
   masterChannel,
   fallbackPeaks,
-  vocalsBandPeaks,
   onExtractBandPeaks
 }: UseTimelineBandPeaksArgs) {
   const masterPeaks = masterChannel?.waveformPeaks ?? fallbackPeaks;
   const [bandPeaks, setBandPeaks] = useState<AudioPeak[] | null>(null);
   const [bandPeaksLoading, setBandPeaksLoading] = useState(false);
-  const [bandPeaksSource, setBandPeaksSource] = useState<'master' | 'vocals-stem' | 'estimated'>('master');
+  const [bandPeaksSource, setBandPeaksSource] = useState<'master' | 'estimated'>('master');
 
   useEffect(() => {
     if (bandMode === 'auto' || bandMode === 'full-mix') {
       setBandPeaks(null);
-      setBandPeaksSource('master');
-      setBandPeaksLoading(false);
-      return;
-    }
-
-    if (bandMode === 'vocals' && vocalsBandPeaks && vocalsBandPeaks.length > 0) {
-      setBandPeaks(vocalsBandPeaks);
-      setBandPeaksSource('vocals-stem');
-      setBandPeaksLoading(false);
-      return;
-    }
-
-    if (
-      bandMode === 'instrumental' &&
-      vocalsBandPeaks && vocalsBandPeaks.length > 0 &&
-      masterPeaks && masterPeaks.length > 0
-    ) {
-      setBandPeaks(subtractPeaks(masterPeaks, vocalsBandPeaks));
       setBandPeaksSource('master');
       setBandPeaksLoading(false);
       return;
@@ -72,7 +53,7 @@ export function useTimelineBandPeaks({
       .finally(() => { if (!cancelled) setBandPeaksLoading(false); });
 
     return () => { cancelled = true; };
-  }, [bandMode, masterChannel?.fileName, masterPeaks, onExtractBandPeaks, vocalsBandPeaks]);
+  }, [bandMode, masterChannel?.fileName, masterPeaks, onExtractBandPeaks]);
 
   return useMemo(() => {
     const displayPeaks = (bandMode === 'auto' || bandMode === 'full-mix')
@@ -88,11 +69,4 @@ export function useTimelineBandPeaks({
       masterIsMock: !masterPeaks || masterPeaks.length === 0
     };
   }, [bandMode, bandPeaks, bandPeaksLoading, bandPeaksSource, masterPeaks]);
-}
-
-function subtractPeaks(master: AudioPeak[], vocals: AudioPeak[]): AudioPeak[] {
-  return master.map((p, i) => ({
-    time: p.time,
-    amplitude: Math.max(0, p.amplitude - (vocals[i]?.amplitude ?? 0) * 0.8)
-  }));
 }

@@ -10,26 +10,11 @@ export interface AudioPeak {
   amplitude: number;
 }
 
-/**
- * A region of the timeline where vocal energy is present.
- * Produced by analyzing the peaks of an isolated vocals stem (or any
- * audio file) and used to estimate clip durations.
- */
-export interface VocalActivitySegment {
-  /** Inclusive start in seconds. */
-  startTime: number;
-  /** Inclusive end in seconds. */
-  endTime: number;
-  /** Average normalized amplitude across the segment, 0..1. */
-  energy: number;
-}
-
-/** Role of an audio file inside a project. */
-export type AudioChannelRole = 'master' | 'vocals';
+/** Role of an audio file inside a project. The master track is what plays. */
+export type AudioChannelRole = 'master';
 
 /**
- * One audio file bound to a project. The master channel is what plays;
- * the optional vocals channel is used for analysis and timing assistance.
+ * One audio file bound to a project. The master channel is what plays.
  */
 export interface AudioChannel {
   fileName: string;
@@ -38,8 +23,6 @@ export interface AudioChannel {
   objectUrl?: string;
   /** Decoded peaks. Falls back to mock waveform when absent. */
   waveformPeaks?: AudioPeak[];
-  /** Set on vocals channels by the activity detector. Empty otherwise. */
-  vocalActivity?: VocalActivitySegment[];
   /**
    * Stable identity for cross-app matching. Lyrixa exports this in the
    * lyrics-bundle so a renderer (e.g. LiveWallpaper) can rebind the bundle
@@ -67,15 +50,13 @@ export function buildAudioFileKey(
 
 /**
  * Audio channels owned by a project. `master` is the playable track.
- * `vocals` is optional helper input for clip-duration estimation.
  */
 export interface ProjectAudioTracks {
   master: AudioChannel | null;
-  vocals?: AudioChannel | null;
 }
 
 export function createEmptyAudioTracks(): ProjectAudioTracks {
-  return { master: null, vocals: null };
+  return { master: null };
 }
 
 /**
@@ -98,7 +79,6 @@ export type AudioBandMode =
 export interface AudioAnalysisTrack {
   mode: AudioBandMode;
   peaks: AudioPeak[];
-  activity?: VocalActivitySegment[];
-  /** Where the data came from: real stems, offline extraction, or heuristic estimate. */
-  source: 'master' | 'vocals-stem' | 'estimated';
+  /** Where the data came from: offline band extraction or heuristic estimate. */
+  source: 'master' | 'estimated';
 }

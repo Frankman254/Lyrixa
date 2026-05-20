@@ -333,20 +333,6 @@
   pointer-events: none;
 }
 
-.tl-vocal-bands {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-}
-
-.tl-vocal-band {
-  position: absolute;
-  top: 8%;
-  bottom: 8%;
-  border-left: 1px solid rgba(95, 200, 142, 0.45);
-  border-right: 1px solid rgba(95, 200, 142, 0.45);
-  border-radius: 2px;
-}
 
 /* ── Tracks ──────────────────────────────────────────── */
 .tl-tracks {

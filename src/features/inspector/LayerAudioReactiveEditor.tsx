@@ -6,7 +6,7 @@ import type {
 } from '../../core/types/layer';
 import { DEFAULT_LAYER_AUDIO_REACTIVE } from '../../core/types/layer';
 
-const REACTIVE_SOURCES: LyricLayerAudioReactiveSource[] = ['master', 'vocals-stem', 'estimated'];
+const REACTIVE_SOURCES: LyricLayerAudioReactiveSource[] = ['master', 'estimated'];
 const REACTIVE_BANDS: LyricLayerAudioReactiveBandMode[] = [
   'full-mix',
   'vocals',

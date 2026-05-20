@@ -9,9 +9,7 @@ interface TimelineToolbarProps {
   isPlaying: boolean;
   pxPerSecond: number;
   masterChannel?: AudioChannel | null;
-  vocalsChannel?: AudioChannel | null;
   bandMode: AudioBandMode;
-  waveformView: 'master' | 'vocals' | 'both';
   snapSeconds: number;
   onPlayToggle: () => void;
   onZoomOut: () => void;
@@ -21,7 +19,6 @@ interface TimelineToolbarProps {
   onCenterPlayhead: () => void;
   fitSelectionEnabled: boolean;
   onBandModeChange: (mode: AudioBandMode) => void;
-  onWaveformViewChange: (view: 'master' | 'vocals' | 'both') => void;
   onSnapSecondsChange: (seconds: number) => void;
   onExit?: () => void;
 }
@@ -34,9 +31,7 @@ export function TimelineToolbar({
   isPlaying,
   pxPerSecond,
   masterChannel,
-  vocalsChannel,
   bandMode,
-  waveformView,
   snapSeconds,
   onPlayToggle,
   onZoomOut,
@@ -46,7 +41,6 @@ export function TimelineToolbar({
   onCenterPlayhead,
   fitSelectionEnabled,
   onBandModeChange,
-  onWaveformViewChange,
   onSnapSecondsChange,
   onExit
 }: TimelineToolbarProps) {
@@ -115,20 +109,6 @@ export function TimelineToolbar({
               <option value="bass">Bass</option>
               <option value="kick">Kick</option>
               <option value="hihat">Hi-Hat</option>
-            </select>
-          </label>
-        )}
-        {(masterChannel || vocalsChannel) && (
-          <label className="tl-snap">
-            Waves
-            <select
-              value={waveformView}
-              onChange={(e) => onWaveformViewChange(e.target.value as 'master' | 'vocals' | 'both')}
-              title="Which waveform rows to show"
-            >
-              <option value="both">Both</option>
-              <option value="master">Master</option>
-              {vocalsChannel && <option value="vocals">Vocals</option>}
             </select>
           </label>
         )}
