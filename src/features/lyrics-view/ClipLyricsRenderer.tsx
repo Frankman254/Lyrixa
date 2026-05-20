@@ -203,9 +203,15 @@ export function ClipLyricsRenderer({
             data-layer={clip.layerId}
             data-layer-type={layerType}
           >
-            <span className="clip-lyric-text" data-text={transformText(clip.text, style.textTransform)}>{transformText(clip.text, style.textTransform)}</span>
+            <span className="clip-lyric-content">
+              <span className="clip-lyric-text" data-text={transformText(clip.text, style.textTransform)}>{transformText(clip.text, style.textTransform)}</span>
+              {showProgressDot && (
+                <span className="clip-progress-track" aria-hidden>
+                  <span className="clip-progress-dot" />
+                </span>
+              )}
+            </span>
             {fx.enabled && fx.preset === 'scanline' && <span className="clip-scanline" aria-hidden />}
-            {showProgressDot && <span className="clip-progress-dot" aria-hidden />}
           </div>
         );
       })}

@@ -161,8 +161,10 @@ export function EditorTopBar({
       <button
         className={`tr-btn primary ${syncMode ? 'active' : ''}`}
         onClick={onToggleSync}
-        disabled={!canSync}
-        title={canSync
+        disabled={!canSync && !syncMode}
+        title={syncMode
+          ? 'Exit tap-to-sync mode'
+          : canSync
           ? 'Tap-to-sync: play the song and press Space on each line'
           : 'Load audio and import lyrics first'}
       >

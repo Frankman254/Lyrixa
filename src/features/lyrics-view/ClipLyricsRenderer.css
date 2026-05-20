@@ -46,10 +46,21 @@
   letter-spacing: max(var(--lyric-letter-spacing, 0px), 0.04em);
 }
 
+.clip-lyric-content {
+  position: relative;
+  z-index: 2;
+  display: inline-grid;
+  grid-template-rows: auto auto;
+  justify-items: stretch;
+  max-width: 100%;
+  text-align: inherit;
+}
+
 .clip-lyric-text {
   position: relative;
   z-index: 2;
   display: inline-block;
+  max-width: 100%;
   white-space: pre-wrap;
   isolation: isolate;
 }
@@ -242,10 +253,31 @@
   animation: lyric-heat-haze calc(var(--lyric-fx-speed, 1s) * 1.4) ease-in-out infinite;
 }
 
+.clip-progress-track {
+  position: relative;
+  z-index: 4;
+  display: block;
+  width: 100%;
+  height: calc(var(--clip-dot-size, 8px) + 8px);
+  margin-top: 6px;
+}
+
+.clip-progress-track::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 2px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--clip-dot-color, #ffffff) 24%, transparent);
+  transform: translateY(-50%);
+}
+
 .clip-progress-dot {
   position: absolute;
   left: calc(var(--clip-progress, 0) * 100%);
-  bottom: 3px;
+  top: 50%;
   width: var(--clip-dot-size, 8px);
   height: var(--clip-dot-size, 8px);
   border-radius: 999px;
@@ -253,8 +285,7 @@
   box-shadow:
     0 0 calc(16px * var(--clip-dot-glow, 0.8)) var(--clip-dot-color, #ffffff),
     0 0 0 1px rgba(255, 255, 255, 0.5);
-  transform: translateX(-50%);
-  z-index: 4;
+  transform: translate(-50%, -50%);
 }
 
 @keyframes clip-fade-in {

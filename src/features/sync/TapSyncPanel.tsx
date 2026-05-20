@@ -1,13 +1,22 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { LyricClip } from '../../core/types/clip';
-import { orderedLayerClips } from '../../core/timeline/tapSync';
+import type { LyricLayer } from '../../core/types/layer';
+import type { TapSyncLine } from '../../core/timeline/tapSync';
+import { isTapSyncLinePublished } from '../../core/timeline/tapSync';
+import { FloatingPanel } from '../../shared/components/FloatingPanel';
 import type { UseTapSyncResult } from './useTapSync';
 import './TapSyncPanel.css';
 
 const SPEED_OPTIONS = [0.5, 0.75, 1] as const;
+const STORAGE_KEY = 'lyrixa_sync_panel_pos';
+const WIDTH_KEY = 'lyrixa_sync_panel_width';
+const MIN_WIDTH = 360;
+const MAX_WIDTH = 860;
 
 interface TapSyncPanelProps {
   clips: LyricClip[];
+  lines: TapSyncLine[];
+  layers: LyricLayer[];
   layerId: string | null;
   layerName: string;
   isPlaying: boolean;
@@ -17,6 +26,7 @@ interface TapSyncPanelProps {
   onPlayToggle: () => void;
   onSeek: (time: number) => void;
   onSpeedChange: (speed: number) => void;
+  onLayerChange: (layerId: string) => void;
   onRestart: () => void;
   onClose: () => void;
 }
@@ -28,8 +38,25 @@ function formatTime(seconds: number): string {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
+function formatDuration(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) return '0.00s';
+  if (seconds < 10) return `${seconds.toFixed(2)}s`;
+  if (seconds < 60) return `${seconds.toFixed(1)}s`;
+  return formatTime(seconds);
+}
+
+function readStoredWidth(): number {
+  try {
+    const raw = Number(localStorage.getItem(WIDTH_KEY));
+    if (Number.isFinite(raw) && raw >= MIN_WIDTH) return Math.min(MAX_WIDTH, raw);
+  } catch { /* ignore */ }
+  return 460;
+}
+
 export function TapSyncPanel({
   clips,
+  lines,
+  layers,
   layerId,
   layerName,
   isPlaying,
@@ -39,44 +66,69 @@ export function TapSyncPanel({
   onPlayToggle,
   onSeek,
   onSpeedChange,
+  onLayerChange,
   onRestart,
   onClose
 }: TapSyncPanelProps) {
-  const lines = useMemo(
-    () => (layerId ? orderedLayerClips(clips, layerId) : []),
+  const publishedById = useMemo(
+    () => new Map(clips.filter(clip => clip.layerId === layerId).map(clip => [clip.id, clip])),
     [clips, layerId]
   );
 
-  const listRef = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(readStoredWidth);
   const activeRef = useRef<HTMLButtonElement>(null);
+
+  const setWidthClamped = (next: number) => {
+    const w = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, next));
+    setWidth(w);
+    try { localStorage.setItem(WIDTH_KEY, String(w)); } catch { /* ignore */ }
+  };
 
   // Keep the line about to be tapped in view.
   useEffect(() => {
     activeRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }, [sync.cursorIndex]);
 
-  const { cursorIndex, total, done, canUndo } = sync;
+  const { cursorIndex, total, done, canUndo, isHolding } = sync;
   const current = lines[cursorIndex];
   const nextUp = lines[cursorIndex + 1];
 
-  return (
-    <div className="tapsync" role="dialog" aria-label="Tap to sync">
-      <header className="tapsync-head">
-        <div className="tapsync-title">
-          <span className="tapsync-badge">SYNC</span>
-          <span className="tapsync-layer" title="Target layer">{layerName}</span>
-        </div>
-        <div className="tapsync-progress">{Math.min(cursorIndex, total)} / {total}</div>
-        <button className="tapsync-close" onClick={onClose} aria-label="Exit sync mode">✕</button>
-      </header>
+  // Pointer-based hold so mouse users get the same press-and-release timing.
+  const handlePointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (done || total === 0) return;
+    e.preventDefault();
+    sync.holdStart();
+  };
+  const handlePointerUp = (e: React.PointerEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    sync.holdEnd();
+  };
 
-      <div className="tapsync-stage">
+  return (
+    <FloatingPanel
+      storageKey={STORAGE_KEY}
+      width={width}
+      defaultPosition={{ x: 24, y: 96 }}
+      title={`◉ Sync · ${layerName}`}
+      headerActions={
+        <>
+          <span className="tapsync-progress">{Math.min(cursorIndex, total)} / {total}</span>
+          <button className="fp-btn" onClick={() => setWidthClamped(width - 80)} title="Narrower">-</button>
+          <button className="fp-btn" onClick={() => setWidthClamped(width + 80)} title="Wider">+</button>
+        </>
+      }
+      onClose={onClose}
+    >
+      <div className="tapsync-body">
         <button
-          className={`tapsync-tap ${done ? 'is-done' : ''}`}
-          onClick={sync.tap}
+          className={`tapsync-tap ${done ? 'is-done' : ''} ${isHolding ? 'is-holding' : ''}`}
+          onPointerDown={handlePointerDown}
+          onPointerUp={handlePointerUp}
+          onPointerLeave={handlePointerUp}
+          onPointerCancel={handlePointerUp}
           disabled={done || total === 0}
         >
-          <span className="tapsync-tap-key">Space</span>
+          <span className="tapsync-tap-key">{isHolding ? 'Release to end line' : 'Hold Space'}</span>
           <span className="tapsync-tap-line">
             {done ? '✓ All lines timed' : current ? current.text || '— (blank line) —' : 'Import lyrics first'}
           </span>
@@ -84,62 +136,88 @@ export function TapSyncPanel({
             <span className="tapsync-tap-next">next: {nextUp.text || '— blank —'}</span>
           )}
         </button>
-      </div>
 
-      <div className="tapsync-controls">
-        <button className="tapsync-btn primary" onClick={onPlayToggle} title="Play / pause (P)">
-          {isPlaying ? '❚❚ Pause' : '▶ Play'}
-        </button>
-        <span className="tapsync-clock mono">{formatTime(playbackTime)}</span>
-        <button className="tapsync-btn" onClick={sync.undo} disabled={!canUndo} title="Undo last tap (Backspace)">↶ Undo</button>
-        <button className="tapsync-btn" onClick={sync.stepBack} disabled={cursorIndex === 0} title="Re-time the previous line (Shift+←)">◀ Back</button>
-        <div className="tapsync-nudge" title="Shift all timings on this layer">
-          <span>Offset</span>
-          <button className="tapsync-btn icon" onClick={() => sync.nudge(-0.05)} title="Nudge earlier (←)">−</button>
-          <button className="tapsync-btn icon" onClick={() => sync.nudge(0.05)} title="Nudge later (→)">+</button>
-        </div>
-        <button className="tapsync-btn ghost" onClick={onRestart} title="Clear this layer and tap from the first line">↻ Restart</button>
-      </div>
-
-      <div className="tapsync-speed" title="Slow the song down so fast lines are easier to tap precisely">
-        <span>Speed</span>
-        {SPEED_OPTIONS.map(opt => (
-          <button
-            key={opt}
-            className={`tapsync-btn small ${speed === opt ? 'active' : ''}`}
-            onClick={() => onSpeedChange(opt)}
+        <label className="tapsync-layer">
+          <span>Target layer</span>
+          <select
+            value={layerId ?? ''}
+            onChange={(e) => {
+              onLayerChange(e.target.value);
+              e.currentTarget.blur();
+            }}
+            disabled={isHolding}
           >
-            {opt}×
+            {layers.map(layer => (
+              <option key={layer.id} value={layer.id}>{layer.name}</option>
+            ))}
+          </select>
+        </label>
+
+        <div className="tapsync-controls">
+          <button className="tapsync-btn primary" onClick={onPlayToggle} title="Play / pause (P)">
+            {isPlaying ? '❚❚ Pause' : '▶ Play'}
           </button>
-        ))}
-      </div>
+          <span className="tapsync-clock mono">{formatTime(playbackTime)}</span>
+          <button className="tapsync-btn" onClick={sync.undo} disabled={!canUndo} title="Undo last line (Backspace)">↶ Undo</button>
+          <button className="tapsync-btn" onClick={sync.stepBack} disabled={cursorIndex === 0} title="Re-time the previous line (Shift+←)">◀ Back</button>
+          <div className="tapsync-nudge" title="Shift all timings on this layer">
+            <span>Offset</span>
+            <button className="tapsync-btn icon" onClick={() => sync.nudge(-0.05)} title="Nudge earlier (←)">−</button>
+            <button className="tapsync-btn icon" onClick={() => sync.nudge(0.05)} title="Nudge later (→)">+</button>
+          </div>
+          <button className="tapsync-btn ghost" onClick={onRestart} title="Clear this layer and tap from the first line">↻ Restart</button>
+        </div>
 
-      <div className="tapsync-list" ref={listRef}>
-        {lines.length === 0 && (
-          <div className="tapsync-empty">No lyric clips on this layer. Import lyrics, then come back to sync.</div>
-        )}
-        {lines.map((line, idx) => {
-          const state =
-            idx < cursorIndex ? 'done' : idx === cursorIndex ? 'active' : 'pending';
-          return (
+        <div className="tapsync-speed" title="Slow the song down so fast lines are easier to time precisely">
+          <span>Speed</span>
+          {SPEED_OPTIONS.map(opt => (
             <button
-              key={line.id}
-              ref={idx === cursorIndex ? activeRef : undefined}
-              className={`tapsync-row ${state}`}
-              onClick={() => onSeek(line.startTime)}
-              title="Jump playback to this line"
+              key={opt}
+              className={`tapsync-btn small ${speed === opt ? 'active' : ''}`}
+              onClick={() => onSpeedChange(opt)}
             >
-              <span className="tapsync-row-index">{idx + 1}</span>
-              <span className="tapsync-row-text">{line.text || '— blank —'}</span>
-              <span className="tapsync-row-time mono">{idx < cursorIndex ? formatTime(line.startTime) : '·'}</span>
+              {opt}×
             </button>
-          );
-        })}
-      </div>
+          ))}
+        </div>
 
-      <p className="tapsync-hint">
-        Press <kbd>Space</kbd> on every line as it's sung · <kbd>P</kbd> play/pause · <kbd>Backspace</kbd> undo · <kbd>←</kbd>/<kbd>→</kbd> nudge all
-      </p>
-    </div>
+        <div className="tapsync-list">
+          {lines.length === 0 && (
+            <div className="tapsync-empty">No lyric clips on this layer. Import lyrics, then come back to sync.</div>
+          )}
+          {lines.map((line, idx) => {
+            const state =
+              idx === cursorIndex
+                ? 'active'
+                : layerId && isTapSyncLinePublished(clips, layerId, line)
+                  ? 'done'
+                  : 'pending';
+            const published = publishedById.get(line.id);
+            const duration = published ? Math.max(0, published.endTime - published.startTime) : 0;
+            const hasTiming = !!published && !published.muted && published.text.trim().length > 0 && duration > 0;
+            const timingLabel = hasTiming ? formatDuration(duration) : '·';
+            return (
+              <button
+                key={line.id}
+                ref={idx === cursorIndex ? activeRef : undefined}
+                className={`tapsync-row ${state}`}
+                onClick={() => published && onSeek(published.startTime)}
+                title={hasTiming
+                  ? `Jump playback to this line (${formatTime(published.startTime)} - ${formatTime(published.endTime)})`
+                  : 'Jump playback to this line'}
+              >
+                <span className="tapsync-row-index">{idx + 1}</span>
+                <span className="tapsync-row-text">{line.text || '— blank —'}</span>
+                <span className="tapsync-row-time mono">{timingLabel}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        <p className="tapsync-hint">
+          <kbd>Hold Space</kbd> while a line is sung, release at its end · <kbd>P</kbd> play/pause · <kbd>Backspace</kbd> undo · <kbd>←</kbd>/<kbd>→</kbd> nudge all
+        </p>
+      </div>
+    </FloatingPanel>
   );
 }
