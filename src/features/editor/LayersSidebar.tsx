@@ -72,11 +72,17 @@ export function LayersSidebar({
               const selected = selectedLayerId === layer.id;
               const hasState = !layer.visible || layer.locked;
               return (
-                <button
+                <div
                   key={layer.id}
-                  type="button"
+                  role="button"
+                  tabIndex={0}
                   className={`ls-layer-row ${selected ? 'selected' : ''} ${hasState ? 'has-state' : ''}`}
                   onClick={() => onSelectLayer(layer.id)}
+                  onKeyDown={(e) => {
+                    if (e.key !== 'Enter' && e.key !== ' ') return;
+                    e.preventDefault();
+                    onSelectLayer(layer.id);
+                  }}
                 >
                   <span className="ls-layer-swatch" style={{ background: layer.color }} />
                   <span className="ls-layer-name">{layer.name}</span>
@@ -99,7 +105,7 @@ export function LayersSidebar({
                       {layer.locked ? '⊟' : '⊞'}
                     </button>
                   </span>
-                </button>
+                </div>
               );
             })}
           </div>

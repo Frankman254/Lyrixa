@@ -58,6 +58,7 @@ export function LyrixaEditorShell() {
   const [syncSpeed, setSyncSpeed] = useState(1);
   const [syncLines, setSyncLines] = useState<TapSyncLine[]>([]);
   const [syncInitialCursor, setSyncInitialCursor] = useState(0);
+  const [syncTargetLayerId, setSyncTargetLayerId] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [transparentPreviewOpen, setTransparentPreviewOpen] = useState(false);
@@ -152,7 +153,10 @@ export function LyrixaEditorShell() {
   const effectiveDuration = masterChannel?.duration ?? 60;
   const showMini = miniPreviewVisible && !previewOpen;
 
-  const syncLayerId = selectedLayerId ?? project.layers[0]?.id ?? null;
+  const activeLayerId = selectedLayerId ?? project.layers[0]?.id ?? null;
+  const syncLayerId = syncMode
+    ? syncTargetLayerId ?? activeLayerId
+    : activeLayerId;
   const syncLayerName =
     project.layers.find(l => l.id === syncLayerId)?.name ?? 'Lyrics';
   const fallbackLyricSourceClips = useMemo(
@@ -218,6 +222,7 @@ export function LyrixaEditorShell() {
     }
     setSyncLines(lines);
     setSyncInitialCursor(findNextUnpublishedLineIndex(lines, hydratedClips, layerId));
+    setSyncTargetLayerId(layerId);
     setSelectedLayerId(layerId);
     tapSync.reset();
   }, [buildSyncLines, project.clips, project.rawLyricsText, setClips, setRawLyricsText, tapSync]);
@@ -228,15 +233,17 @@ export function LyrixaEditorShell() {
       setSyncSpeed(1);
       setSyncLines([]);
       setSyncInitialCursor(0);
+      setSyncTargetLayerId(null);
       return;
     }
 
-    if (syncLayerId) startSyncForLayer(syncLayerId);
+    const initialLayerId = syncTargetLayerId ?? activeLayerId;
+    if (initialLayerId) startSyncForLayer(initialLayerId);
     setIsPlaying(false);
     setMiniPreviewVisible(true);
     handleSeek(0);
     setSyncMode(true);
-  }, [handleSeek, setIsPlaying, startSyncForLayer, syncLayerId, syncMode]);
+  }, [activeLayerId, handleSeek, setIsPlaying, startSyncForLayer, syncMode, syncTargetLayerId]);
 
   const handleSyncLayerChange = useCallback((layerId: string) => {
     startSyncForLayer(layerId);
@@ -259,6 +266,7 @@ export function LyrixaEditorShell() {
     setSyncMode(false);
     setSyncLines([]);
     setSyncInitialCursor(0);
+    setSyncTargetLayerId(null);
     setPreviewOpen(false);
     setTransparentPreviewOpen(false);
     setMiniPreviewVisible(true);

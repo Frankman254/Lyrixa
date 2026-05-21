@@ -87,6 +87,11 @@
   background: var(--bg-2);
 }
 
+.ls-layer-row:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
+}
+
 .ls-layer-row.selected::before {
   content: "";
   position: absolute;
