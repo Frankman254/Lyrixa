@@ -1,4 +1,4 @@
-import type { MouseEvent } from 'react';
+import { memo, type MouseEvent } from 'react';
 import type { AudioBandMode, AudioChannel, AudioPeak } from '../../core/types/audio';
 import { TimelineAudioTrack } from './TimelineAudioTrack';
 import { TimelineRuler } from './TimelineRuler';
@@ -32,7 +32,7 @@ const BAND_MODE_COLORS: Record<AudioBandMode, string> = {
   'hihat': '#a88ee6'
 };
 
-export function TimelineAudioLanes({
+export const TimelineAudioLanes = memo(function TimelineAudioLanes({
   duration,
   pxPerSecond,
   laneWidth,
@@ -77,7 +77,7 @@ export function TimelineAudioLanes({
       />
     </>
   );
-}
+});
 
 function getBandBadge(
   mode: AudioBandMode,

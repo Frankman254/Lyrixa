@@ -9,6 +9,9 @@ interface UsePlaybackControllerArgs {
   onCurrentTimeCommit: (time: number) => void;
 }
 
+const PLAYBACK_UI_FPS = 24;
+const PLAYBACK_UI_FRAME_MS = 1000 / PLAYBACK_UI_FPS;
+
 export function usePlaybackController({
   projectId,
   initialTime,
@@ -17,6 +20,7 @@ export function usePlaybackController({
 }: UsePlaybackControllerArgs) {
   const audioEngineRef = useRef<AudioEngineRef>(null);
   const rafRef = useRef<number | null>(null);
+  const lastUiFrameRef = useRef(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackState, setPlaybackState] = useState(() => ({
     projectId,
@@ -36,9 +40,14 @@ export function usePlaybackController({
     }
     const tick = () => {
       const t = audioEngineRef.current?.getCurrentTime() ?? 0;
-      setPlaybackTime(t);
+      const now = performance.now();
+      if (now - lastUiFrameRef.current >= PLAYBACK_UI_FRAME_MS) {
+        lastUiFrameRef.current = now;
+        setPlaybackTime(t);
+      }
       rafRef.current = requestAnimationFrame(tick);
     };
+    lastUiFrameRef.current = 0;
     rafRef.current = requestAnimationFrame(tick);
     return () => {
       if (rafRef.current != null) cancelAnimationFrame(rafRef.current);

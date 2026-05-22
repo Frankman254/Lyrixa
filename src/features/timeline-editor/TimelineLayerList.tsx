@@ -1,4 +1,4 @@
-import type { RefCallback } from 'react';
+import { memo, type RefCallback } from 'react';
 import type { LyricClip as LyricClipModel, ClipPositionPreset } from '../../core/types/clip';
 import type { LyricLayer } from '../../core/types/layer';
 import type { ClipPointerModifiers, DragMode } from './LyricClip';
@@ -27,7 +27,7 @@ interface TimelineLayerListProps {
   onLayerSelect: (layerId: string) => void;
 }
 
-export function TimelineLayerList({
+export const TimelineLayerList = memo(function TimelineLayerList({
   layers,
   clipsByLayer,
   pxPerSecond,
@@ -66,4 +66,4 @@ export function TimelineLayerList({
       ))}
     </>
   );
-}
+});

@@ -1,4 +1,4 @@
-import type { MouseEventHandler, ReactNode } from 'react';
+import { memo, type MouseEventHandler, type ReactNode } from 'react';
 import type { AudioPeak } from '../../core/types/audio';
 import { AudioWaveformTrack } from './AudioWaveformTrack';
 import { TimelineTrackHeader } from './TimelineTrackHeader';
@@ -25,7 +25,7 @@ interface TimelineAudioTrackProps {
  * One audio row inside the timeline. Uses the shared TimelineTrackHeader so
  * the lane area aligns with lyric clip lanes.
  */
-export function TimelineAudioTrack({
+export const TimelineAudioTrack = memo(function TimelineAudioTrack({
   title,
   color,
   duration,
@@ -68,4 +68,4 @@ export function TimelineAudioTrack({
       </div>
     </div>
   );
-}
+});

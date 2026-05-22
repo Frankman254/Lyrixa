@@ -1,4 +1,4 @@
-import { useMemo, useRef, useEffect } from 'react';
+import { memo, useMemo, useRef, useEffect } from 'react';
 import type { AudioPeak } from '../../core/types/audio';
 
 export type { AudioPeak };
@@ -18,10 +18,10 @@ interface AudioWaveformTrackProps {
   visibleWidthPx?: number;
 }
 
-const TARGET_WAVEFORM_CHUNK_SECONDS = 10 * 60;
-const MAX_WAVEFORM_SEGMENT_WIDTH = 16_000;
-const MAX_WAVEFORM_BITMAP_WIDTH = 16_000;
-const MIN_OVERSCAN_PX = 1200;
+const TARGET_WAVEFORM_CHUNK_SECONDS = 45;
+const MAX_WAVEFORM_SEGMENT_WIDTH = 4_800;
+const MAX_WAVEFORM_BITMAP_WIDTH = 4_096;
+const MIN_OVERSCAN_PX = 360;
 
 function hashSeed(str: string): number {
   let h = 1779033703 ^ str.length;
@@ -32,7 +32,7 @@ function hashSeed(str: string): number {
   return h >>> 0;
 }
 
-export function AudioWaveformTrack({
+export const AudioWaveformTrack = memo(function AudioWaveformTrack({
   duration,
   pxPerSecond,
   peaks,
@@ -45,13 +45,17 @@ export function AudioWaveformTrack({
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const totalWidth = Math.max(duration, 1) * pxPerSecond;
-  const overscanPx = Math.max(MIN_OVERSCAN_PX, visibleWidthPx * 0.75);
+  const overscanPx = Math.max(MIN_OVERSCAN_PX, visibleWidthPx * 0.25);
   const visibleEndPx = visibleStartPx + visibleWidthPx;
   const desiredChunkWidth = Math.min(
     TARGET_WAVEFORM_CHUNK_SECONDS * pxPerSecond,
     MAX_WAVEFORM_SEGMENT_WIDTH
   );
-  const targetSegmentWidth = Math.max(visibleWidthPx + overscanPx * 2, desiredChunkWidth);
+  const minSegmentWidth = visibleWidthPx + overscanPx * 2;
+  const targetSegmentWidth = Math.min(
+    Math.max(minSegmentWidth, desiredChunkWidth),
+    Math.max(minSegmentWidth, MAX_WAVEFORM_SEGMENT_WIDTH)
+  );
   const pageStepPx = Math.max(visibleWidthPx, targetSegmentWidth * 0.5);
   const rawSegmentStartPx = Math.max(0, visibleStartPx - overscanPx);
   const segmentStartPx = Math.max(
@@ -139,7 +143,7 @@ export function AudioWaveformTrack({
       />
     </div>
   );
-}
+});
 
 function generateMockPeaksForRange(
   startTime: number,
@@ -147,7 +151,7 @@ function generateMockPeaksForRange(
   pxPerSecond: number,
   seed: string
 ): AudioPeak[] {
-  const samplesPerSecond = Math.max(20, Math.min(120, Math.ceil(pxPerSecond * 0.9)));
+  const samplesPerSecond = Math.max(16, Math.min(80, Math.ceil(pxPerSecond * 0.6)));
   const startIndex = Math.max(0, Math.floor(startTime * samplesPerSecond));
   const endIndex = Math.max(startIndex + 1, Math.ceil(endTime * samplesPerSecond));
   const out: AudioPeak[] = new Array(endIndex - startIndex + 1);
