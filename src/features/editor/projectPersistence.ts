@@ -78,6 +78,8 @@ export function createEmptyProject(): LyrixaProject {
     audioTracks: createEmptyAudioTracks(),
     rawLyricsText: '',
     normalizedLyrics: [],
+    lyricSources: [],
+    activeLyricSourceId: undefined,
     layers: createDefaultLayers(),
     clips: [],
     styleConfig: { ...DEFAULT_LYRIC_STYLE },
@@ -169,7 +171,7 @@ function migrateV1(legacy: LegacyV1Project): LyrixaProject {
         }
       : null
   };
-  return {
+  return normalizeProject({
     id: legacy.id,
     name: legacy.name,
     audioTracks,
@@ -183,7 +185,7 @@ function migrateV1(legacy: LegacyV1Project): LyrixaProject {
     progressIndicatorConfig: resolveProgressIndicatorConfig(legacy.progressIndicatorConfig),
     currentTime: legacy.currentTime ?? 0,
     renderMode: legacy.renderMode ?? 'editor'
-  };
+  });
 }
 
 /**

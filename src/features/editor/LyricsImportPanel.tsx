@@ -33,6 +33,9 @@ export function LyricsImportPanel({
   const [preserveTiming, setPreserveTiming] = useState(true);
   const [layerId, setLayerId] = useState(layers[0]?.id ?? 'layer-main');
   const [strategy, setStrategy] = useState<ClipDurationStrategy>('line-length-weighted');
+  const [sourceTitle, setSourceTitle] = useState('Lyrics 1');
+  const [addAsNewSource, setAddAsNewSource] = useState(false);
+  const [appendAfterExisting, setAppendAfterExisting] = useState(true);
 
   const effectiveStrategy = strategy;
   const preview = useMemo(() => normalizeLyricsText(text), [text]);
@@ -46,7 +49,10 @@ export function LyricsImportPanel({
       maxDuration,
       preserveExistingTiming: preserveTiming,
       layerId,
-      strategy: effectiveStrategy
+      strategy: effectiveStrategy,
+      sourceMode: addAsNewSource ? 'add' : 'replace-active',
+      sourceTitle,
+      appendAfterExisting
     });
     onClose();
   };
@@ -160,6 +166,34 @@ export function LyricsImportPanel({
                 </label>
               </>
             )}
+
+            <label>
+              Source name
+              <input
+                type="text"
+                value={sourceTitle}
+                onChange={(e) => setSourceTitle(e.target.value)}
+              />
+            </label>
+
+            <label className="lip-check">
+              <input
+                type="checkbox"
+                checked={addAsNewSource}
+                onChange={(e) => setAddAsNewSource(e.target.checked)}
+              />
+              Add as new lyrics source
+            </label>
+
+            <label className="lip-check">
+              <input
+                type="checkbox"
+                checked={appendAfterExisting}
+                disabled={!addAsNewSource}
+                onChange={(e) => setAppendAfterExisting(e.target.checked)}
+              />
+              Append after existing clips
+            </label>
 
             <label>
               Layer

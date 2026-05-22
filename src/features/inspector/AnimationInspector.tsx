@@ -11,6 +11,20 @@ const ACTIVE_ANIMATION_OPTIONS: LyricAnimationConfig['activeAnimation'][] = [
   'flicker'
 ];
 
+const TRANSITION_OPTIONS: LyricAnimationConfig['transitionIn'][] = [
+  'none',
+  'fade',
+  'slide-up',
+  'slide-down',
+  'scale-in',
+  'scale-out',
+  'blur-in',
+  'blur-out',
+  'glow-pop',
+  'glitch-in',
+  'glitch-out'
+];
+
 interface AnimationInspectorProps {
   animation: LyricAnimationConfig;
   onPatchAnimation: (patch: Partial<LyricAnimationConfig>) => void;
@@ -23,6 +37,34 @@ export function AnimationInspector({
   return (
     <section className="insp-stack">
       <Group title="Animation" open>
+        <label>
+          Enter
+          <select
+            className="form-control form-select"
+            value={animation.transitionIn}
+            onChange={(e) => onPatchAnimation({
+              transitionIn: e.target.value as LyricAnimationConfig['transitionIn']
+            })}
+          >
+            {TRANSITION_OPTIONS.map(value => (
+              <option key={value} value={value}>{value}</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Exit
+          <select
+            className="form-control form-select"
+            value={animation.transitionOut}
+            onChange={(e) => onPatchAnimation({
+              transitionOut: e.target.value as LyricAnimationConfig['transitionOut']
+            })}
+          >
+            {TRANSITION_OPTIONS.map(value => (
+              <option key={value} value={value}>{value}</option>
+            ))}
+          </select>
+        </label>
         <label>
           Active
           <select

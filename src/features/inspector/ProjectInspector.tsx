@@ -50,6 +50,21 @@ export function ProjectInspector({
         </label>
       </Group>
 
+      <Group title="Lyrics sources">
+        {project.lyricSources.length === 0 ? (
+          <p className="insp-muted">No lyrics sources yet.</p>
+        ) : (
+          <div className="insp-source-list">
+            {[...project.lyricSources].sort((a, b) => a.order - b.order).map(source => (
+              <div key={source.id} className="insp-source-row">
+                <strong>{source.title}</strong>
+                <span>{source.normalizedLines.length} lines</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </Group>
+
       <Group title="Danger zone">
         <button className="ls-btn small danger" onClick={onHardResetProject}>
           Hard Reset Project

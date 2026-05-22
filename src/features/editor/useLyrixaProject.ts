@@ -56,6 +56,11 @@ export interface ApplyLyricsOptions {
   strategy?: ClipDurationStrategy;
   minDuration?: number;
   maxDuration?: number;
+  /** Replace the active lyrics source or add a new ordered source. */
+  sourceMode?: 'replace-active' | 'add';
+  sourceTitle?: string;
+  /** When adding a source, place its generated clips after the last clip on the layer. */
+  appendAfterExisting?: boolean;
 }
 
 export interface UseLyrixaProjectResult {
@@ -342,19 +347,56 @@ export function useLyrixaProject(): UseLyrixaProjectResult {
       normalizeOptions,
       strategy = 'fixed',
       minDuration = 1.0,
-      maxDuration = 6.0
+      maxDuration = 6.0,
+      sourceMode = 'replace-active',
+      sourceTitle,
+      appendAfterExisting = false
     } = options;
 
     const { lines } = normalizeLyricsText(rawText, normalizeOptions);
 
     setProject(p => {
-      const otherClips = p.clips.filter(c => c.layerId !== layerId);
+      const now = new Date().toISOString();
+      const currentSources = p.lyricSources ?? [];
+      const activeSource = currentSources.find(source => source.id === p.activeLyricSourceId)
+        ?? currentSources[0];
+      const addingSource = sourceMode === 'add' || !activeSource;
+      const lyricSourceId = addingSource
+        ? createLyricSourceId()
+        : activeSource.id;
+      const nextSource = {
+        id: lyricSourceId,
+        title: sourceTitle?.trim() || (addingSource ? `Lyrics ${currentSources.length + 1}` : activeSource?.title) || 'Lyrics 1',
+        rawText,
+        normalizedLines: lines,
+        order: addingSource
+          ? Math.max(-1, ...currentSources.map(source => source.order)) + 1
+          : activeSource.order,
+        createdAt: addingSource ? now : activeSource.createdAt,
+        updatedAt: now
+      };
+      const nextSources = addingSource
+        ? [...currentSources, nextSource]
+        : currentSources.map(source => source.id === lyricSourceId ? nextSource : source);
+      const sortedSources = [...nextSources].sort((a, b) => a.order - b.order);
+      const combinedRawLyricsText = sortedSources.map(source => source.rawText.trim()).filter(Boolean).join('\n\n');
+      const combinedNormalizedLyrics = sortedSources.flatMap(source => source.normalizedLines);
+      const hasSourceScopedClips = p.clips.some(c => c.layerId === layerId && c.lyricSourceId);
+      const replacingLegacyLayer = !addingSource && !hasSourceScopedClips;
+      const otherClips = addingSource
+        ? p.clips
+        : p.clips.filter(c =>
+            c.layerId !== layerId ||
+            (!replacingLegacyLayer && c.lyricSourceId !== lyricSourceId)
+          );
 
       if (lines.length === 0) {
         return {
           ...p,
-          rawLyricsText: rawText,
-          normalizedLyrics: lines,
+          rawLyricsText: combinedRawLyricsText,
+          normalizedLyrics: combinedNormalizedLyrics,
+          lyricSources: sortedSources,
+          activeLyricSourceId: lyricSourceId,
           clips: otherClips
         };
       }
@@ -365,6 +407,9 @@ export function useLyrixaProject(): UseLyrixaProjectResult {
       const existingLayerClips = p.clips
         .filter(c => c.layerId === layerId)
         .sort((a, b) => a.startTime - b.startTime);
+      const appendOffset = addingSource && appendAfterExisting
+        ? Math.max(0, ...p.clips.filter(c => c.layerId === layerId).map(c => c.endTime)) + 1
+        : 0;
 
       const fresh = createClipsFromNormalizedLyrics(lines, {
         layerId,
@@ -376,8 +421,11 @@ export function useLyrixaProject(): UseLyrixaProjectResult {
         idPrefix
       }).map((clip, index) => ({
         ...clip,
+        startTime: clip.startTime + appendOffset,
+        endTime: clip.endTime + appendOffset,
         sourceIndex: index,
-        sourceId: createTapSyncSourceId(index, clip.text),
+        sourceId: createTapSyncSourceId(index, clip.text, lyricSourceId),
+        lyricSourceId,
         createdBy: 'import' as const
       }));
 
@@ -395,6 +443,7 @@ export function useLyrixaProject(): UseLyrixaProjectResult {
               muted: generated.muted,
               sourceIndex: generated.sourceIndex,
               sourceId: generated.sourceId,
+              lyricSourceId,
               createdBy: reused.createdBy ?? 'import'
             };
           }
@@ -404,8 +453,10 @@ export function useLyrixaProject(): UseLyrixaProjectResult {
 
       return {
         ...p,
-        rawLyricsText: rawText,
-        normalizedLyrics: lines,
+        rawLyricsText: combinedRawLyricsText,
+        normalizedLyrics: combinedNormalizedLyrics,
+        lyricSources: sortedSources,
+        activeLyricSourceId: lyricSourceId,
         clips: [...otherClips, ...nextClips]
       };
     });
@@ -546,6 +597,13 @@ function readAudioDuration(file: File): Promise<number> {
       reject(new Error(`Could not read audio metadata for ${file.name}`));
     });
   });
+}
+
+function createLyricSourceId(): string {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return `lyrics-${crypto.randomUUID()}`;
+  }
+  return `lyrics-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 function collectTextureIds(project: LyrixaProject): string[] {

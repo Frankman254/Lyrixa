@@ -90,7 +90,8 @@ export function ClipLyricsRenderer({
             transitionOut: clip.transitionOut
           }
         );
-        const exitLingerSeconds = Math.max(0, clipAnimation.exitLingerMs) / 1000;
+        const timing = resolveAutoTransitionTiming(clip.endTime - clip.startTime, clipAnimation);
+        const exitLingerSeconds = timing.exitLingerMs / 1000;
         return currentTime >= clip.startTime && currentTime <= clip.endTime + exitLingerSeconds;
       }),
     [animationConfig, clips, currentTime, layerMap, visibleLayerIds]
@@ -102,7 +103,7 @@ export function ClipLyricsRenderer({
         const layer   = layerMap.get(clip.layerId);
         const pos     = resolvePosition(clip, layer);
         const posClass = POSITION_CLASS[pos] ?? 'pos-center';
-        const duration = clip.endTime - clip.startTime;
+        const duration = Math.max(0, clip.endTime - clip.startTime);
         const progress = duration > 0
           ? Math.max(0, Math.min(1, (currentTime - clip.startTime) / duration))
           : 0;
@@ -123,6 +124,14 @@ export function ClipLyricsRenderer({
           layer?.progressIndicatorDefaults ?? layer?.progressIndicator,
           clip.progressIndicatorOverride
         );
+        const timing = resolveAutoTransitionTiming(duration, animation);
+        const enterProgress = timing.enterMs > 0
+          ? Math.max(0, Math.min(1, ((currentTime - clip.startTime) * 1000) / timing.enterMs))
+          : 1;
+        const exitProgress = timing.exitMs > 0
+          ? Math.max(0, Math.min(1, ((currentTime - clip.endTime) * 1000) / timing.exitMs))
+          : 0;
+        const holdProgress = Math.max(0, Math.min(1, (progress - 0.12) / 0.76));
         const fill = style.textFill;
         const texture = fill.imageTexture;
         const fillMode = fill.type;
@@ -169,10 +178,13 @@ export function ClipLyricsRenderer({
           '--lyric-texture-repeat': 'no-repeat',
           '--lyric-texture-opacity': texture?.opacity ?? 1,
           '--lyric-texture-filter': `brightness(${style.textTextureBrightness}) contrast(${style.textTextureContrast}) saturate(${style.textTextureSaturation})`,
-          '--lyric-animation-duration': `${animation.durationMs}ms`,
+          '--lyric-animation-duration': `${isExiting ? timing.exitMs : timing.enterMs}ms`,
           '--lyric-animation-easing': animation.easing,
           '--lyric-animation-intensity': animation.intensity,
           '--lyric-animation-speed': `${Math.max(0.1, animation.speed)}s`,
+          '--clip-enter-progress': enterProgress,
+          '--clip-exit-progress': exitProgress,
+          '--clip-hold-progress': holdProgress,
           '--lyric-fx-intensity': fx.intensity,
           '--lyric-fx-speed': `${Math.max(0.1, fx.speed)}s`,
           '--lyric-fx-color-a': fx.colorA,
@@ -223,4 +235,24 @@ function transformText(text: string, transform: LyricVisualStyle['textTransform'
   if (transform === 'uppercase') return text.toUpperCase();
   if (transform === 'lowercase') return text.toLowerCase();
   return text;
+}
+
+function resolveAutoTransitionTiming(
+  durationSeconds: number,
+  animation: LyricAnimationConfig
+): { enterMs: number; exitMs: number; exitLingerMs: number } {
+  const clipMs = Math.max(250, durationSeconds * 1000);
+  const maxPhaseMs = Math.max(120, clipMs * 0.42);
+  const base = animation.durationMs > 0 ? animation.durationMs : 360;
+  const enterMs = animation.transitionIn === 'none'
+    ? 0
+    : Math.round(Math.min(maxPhaseMs, Math.max(180, Math.min(900, clipMs * 0.2, base * 1.2))));
+  const exitMs = animation.transitionOut === 'none'
+    ? 0
+    : Math.round(Math.min(maxPhaseMs, Math.max(160, Math.min(760, clipMs * 0.16, base * 1.1))));
+  return {
+    enterMs,
+    exitMs,
+    exitLingerMs: exitMs
+  };
 }

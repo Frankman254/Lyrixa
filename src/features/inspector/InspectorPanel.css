@@ -145,6 +145,7 @@
 }
 
 .insp-empty,
+.insp-muted,
 .insp-warning {
   padding: var(--s-3);
   border-radius: var(--r-2);
@@ -158,4 +159,34 @@
   color: var(--warning);
   border-color: oklch(from var(--warning) l c h / 0.3);
   background: oklch(from var(--warning) l c h / 0.08);
+}
+
+.insp-source-list {
+  display: grid;
+  gap: 6px;
+}
+
+.insp-source-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-2);
+  background: var(--bg-2);
+  font-size: 11px;
+}
+
+.insp-source-row strong {
+  min-width: 0;
+  color: var(--fg-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.insp-source-row span {
+  flex: none;
+  color: var(--fg-3);
+  font-variant-numeric: tabular-nums;
 }

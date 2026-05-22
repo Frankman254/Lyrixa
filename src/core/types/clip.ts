@@ -52,6 +52,8 @@ export interface LyricClip {
   sourceIndex?: number;
   /** Stable source identity shared by the same lyric line across layers. */
   sourceId?: string;
+  /** Parent lyrics source, used when a long mix contains several lyric sets. */
+  lyricSourceId?: string;
   /** Creation path used by sync/import tooling. */
   createdBy?: 'tap-sync' | 'manual' | 'import';
 

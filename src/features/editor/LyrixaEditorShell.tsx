@@ -5,6 +5,7 @@ import { TimelineEditor } from '../timeline-editor/TimelineEditor';
 import { ClipLyricsRenderer } from '../lyrics-view/ClipLyricsRenderer';
 import type { LyricClip } from '../../core/types/clip';
 import type { LyricLayer } from '../../core/types/layer';
+import type { LyrixaProject } from '../../core/types/project';
 import { LyricsImportPanel } from './LyricsImportPanel';
 import { FloatingPreview } from './FloatingPreview';
 import { EditorAlerts } from './EditorAlerts';
@@ -163,10 +164,14 @@ export function LyrixaEditorShell() {
     () => findBestLyricSourceClips(project.clips, project.layers, syncLayerId),
     [project.clips, project.layers, syncLayerId]
   );
+  const orderedProjectLyricLines = useMemo(
+    () => getOrderedProjectLyricLines(project),
+    [project]
+  );
   const canSync =
     !!masterChannel?.objectUrl &&
     !!syncLayerId &&
-    (project.rawLyricsText.trim().length > 0 || fallbackLyricSourceClips.length > 0);
+    (orderedProjectLyricLines.length > 0 || fallbackLyricSourceClips.length > 0);
 
   const tapSync = useTapSync({
     enabled: syncMode,
@@ -183,27 +188,31 @@ export function LyrixaEditorShell() {
 
   const buildSyncLines = useCallback((layerId: string): TapSyncLine[] => {
     const layerClips = orderedLayerClips(project.clips, layerId);
-    const rawLines = normalizeLyricsText(project.rawLyricsText).lines;
     const fallbackSourceClips = findBestLyricSourceClips(project.clips, project.layers, layerId);
-    const sourceTexts = rawLines.length > 0
-      ? rawLines
-      : fallbackSourceClips.map(clip => clip.text);
+    const sourceLines = orderedProjectLyricLines.length > 0
+      ? orderedProjectLyricLines
+      : fallbackSourceClips.map((clip, index) => ({
+          text: clip.text,
+          sourceIndex: index,
+          sourceId: clip.sourceId ?? createTapSyncSourceId(index, clip.text),
+          lyricSourceId: clip.lyricSourceId
+        }));
 
-    return sourceTexts.map((text, index) => {
-      const sourceId = fallbackSourceClips[index]?.sourceId ?? createTapSyncSourceId(index, text);
-      const sameTextAtIndex = layerClips[index]?.text.trim() === text.trim()
+    return sourceLines.map((line, index) => {
+      const sameTextAtIndex = layerClips[index]?.text.trim() === line.text.trim()
         ? layerClips[index]
         : undefined;
-      const existing = layerClips.find(clip => clip.sourceId === sourceId) ?? sameTextAtIndex;
+      const existing = layerClips.find(clip => clip.sourceId === line.sourceId) ?? sameTextAtIndex;
       const template = existing ?? fallbackSourceClips[index];
       return {
-        sourceIndex: index,
-        sourceId,
-        text,
+        sourceIndex: line.sourceIndex,
+        sourceId: line.sourceId,
+        lyricSourceId: line.lyricSourceId,
+        text: line.text,
         template
       };
     });
-  }, [project.clips, project.layers, project.rawLyricsText]);
+  }, [orderedProjectLyricLines, project.clips, project.layers]);
 
   const clearSyncLayer = useCallback((layerId = syncLayerId) => {
     if (!layerId) return;
@@ -214,7 +223,7 @@ export function LyrixaEditorShell() {
     if (!layerId) return;
     const lines = buildSyncLines(layerId);
     const hydratedClips = attachSourceIdentityToLayerClips(project.clips, layerId, lines);
-    if (project.rawLyricsText.trim().length === 0 && lines.length > 0) {
+    if (project.rawLyricsText.trim().length === 0 && project.lyricSources.length === 0 && lines.length > 0) {
       setRawLyricsText(lines.map(line => line.text).join('\n'));
     }
     if (hydratedClips !== project.clips) {
@@ -225,7 +234,7 @@ export function LyrixaEditorShell() {
     setSyncTargetLayerId(layerId);
     setSelectedLayerId(layerId);
     tapSync.reset();
-  }, [buildSyncLines, project.clips, project.rawLyricsText, setClips, setRawLyricsText, tapSync]);
+  }, [buildSyncLines, project.clips, project.lyricSources.length, project.rawLyricsText, setClips, setRawLyricsText, tapSync]);
 
   const handleToggleSync = useCallback(() => {
     if (syncMode) {
@@ -585,6 +594,32 @@ function findBestLyricSourceClips(
   return best;
 }
 
+function getOrderedProjectLyricLines(project: LyrixaProject): TapSyncLine[] {
+  const sources = [...(project.lyricSources ?? [])]
+    .filter(source => source.normalizedLines.length > 0 || source.rawText.trim().length > 0)
+    .sort((a, b) => a.order - b.order);
+
+  if (sources.length === 0) {
+    return normalizeLyricsText(project.rawLyricsText).lines.map((text, index) => ({
+      sourceIndex: index,
+      sourceId: createTapSyncSourceId(index, text),
+      text
+    }));
+  }
+
+  return sources.flatMap(source => {
+    const lines = source.normalizedLines.length > 0
+      ? source.normalizedLines
+      : normalizeLyricsText(source.rawText).lines;
+    return lines.map((text, index) => ({
+      sourceIndex: index,
+      sourceId: createTapSyncSourceId(index, text, source.id),
+      lyricSourceId: source.id,
+      text
+    }));
+  });
+}
+
 function attachSourceIdentityToLayerClips(
   clips: LyricClip[],
   layerId: string,
@@ -603,6 +638,7 @@ function attachSourceIdentityToLayerClips(
     if (
       clip.sourceId === line.sourceId &&
       clip.sourceIndex === line.sourceIndex &&
+      clip.lyricSourceId === line.lyricSourceId &&
       clip.createdBy
     ) {
       continue;
@@ -610,6 +646,7 @@ function attachSourceIdentityToLayerClips(
     patches.set(clip.id, {
       sourceId: line.sourceId,
       sourceIndex: line.sourceIndex,
+      lyricSourceId: line.lyricSourceId,
       createdBy: clip.createdBy ?? 'import'
     });
   }

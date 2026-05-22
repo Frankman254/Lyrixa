@@ -7,7 +7,8 @@ import type {
   LyricLayerAudioReactiveTarget,
   LyricLayerAudioReactiveTargets
 } from '../types/layer';
-import type { LyrixaProject } from '../types/project';
+import { normalizeLyricsText } from '../lyrics/normalize';
+import type { LyricSource, LyrixaProject } from '../types/project';
 import { DEFAULT_LYRIC_ANIMATION } from '../types/render';
 import {
   normalizePartialLyricVisualStyle,
@@ -65,12 +66,24 @@ export function parseProjectExportEnvelope(raw: unknown): LyrixaProject {
 export function normalizeProject(input: Partial<LyrixaProject>): LyrixaProject {
   const emptyId = `imported-${Date.now()}`;
   const audioTracks = normalizeAudioTracks(input.audioTracks);
+  const lyricSources = normalizeLyricSources(
+    input.lyricSources,
+    input.rawLyricsText,
+    input.normalizedLyrics
+  );
+  const activeLyricSourceId =
+    typeof input.activeLyricSourceId === 'string' &&
+    lyricSources.some(source => source.id === input.activeLyricSourceId)
+      ? input.activeLyricSourceId
+      : lyricSources[0]?.id;
   return {
     id: typeof input.id === 'string' && input.id ? input.id : emptyId,
     name: typeof input.name === 'string' && input.name ? input.name : 'Imported Project',
     audioTracks,
     rawLyricsText: input.rawLyricsText ?? '',
     normalizedLyrics: Array.isArray(input.normalizedLyrics) ? input.normalizedLyrics : [],
+    lyricSources,
+    activeLyricSourceId,
     layers: normalizeLayers(input.layers),
     clips: normalizeClips(input.clips),
     styleConfig: resolveLyricVisualStyle(input.styleConfig),
@@ -80,6 +93,47 @@ export function normalizeProject(input: Partial<LyrixaProject>): LyrixaProject {
     currentTime: Number.isFinite(input.currentTime) ? input.currentTime! : 0,
     renderMode: input.renderMode ?? 'editor'
   };
+}
+
+export function normalizeLyricSources(
+  sources: LyricSource[] | undefined,
+  rawLyricsText = '',
+  normalizedLyrics: string[] | undefined = undefined
+): LyricSource[] {
+  if (Array.isArray(sources) && sources.length > 0) {
+    return sources
+      .map((source, index) => {
+        const rawText = typeof source.rawText === 'string' ? source.rawText : '';
+        const normalizedLines = Array.isArray(source.normalizedLines)
+          ? source.normalizedLines
+          : normalizeLyricsText(rawText).lines;
+        const now = new Date(0).toISOString();
+        return {
+          id: typeof source.id === 'string' && source.id ? source.id : `lyrics-${index + 1}`,
+          title: typeof source.title === 'string' && source.title ? source.title : `Lyrics ${index + 1}`,
+          rawText,
+          normalizedLines,
+          order: Number.isFinite(source.order) ? source.order : index,
+          createdAt: typeof source.createdAt === 'string' ? source.createdAt : now,
+          updatedAt: typeof source.updatedAt === 'string' ? source.updatedAt : now
+        };
+      })
+      .sort((a, b) => a.order - b.order);
+  }
+
+  const rawText = rawLyricsText.trim();
+  if (!rawText) return [];
+  return [{
+    id: 'lyrics-main',
+    title: 'Lyrics 1',
+    rawText: rawLyricsText,
+    normalizedLines: Array.isArray(normalizedLyrics) && normalizedLyrics.length > 0
+      ? normalizedLyrics
+      : normalizeLyricsText(rawLyricsText).lines,
+    order: 0,
+    createdAt: new Date(0).toISOString(),
+    updatedAt: new Date(0).toISOString()
+  }];
 }
 
 export function normalizeLayers(layers: LyricLayer[] | undefined): LyricLayer[] {

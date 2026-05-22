@@ -26,18 +26,19 @@ export interface TapOptions {
 export interface TapSyncLine {
   sourceIndex: number;
   sourceId: string;
+  lyricSourceId?: string;
   text: string;
   /** Optional source clip whose visual metadata should be preserved. */
   template?: LyricClip;
 }
 
-export function createTapSyncSourceId(index: number, text: string): string {
+export function createTapSyncSourceId(index: number, text: string, namespace = 'lyric'): string {
   const normalized = text.trim().replace(/\s+/g, ' ');
   let hash = 5381;
   for (let i = 0; i < normalized.length; i += 1) {
     hash = ((hash << 5) + hash) ^ normalized.charCodeAt(i);
   }
-  return `lyric-${index}-${(hash >>> 0).toString(36)}`;
+  return `${namespace}-${index}-${(hash >>> 0).toString(36)}`;
 }
 
 /** Clips belonging to `layerId`, in stable line order. */
@@ -86,6 +87,7 @@ function createLineClip(
     layerId,
     sourceIndex: line.sourceIndex,
     sourceId: line.sourceId,
+    lyricSourceId: line.lyricSourceId,
     createdBy: 'tap-sync',
     transitionIn: template?.transitionIn ?? 'fade',
     transitionOut: template?.transitionOut ?? 'fade',

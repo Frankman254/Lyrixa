@@ -27,6 +27,16 @@ export interface LyrixaTrack {
  * The single source of truth for the editor experience. Every feature
  * reads from and writes to this project via `useLyrixaProject`.
  */
+export interface LyricSource {
+  id: string;
+  title: string;
+  rawText: string;
+  normalizedLines: string[];
+  order: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface LyrixaProject {
   id: string;
   name: string;
@@ -36,6 +46,10 @@ export interface LyrixaProject {
   rawLyricsText: string;
   /** The normalized lines derived from rawLyricsText. */
   normalizedLyrics: string[];
+  /** Ordered lyric sets for long mixes, medleys, and multi-song sessions. */
+  lyricSources: LyricSource[];
+  /** Source currently edited/imported by the lyrics workflow. */
+  activeLyricSourceId?: string;
   layers: LyricLayer[];
   clips: LyricClip[];
   styleConfig: LyricVisualStyle;
