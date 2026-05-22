@@ -7,9 +7,13 @@ interface LayersSidebarProps {
   clips: LyricClip[];
   selectedLayerId: string | null;
   collapsed: boolean;
+  waveformEnabled: boolean;
+  previewVisible: boolean;
   onSelectLayer: (id: string) => void;
   onLayersChange: (next: LyricLayer[]) => void;
   onToggleCollapsed: () => void;
+  onToggleWaveform: () => void;
+  onTogglePreview: () => void;
 }
 
 /**
@@ -22,9 +26,13 @@ export function LayersSidebar({
   clips,
   selectedLayerId,
   collapsed,
+  waveformEnabled,
+  previewVisible,
   onSelectLayer,
   onLayersChange,
-  onToggleCollapsed
+  onToggleCollapsed,
+  onToggleWaveform,
+  onTogglePreview
 }: LayersSidebarProps) {
   const sortedLayers = [...layers].sort((a, b) => a.order - b.order);
 
@@ -108,6 +116,38 @@ export function LayersSidebar({
                 </div>
               );
             })}
+          </div>
+        </div>
+
+        <div className="ls-sidebar-section ls-quick-section">
+          <div className="ls-sidebar-section-title">Quick Access</div>
+          <div className="ls-quick-actions">
+            <button
+              type="button"
+              className={`ls-quick-action ${waveformEnabled ? 'active' : ''}`}
+              onClick={onToggleWaveform}
+              title={waveformEnabled
+                ? 'Hide waveform and stop audio peak analysis'
+                : 'Show waveform and allow audio peak analysis'}
+            >
+              <span className="ls-quick-icon" aria-hidden>≋</span>
+              <span>
+                <strong>Waveform</strong>
+                <small>{waveformEnabled ? 'On' : 'Off'}</small>
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`ls-quick-action ${previewVisible ? 'active' : ''}`}
+              onClick={onTogglePreview}
+              title={previewVisible ? 'Hide floating preview' : 'Show floating preview'}
+            >
+              <span className="ls-quick-icon" aria-hidden>◉</span>
+              <span>
+                <strong>Preview</strong>
+                <small>{previewVisible ? 'Shown' : 'Hidden'}</small>
+              </span>
+            </button>
           </div>
         </div>
       </div>

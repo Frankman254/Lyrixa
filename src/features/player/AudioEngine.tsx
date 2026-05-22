@@ -19,6 +19,8 @@ interface AudioEngineProps {
   isPlaying: boolean;
   /** Playback speed multiplier. 1 = normal. Used by tap-sync to slow fast songs. */
   playbackRate?: number;
+  /** Enables Web Audio analyser wiring for visual/audio-reactive features. */
+  analysisEnabled?: boolean;
   /** Position to restore when the underlying audio source URL changes. */
   sourceSyncTime?: number;
   /** Optional ~4Hz tick from the <audio> element. Use rAF for smooth playhead. */
@@ -31,6 +33,7 @@ export const AudioEngine = forwardRef<AudioEngineRef, AudioEngineProps>(({
   audioUrl,
   isPlaying,
   playbackRate = 1,
+  analysisEnabled = true,
   sourceSyncTime = 0,
   onTimeUpdate,
   onDurationChange,
@@ -100,16 +103,18 @@ export const AudioEngine = forwardRef<AudioEngineRef, AudioEngineProps>(({
   useEffect(() => {
     if (audioRef.current) {
       if (isPlaying) {
-        initWebAudio();
-        if (audioCtxRef.current?.state === 'suspended') {
-          audioCtxRef.current.resume();
+        if (analysisEnabled) {
+          initWebAudio();
+          if (audioCtxRef.current?.state === 'suspended') {
+            audioCtxRef.current.resume();
+          }
         }
         audioRef.current.play().catch(e => console.warn('Audio play failed:', e));
       } else {
         audioRef.current.pause();
       }
     }
-  }, [audioUrl, isPlaying]);
+  }, [audioUrl, isPlaying, analysisEnabled]);
 
   const handleTimeUpdate = () => {
     if (audioRef.current && onTimeUpdate) {

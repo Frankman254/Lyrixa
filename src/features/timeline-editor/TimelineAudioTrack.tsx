@@ -15,6 +15,8 @@ interface TimelineAudioTrackProps {
   actions?: ReactNode;
   /** True when no real decoded peaks exist and the waveform is the mock fallback. */
   mockFallback?: boolean;
+  /** Keeps the lane seekable while skipping waveform canvas/render work. */
+  showWaveform?: boolean;
   /** Click handler for the waveform lane — used for timeline seek. */
   onLaneClick?: MouseEventHandler<HTMLDivElement>;
   visibleStartPx?: number;
@@ -35,6 +37,7 @@ export const TimelineAudioTrack = memo(function TimelineAudioTrack({
   badge,
   actions,
   mockFallback,
+  showWaveform = true,
   onLaneClick,
   visibleStartPx,
   visibleWidthPx
@@ -55,16 +58,22 @@ export const TimelineAudioTrack = memo(function TimelineAudioTrack({
         style={{ width: `${totalWidth}px`, height: `${height}px` }}
         onClick={onLaneClick}
       >
-        <AudioWaveformTrack
-          duration={duration}
-          pxPerSecond={pxPerSecond}
-          peaks={peaks}
-          height={height}
-          color={color}
-          seed={title}
-          visibleStartPx={visibleStartPx}
-          visibleWidthPx={visibleWidthPx}
-        />
+        {showWaveform ? (
+          <AudioWaveformTrack
+            duration={duration}
+            pxPerSecond={pxPerSecond}
+            peaks={peaks}
+            height={height}
+            color={color}
+            seed={title}
+            visibleStartPx={visibleStartPx}
+            visibleWidthPx={visibleWidthPx}
+          />
+        ) : (
+          <div className="tl-waveform-disabled" style={{ width: `${totalWidth}px`, height: `${height}px` }}>
+            Waveform disabled
+          </div>
+        )}
       </div>
     </div>
   );

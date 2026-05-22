@@ -8,6 +8,7 @@ import {
   normalizeProject,
   stripRuntimeTextureUrls
 } from '../../core/project/serialization';
+import { shouldPersistAudioMetadata } from './audioBlobStorage';
 import {
   DEFAULT_CLIP_PROGRESS_INDICATOR,
   DEFAULT_LYRIC_ANIMATION,
@@ -23,6 +24,7 @@ import {
 
 const STORAGE_KEY = 'lyrixa:project:v1';
 const SCHEMA_VERSION = 3;
+const PERSISTED_WAVEFORM_PEAK_MAX_COUNT = 15_000;
 
 export interface HydratedProject {
   project: LyrixaProject;
@@ -100,9 +102,16 @@ function generateId(): string {
 
 function stripObjectUrls(channel: AudioChannel | null | undefined): PersistedAudioChannel | null {
   if (!channel) return null;
-  const { objectUrl: _omit, ...rest } = channel;
+  const { objectUrl: _omit, waveformPeaks, ...rest } = channel;
   void _omit;
-  return rest;
+  const keepWaveformPeaks =
+    waveformPeaks &&
+    waveformPeaks.length <= PERSISTED_WAVEFORM_PEAK_MAX_COUNT &&
+    shouldPersistAudioMetadata(channel.sizeBytes, channel.duration);
+  return {
+    ...rest,
+    waveformPeaks: keepWaveformPeaks ? waveformPeaks : undefined
+  };
 }
 
 /**
@@ -151,12 +160,13 @@ export function loadProject(): HydratedProject {
 }
 
 function rehydrateV2(persisted: PersistedProject): LyrixaProject {
+  const master = persisted.audioTracks?.master
+    ? stripObjectUrls({ ...persisted.audioTracks.master, objectUrl: undefined })
+    : null;
   return normalizeProject({
     ...persisted,
     audioTracks: {
-      master: persisted.audioTracks?.master
-        ? { ...persisted.audioTracks.master, objectUrl: undefined }
-        : null
+      master
     }
   });
 }

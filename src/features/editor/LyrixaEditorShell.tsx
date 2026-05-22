@@ -33,6 +33,10 @@ import { useProjectImportExport } from './useProjectImportExport';
 import './LyrixaEditorShell.css';
 
 export function LyrixaEditorShell() {
+  const [waveformEnabled, setWaveformEnabled] = useState(() =>
+    readStoredBoolean('lyrixa_waveform_enabled', false)
+  );
+
   const {
     project,
     saveStatus,
@@ -53,7 +57,9 @@ export function LyrixaEditorShell() {
     setMasterDuration,
     importProject,
     hardResetProject
-  } = useLyrixaProject();
+  } = useLyrixaProject({
+    waveformAnalysisEnabled: waveformEnabled
+  });
 
   const masterFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -104,7 +110,7 @@ export function LyrixaEditorShell() {
       e.target.value = '';
       if (!file) return;
       try {
-        await loadAudioFile(file, role);
+        await loadAudioFile(file, role, { analyzeWaveform: waveformEnabled });
       } catch (err) {
         console.error(`[Lyrixa] Failed to load ${role} audio file:`, err);
       }
@@ -127,12 +133,13 @@ export function LyrixaEditorShell() {
 
   const extractBandPeaksForMode = useCallback(
     async (mode: AudioBandMode) => {
+      if (!waveformEnabled) return null;
       const blob = getAudioBlob('master');
       if (!blob) return null;
       if (!shouldExtractRealPeaks(blob, masterChannel?.duration ?? 0)) return null;
       return extractBandPeaksFromBlob(blob, mode);
     },
-    [getAudioBlob, masterChannel?.duration]
+    [getAudioBlob, masterChannel?.duration, waveformEnabled]
   );
 
   const {
@@ -282,6 +289,7 @@ export function LyrixaEditorShell() {
     setPreviewOpen(false);
     setTransparentPreviewOpen(false);
     setMiniPreviewVisible(true);
+    setWaveformEnabled(false);
     setSelectedClipId(null);
     setSelectedLayerId(null);
     await hardResetProject();
@@ -293,6 +301,23 @@ export function LyrixaEditorShell() {
     setFloatingPreviewWidth(next);
     try { window.localStorage.setItem('lyrixa_floating_preview_width', String(next)); } catch { /* ignore */ }
   };
+
+  const toggleWaveformEnabled = useCallback(() => {
+    setWaveformEnabled(current => {
+      const next = !current;
+      try { window.localStorage.setItem('lyrixa_waveform_enabled', next ? '1' : '0'); } catch { /* ignore */ }
+      return next;
+    });
+  }, []);
+
+  const togglePreviewWindow = useCallback(() => {
+    if (previewOpen || miniPreviewVisible) {
+      setPreviewOpen(false);
+      setMiniPreviewVisible(false);
+      return;
+    }
+    setMiniPreviewVisible(true);
+  }, [miniPreviewVisible, previewOpen]);
 
   const shellClass = [
     'lyrixa-shell',
@@ -358,6 +383,7 @@ export function LyrixaEditorShell() {
           audioUrl={masterChannel.objectUrl}
           isPlaying={isPlaying}
           playbackRate={syncMode ? syncSpeed : 1}
+          analysisEnabled={waveformEnabled}
           sourceSyncTime={playbackTime}
           onDurationChange={setMasterDuration}
           onEnded={() => setIsPlaying(false)}
@@ -369,11 +395,15 @@ export function LyrixaEditorShell() {
         clips={project.clips}
         selectedLayerId={selectedLayerId}
         collapsed={sidebarCollapsed}
+        waveformEnabled={waveformEnabled}
+        previewVisible={showMini || previewOpen}
         onSelectLayer={(id) => {
           setSelectedLayerId(id);
           setSelectedClipId(null);
         }}
         onLayersChange={setLayers}
+        onToggleWaveform={toggleWaveformEnabled}
+        onTogglePreview={togglePreviewWindow}
         onToggleCollapsed={() => {
           setSidebarCollapsed(v => {
             const next = !v;
@@ -395,7 +425,8 @@ export function LyrixaEditorShell() {
             isPlaying={isPlaying}
             trackName={masterChannel?.fileName ?? 'No audio loaded'}
             masterChannel={masterChannel}
-            onExtractBandPeaks={extractBandPeaksForMode}
+            waveformEnabled={waveformEnabled}
+            onExtractBandPeaks={waveformEnabled ? extractBandPeaksForMode : undefined}
             onClipsChange={setClips}
             onLayersChange={setLayers}
             onSeek={handleSeek}
@@ -570,6 +601,13 @@ function readStoredNumber(key: string, fallback: number): number {
   if (!raw) return fallback;
   const parsed = Number(raw);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function readStoredBoolean(key: string, fallback: boolean): boolean {
+  const raw = safeGetLocalStorage(key);
+  if (raw === '1') return true;
+  if (raw === '0') return false;
+  return fallback;
 }
 
 function findBestLyricSourceClips(

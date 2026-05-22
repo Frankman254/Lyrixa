@@ -13,6 +13,8 @@ import type { AudioChannelRole } from '../../core/types/audio';
 const DB_NAME = 'lyrixa';
 const DB_VERSION = 2;
 const STORE_AUDIO = 'audio';
+export const AUDIO_PERSIST_MAX_BLOB_BYTES = 50 * 1024 * 1024;
+export const AUDIO_PERSIST_MAX_DURATION_SECONDS = 20 * 60;
 
 export interface StoredAudio {
   blob: Blob;
@@ -23,6 +25,19 @@ export interface StoredAudio {
   sizeBytes?: number;
   lastModified?: number;
   fileKey?: string;
+}
+
+export function shouldPersistAudioBlob(blob: Blob, durationSeconds: number): boolean {
+  return shouldPersistAudioMetadata(blob.size, durationSeconds);
+}
+
+export function shouldPersistAudioMetadata(
+  sizeBytes: number | undefined,
+  durationSeconds: number | undefined
+): boolean {
+  if (typeof sizeBytes === 'number' && sizeBytes > AUDIO_PERSIST_MAX_BLOB_BYTES) return false;
+  if (typeof durationSeconds === 'number' && durationSeconds > AUDIO_PERSIST_MAX_DURATION_SECONDS) return false;
+  return true;
 }
 
 function audioKey(projectId: string, role: AudioChannelRole): string {

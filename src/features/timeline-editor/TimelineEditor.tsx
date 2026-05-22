@@ -45,6 +45,8 @@ interface TimelineEditorProps {
   embedded?: boolean;
   /** When true, the timeline's global keyboard shortcuts are suspended (e.g. during tap-sync). */
   disableShortcuts?: boolean;
+  /** When false, the audio lane stays usable for seeking but skips waveform rendering/extraction. */
+  waveformEnabled?: boolean;
   /** Async callback to extract frequency-filtered peaks for a given band mode. */
   onExtractBandPeaks?: (mode: AudioBandMode) => Promise<AudioPeak[] | null>;
   onClipsChange: (next: LyricClipModel[]) => void;
@@ -79,6 +81,7 @@ export function TimelineEditor({
   peaks,
   embedded = false,
   disableShortcuts = false,
+  waveformEnabled = true,
   onExtractBandPeaks,
   onClipsChange,
   onLayersChange,
@@ -599,9 +602,9 @@ export function TimelineEditor({
     masterIsMock
   } = useTimelineBandPeaks({
     bandMode,
-    masterChannel,
-    fallbackPeaks: peaks,
-    onExtractBandPeaks
+    masterChannel: waveformEnabled ? masterChannel : null,
+    fallbackPeaks: waveformEnabled ? peaks : undefined,
+    onExtractBandPeaks: waveformEnabled ? onExtractBandPeaks : undefined
   });
 
   // ── Lyrics Offset ──────────────────────────────────────────────
@@ -703,6 +706,7 @@ export function TimelineEditor({
             bandMode={bandMode}
             bandPeaksLoading={bandPeaksLoading}
             masterChannel={masterChannel}
+            waveformEnabled={waveformEnabled}
             displayPeaks={displayPeaks}
             bandPeaks={bandPeaks}
             masterIsMock={masterIsMock}

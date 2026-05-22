@@ -30,7 +30,10 @@ import {
   putAudio,
   getAudio,
   deleteAudio,
-  deleteAllProjectAudio
+  deleteAllProjectAudio,
+  shouldPersistAudioBlob,
+  shouldPersistAudioMetadata,
+  type StoredAudio
 } from './audioBlobStorage';
 import {
   extractPeaksFromBlob,
@@ -45,6 +48,18 @@ const AUTOSAVE_DEBOUNCE_MS = 400;
 
 export type SaveStatus = 'idle' | 'pending' | 'saved';
 export type ClipUpdate = LyricClip[] | ((previous: LyricClip[]) => LyricClip[]);
+
+export interface UseLyrixaProjectOptions {
+  /** When false, Lyrixa never decodes audio to extract waveform peaks. */
+  waveformAnalysisEnabled?: boolean;
+}
+
+export interface LoadAudioOptions {
+  /** Override waveform peak extraction for this load operation. */
+  analyzeWaveform?: boolean;
+  /** Override audio blob persistence for this load operation. */
+  persistAudio?: boolean;
+}
 
 export interface ApplyLyricsOptions {
   /** Default duration in seconds. Used by `fixed` and as fallback. */
@@ -72,7 +87,7 @@ export interface UseLyrixaProjectResult {
   audioNeedsReload: boolean;
 
   setProjectName: (name: string) => void;
-  loadAudioFile: (file: File, role?: AudioChannelRole) => Promise<void>;
+  loadAudioFile: (file: File, role?: AudioChannelRole, options?: LoadAudioOptions) => Promise<void>;
   removeAudio: (role?: AudioChannelRole) => Promise<void>;
   /** Returns the in-memory Blob for a loaded audio channel, or null if unavailable. */
   getAudioBlob: (role: AudioChannelRole) => Blob | null;
@@ -102,7 +117,9 @@ export interface UseLyrixaProjectResult {
  * Owns the LyrixaProject in memory, persists JSON to localStorage, and
  * persists the master audio blob to IndexedDB.
  */
-export function useLyrixaProject(): UseLyrixaProjectResult {
+export function useLyrixaProject({
+  waveformAnalysisEnabled = true
+}: UseLyrixaProjectOptions = {}): UseLyrixaProjectResult {
   const [hydrated] = useState(() => loadProject());
   const [project, setProject] = useState<LyrixaProject>(hydrated.project);
   const [audioNeedsReload, setAudioNeedsReload] = useState(false);
@@ -110,6 +127,11 @@ export function useLyrixaProject(): UseLyrixaProjectResult {
 
   const saveTimerRef = useRef<number | null>(null);
   const skipNextSaveRef = useRef(true);
+  const waveformAnalysisEnabledRef = useRef(waveformAnalysisEnabled);
+
+  useEffect(() => {
+    waveformAnalysisEnabledRef.current = waveformAnalysisEnabled;
+  }, [waveformAnalysisEnabled]);
 
   // In-memory blob for the current project — used by band peak extraction.
   const blobsRef = useRef<{ master: Blob | null }>({ master: null });
@@ -160,10 +182,19 @@ export function useLyrixaProject(): UseLyrixaProjectResult {
 
     const restore = async (role: AudioChannelRole, channel: AudioChannel | null | undefined) => {
       if (!channel) return;
+      if (!shouldPersistAudioMetadata(channel.sizeBytes, channel.duration)) {
+        if (role === 'master') setAudioNeedsReload(true);
+        return;
+      }
       const stored = await getAudio(initial.id, role).catch(() => null);
       if (cancelled) return;
       if (!stored) {
         if (role === 'master') setAudioNeedsReload(true);
+        return;
+      }
+      if (!storedAudioMatchesChannel(stored, channel)) {
+        if (role === 'master') setAudioNeedsReload(true);
+        void deleteAudio(initial.id, role);
         return;
       }
       blobsRef.current[role] = stored.blob;
@@ -186,8 +217,8 @@ export function useLyrixaProject(): UseLyrixaProjectResult {
           audioTracks: { ...p.audioTracks, [role]: updated }
         };
       });
-      // Re-extract peaks if missing — keeps mock fallback honest.
-      if (!channel.waveformPeaks || channel.waveformPeaks.length === 0) {
+      // Re-extract peaks if missing, unless performance mode forbids audio decoding.
+      if (waveformAnalysisEnabledRef.current && (!channel.waveformPeaks || channel.waveformPeaks.length === 0)) {
         extractAndApplyPeaks(stored.blob, role, stored.duration);
       }
     };
@@ -259,6 +290,7 @@ export function useLyrixaProject(): UseLyrixaProjectResult {
 
   const extractAndApplyPeaks = useCallback(
     (blob: Blob, role: AudioChannelRole, durationSeconds: number) => {
+      if (!waveformAnalysisEnabledRef.current) return;
       if (!shouldExtractRealPeaks(blob, durationSeconds)) return;
       // Fire and forget — decoding is async but UI must not block on it.
       extractPeaksFromBlob(blob, { peaksPerSecond: 25 })
@@ -270,10 +302,26 @@ export function useLyrixaProject(): UseLyrixaProjectResult {
     [applyChannelPeaks]
   );
 
-  const loadAudioFile = useCallback(async (file: File, role: AudioChannelRole = 'master') => {
+  useEffect(() => {
+    if (!waveformAnalysisEnabled) return;
+    const master = project.audioTracks.master;
+    const blob = blobsRef.current.master;
+    if (!master || !blob) return;
+    if (master.waveformPeaks && master.waveformPeaks.length > 0) return;
+    extractAndApplyPeaks(blob, 'master', master.duration);
+  }, [
+    waveformAnalysisEnabled,
+    project.audioTracks.master,
+    extractAndApplyPeaks
+  ]);
+
+  const loadAudioFile = useCallback(async (
+    file: File,
+    role: AudioChannelRole = 'master',
+    options: LoadAudioOptions = {}
+  ) => {
     const objectUrl = URL.createObjectURL(file);
     blobsRef.current[role] = file;
-    const duration = await readAudioDuration(file).catch(() => 0);
     const sizeBytes = file.size;
     const lastModified = file.lastModified;
     const fileKey = buildAudioFileKey(file.name, sizeBytes, lastModified);
@@ -284,7 +332,7 @@ export function useLyrixaProject(): UseLyrixaProjectResult {
       const channel: AudioChannel = {
         fileName: file.name,
         objectUrl,
-        duration,
+        duration: 0,
         waveformPeaks: undefined,
         sizeBytes,
         lastModified,
@@ -297,17 +345,42 @@ export function useLyrixaProject(): UseLyrixaProjectResult {
     });
     if (role === 'master') setAudioNeedsReload(false);
 
-    try {
-      await putAudio(projectIdRef.current, role, file, file.name, duration, {
-        sizeBytes,
-        lastModified,
-        fileKey
-      });
-    } catch (err) {
-      console.warn(`[Lyrixa] Could not persist ${role} audio blob:`, err);
+    if (!shouldPersistAudioMetadata(sizeBytes, undefined)) {
+      void deleteAudio(projectIdRef.current, role);
     }
 
-    extractAndApplyPeaks(file, role, duration);
+    void readAudioDuration(file)
+      .catch(() => 0)
+      .then(duration => {
+        setProject(p => {
+          const current = p.audioTracks[role];
+          if (!current || current.fileKey !== fileKey) return p;
+          if (current.duration === duration) return p;
+          return {
+            ...p,
+            audioTracks: {
+              ...p.audioTracks,
+              [role]: { ...current, duration }
+            }
+          };
+        });
+
+        if ((options.persistAudio ?? true) && shouldPersistAudioBlob(file, duration)) {
+          void putAudio(projectIdRef.current, role, file, file.name, duration, {
+            sizeBytes,
+            lastModified,
+            fileKey
+          }).catch(err => {
+            console.warn(`[Lyrixa] Could not persist ${role} audio blob:`, err);
+          });
+        } else {
+          void deleteAudio(projectIdRef.current, role);
+        }
+
+        if (options.analyzeWaveform ?? waveformAnalysisEnabledRef.current) {
+          extractAndApplyPeaks(file, role, duration);
+        }
+      });
   }, [extractAndApplyPeaks]);
 
   const removeAudio = useCallback(async (role: AudioChannelRole = 'master') => {
@@ -601,6 +674,28 @@ function readAudioDuration(file: File): Promise<number> {
       reject(new Error(`Could not read audio metadata for ${file.name}`));
     });
   });
+}
+
+function storedAudioMatchesChannel(stored: StoredAudio, channel: AudioChannel): boolean {
+  if (stored.fileKey && channel.fileKey) return stored.fileKey === channel.fileKey;
+  if (
+    typeof stored.sizeBytes === 'number' &&
+    typeof channel.sizeBytes === 'number' &&
+    stored.sizeBytes !== channel.sizeBytes
+  ) {
+    return false;
+  }
+  if (
+    typeof stored.lastModified === 'number' &&
+    typeof channel.lastModified === 'number' &&
+    stored.lastModified !== channel.lastModified
+  ) {
+    return false;
+  }
+  if (stored.fileName && channel.fileName && stored.fileName !== channel.fileName) {
+    return false;
+  }
+  return true;
 }
 
 function createLyricSourceId(): string {

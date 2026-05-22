@@ -13,6 +13,7 @@ interface TimelineAudioLanesProps {
   bandMode: AudioBandMode;
   bandPeaksLoading: boolean;
   masterChannel?: AudioChannel | null;
+  waveformEnabled: boolean;
   displayPeaks?: AudioPeak[];
   bandPeaks: AudioPeak[] | null;
   masterIsMock: boolean;
@@ -41,6 +42,7 @@ export const TimelineAudioLanes = memo(function TimelineAudioLanes({
   bandMode,
   bandPeaksLoading,
   masterChannel,
+  waveformEnabled,
   displayPeaks,
   bandPeaks,
   masterIsMock,
@@ -69,8 +71,9 @@ export const TimelineAudioLanes = memo(function TimelineAudioLanes({
         pxPerSecond={pxPerSecond}
         height={masterHeight}
         peaks={displayPeaks}
-        badge={getBandBadge(bandMode, bandPeaksLoading, !!masterChannel?.fileName)}
+        badge={waveformEnabled ? getBandBadge(bandMode, bandPeaksLoading, !!masterChannel?.fileName) : 'waveform off'}
         mockFallback={masterIsMock && !bandPeaks && !bandPeaksLoading}
+        showWaveform={waveformEnabled}
         visibleStartPx={visibleStartPx}
         visibleWidthPx={visibleWidthPx}
         onLaneClick={onLaneClick}
