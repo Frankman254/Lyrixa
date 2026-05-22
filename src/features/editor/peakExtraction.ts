@@ -10,6 +10,15 @@ export interface ExtractPeaksOptions {
   peaksPerSecond?: number;
 }
 
+export const REAL_PEAK_MAX_DURATION_SECONDS = 30 * 60;
+export const REAL_PEAK_MAX_BLOB_BYTES = 180 * 1024 * 1024;
+
+export function shouldExtractRealPeaks(blob: Blob, durationSeconds: number): boolean {
+  if (durationSeconds > REAL_PEAK_MAX_DURATION_SECONDS) return false;
+  if (blob.size > REAL_PEAK_MAX_BLOB_BYTES) return false;
+  return true;
+}
+
 /**
  * Decode an audio Blob and produce a downsampled peak array.
  *

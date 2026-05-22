@@ -65,9 +65,9 @@ export function ProjectInspector({
         )}
       </Group>
 
-      <Group title="Danger zone">
+      <Group title="Danger zone" open>
         <button className="ls-btn small danger" onClick={onHardResetProject}>
-          Hard Reset Project
+          Delete whole project
         </button>
       </Group>
     </section>

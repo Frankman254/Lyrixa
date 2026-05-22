@@ -24,7 +24,10 @@ import { normalizeLyricsText } from '../../core/lyrics/normalize';
 import { useLyrixaProject } from './useLyrixaProject';
 import { useAccentTheme } from '../../shared/theme/useAccentTheme';
 import type { AudioChannelRole, AudioBandMode } from '../../core/types/audio';
-import { extractBandPeaksFromBlob } from './peakExtraction';
+import {
+  extractBandPeaksFromBlob,
+  shouldExtractRealPeaks
+} from './peakExtraction';
 import { usePlaybackController } from './usePlaybackController';
 import { useProjectImportExport } from './useProjectImportExport';
 import './LyrixaEditorShell.css';
@@ -49,7 +52,6 @@ export function LyrixaEditorShell() {
     setCurrentTime,
     setMasterDuration,
     importProject,
-    resetProject,
     hardResetProject
   } = useLyrixaProject();
 
@@ -127,9 +129,10 @@ export function LyrixaEditorShell() {
     async (mode: AudioBandMode) => {
       const blob = getAudioBlob('master');
       if (!blob) return null;
+      if (!shouldExtractRealPeaks(blob, masterChannel?.duration ?? 0)) return null;
       return extractBandPeaksFromBlob(blob, mode);
     },
-    [getAudioBlob]
+    [getAudioBlob, masterChannel?.duration]
   );
 
   const {
@@ -337,13 +340,7 @@ export function LyrixaEditorShell() {
         onShowMiniPreview={() => setMiniPreviewVisible(true)}
         onPlayToggle={handlePlayToggle}
         onSeek={handleSeek}
-        onResetProject={() => {
-          if (window.confirm('Discard the current project and start a new one?')) {
-            resetProject();
-            setIsPlaying(false);
-            setPlaybackTime(0);
-          }
-        }}
+        onResetProject={handleHardResetProject}
         accent={accent}
         onAccentChange={setAccent}
       />

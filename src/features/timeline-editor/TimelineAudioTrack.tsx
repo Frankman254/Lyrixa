@@ -17,6 +17,8 @@ interface TimelineAudioTrackProps {
   mockFallback?: boolean;
   /** Click handler for the waveform lane — used for timeline seek. */
   onLaneClick?: MouseEventHandler<HTMLDivElement>;
+  visibleStartPx?: number;
+  visibleWidthPx?: number;
 }
 
 /**
@@ -33,7 +35,9 @@ export function TimelineAudioTrack({
   badge,
   actions,
   mockFallback,
-  onLaneClick
+  onLaneClick,
+  visibleStartPx,
+  visibleWidthPx
 }: TimelineAudioTrackProps) {
   const totalWidth = Math.max(duration, 1) * pxPerSecond;
 
@@ -58,6 +62,8 @@ export function TimelineAudioTrack({
           height={height}
           color={color}
           seed={title}
+          visibleStartPx={visibleStartPx}
+          visibleWidthPx={visibleWidthPx}
         />
       </div>
     </div>

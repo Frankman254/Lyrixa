@@ -235,8 +235,8 @@ export function EditorTopBar({
         </select>
       </label>
 
-      <button className="tr-btn danger" onClick={onResetProject} title="Discard project and start a new one">
-        New
+      <button className="tr-btn danger" onClick={onResetProject} title="Delete the current project and clear Lyrixa local data">
+        Reset
       </button>
 
       <EditorHiddenFileInputs

@@ -32,7 +32,10 @@ import {
   deleteAudio,
   deleteAllProjectAudio
 } from './audioBlobStorage';
-import { extractPeaksFromBlob } from './peakExtraction';
+import {
+  extractPeaksFromBlob,
+  shouldExtractRealPeaks
+} from './peakExtraction';
 import {
   deleteAllProjectTextures,
   getTextureAsset
@@ -185,7 +188,7 @@ export function useLyrixaProject(): UseLyrixaProjectResult {
       });
       // Re-extract peaks if missing — keeps mock fallback honest.
       if (!channel.waveformPeaks || channel.waveformPeaks.length === 0) {
-        extractAndApplyPeaks(stored.blob, role);
+        extractAndApplyPeaks(stored.blob, role, stored.duration);
       }
     };
 
@@ -255,7 +258,8 @@ export function useLyrixaProject(): UseLyrixaProjectResult {
   );
 
   const extractAndApplyPeaks = useCallback(
-    (blob: Blob, role: AudioChannelRole) => {
+    (blob: Blob, role: AudioChannelRole, durationSeconds: number) => {
+      if (!shouldExtractRealPeaks(blob, durationSeconds)) return;
       // Fire and forget — decoding is async but UI must not block on it.
       extractPeaksFromBlob(blob, { peaksPerSecond: 25 })
         .then(peaks => {
@@ -303,7 +307,7 @@ export function useLyrixaProject(): UseLyrixaProjectResult {
       console.warn(`[Lyrixa] Could not persist ${role} audio blob:`, err);
     }
 
-    extractAndApplyPeaks(file, role);
+    extractAndApplyPeaks(file, role, duration);
   }, [extractAndApplyPeaks]);
 
   const removeAudio = useCallback(async (role: AudioChannelRole = 'master') => {

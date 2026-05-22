@@ -16,6 +16,8 @@ interface TimelineAudioLanesProps {
   displayPeaks?: AudioPeak[];
   bandPeaks: AudioPeak[] | null;
   masterIsMock: boolean;
+  visibleStartPx: number;
+  visibleWidthPx: number;
   onRulerClick: (e: MouseEvent<HTMLDivElement>) => void;
   onLaneClick: (e: MouseEvent) => void;
 }
@@ -42,6 +44,8 @@ export function TimelineAudioLanes({
   displayPeaks,
   bandPeaks,
   masterIsMock,
+  visibleStartPx,
+  visibleWidthPx,
   onRulerClick,
   onLaneClick
 }: TimelineAudioLanesProps) {
@@ -67,6 +71,8 @@ export function TimelineAudioLanes({
         peaks={displayPeaks}
         badge={getBandBadge(bandMode, bandPeaksLoading, !!masterChannel?.fileName)}
         mockFallback={masterIsMock && !bandPeaks && !bandPeaksLoading}
+        visibleStartPx={visibleStartPx}
+        visibleWidthPx={visibleWidthPx}
         onLaneClick={onLaneClick}
       />
     </>

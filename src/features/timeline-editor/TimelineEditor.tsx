@@ -141,6 +141,8 @@ export function TimelineEditor({
   const laneWidth = effectiveDuration * pxPerSecond;
   const headerWidth = TRACK_HEADER_WIDTH;
   const totalLaneContainerWidth = laneWidth + headerWidth;
+  const visibleLaneStartPx = Math.max(0, scrollMetrics.scrollLeft - headerWidth);
+  const visibleLaneWidthPx = Math.max(1, scrollMetrics.clientWidth);
 
   const sortedLayers = useMemo(
     () => [...layers].sort((a, b) => a.order - b.order),
@@ -704,6 +706,8 @@ export function TimelineEditor({
             displayPeaks={displayPeaks}
             bandPeaks={bandPeaks}
             masterIsMock={masterIsMock}
+            visibleStartPx={visibleLaneStartPx}
+            visibleWidthPx={visibleLaneWidthPx}
             onRulerClick={handleRulerClick}
             onLaneClick={handleSeekClick}
           />

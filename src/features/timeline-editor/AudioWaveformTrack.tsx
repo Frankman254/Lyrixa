@@ -12,12 +12,17 @@ interface AudioWaveformTrackProps {
   color?: string;
   /** Seed keeps the mock waveform stable between renders for the same track. */
   seed?: string;
+  /** Left edge of the visible lane viewport, in lane pixels. */
+  visibleStartPx?: number;
+  /** Visible viewport width, in pixels. */
+  visibleWidthPx?: number;
 }
 
-/**
- * Deterministic PRNG so the mock waveform doesn't jitter between renders.
- * xmur3 + mulberry32 — tiny, non-crypto, good enough for visual noise.
- */
+const TARGET_WAVEFORM_CHUNK_SECONDS = 10 * 60;
+const MAX_WAVEFORM_SEGMENT_WIDTH = 16_000;
+const MAX_WAVEFORM_BITMAP_WIDTH = 16_000;
+const MIN_OVERSCAN_PX = 1200;
+
 function hashSeed(str: string): number {
   let h = 1779033703 ^ str.length;
   for (let i = 0; i < str.length; i++) {
@@ -27,62 +32,62 @@ function hashSeed(str: string): number {
   return h >>> 0;
 }
 
-function mulberry32(a: number) {
-  return function () {
-    a |= 0;
-    a = (a + 0x6d2b79f5) | 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-function generateMockPeaks(duration: number, samplesPerSecond: number, seed: string): AudioPeak[] {
-  const rand = mulberry32(hashSeed(seed));
-  const total = Math.max(1, Math.floor(duration * samplesPerSecond));
-  const out: AudioPeak[] = new Array(total);
-  let envelope = 0.4;
-  for (let i = 0; i < total; i++) {
-    const t = i / samplesPerSecond;
-    // Slowly drifting envelope — creates "song dynamics" feel.
-    envelope += (rand() - 0.5) * 0.08;
-    envelope = Math.max(0.15, Math.min(0.95, envelope));
-    const beat = 0.25 + 0.75 * Math.abs(Math.sin(t * Math.PI * 1.8));
-    const jitter = 0.4 + rand() * 0.6;
-    const amp = Math.min(1, envelope * beat * jitter);
-    out[i] = { time: t, amplitude: amp };
-  }
-  return out;
-}
-
 export function AudioWaveformTrack({
   duration,
   pxPerSecond,
   peaks,
   height = 72,
   color = '#53c2f0',
-  seed = 'default'
+  seed = 'default',
+  visibleStartPx = 0,
+  visibleWidthPx = 2000
 }: AudioWaveformTrackProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  const resolvedPeaks = useMemo<AudioPeak[]>(() => {
-    if (peaks && peaks.length > 0) return peaks;
-    return generateMockPeaks(Math.max(duration, 1), 20, seed);
-  }, [peaks, duration, seed]);
-
   const totalWidth = Math.max(duration, 1) * pxPerSecond;
+  const overscanPx = Math.max(MIN_OVERSCAN_PX, visibleWidthPx * 0.75);
+  const visibleEndPx = visibleStartPx + visibleWidthPx;
+  const desiredChunkWidth = Math.min(
+    TARGET_WAVEFORM_CHUNK_SECONDS * pxPerSecond,
+    MAX_WAVEFORM_SEGMENT_WIDTH
+  );
+  const targetSegmentWidth = Math.max(visibleWidthPx + overscanPx * 2, desiredChunkWidth);
+  const pageStepPx = Math.max(visibleWidthPx, targetSegmentWidth * 0.5);
+  const rawSegmentStartPx = Math.max(0, visibleStartPx - overscanPx);
+  const segmentStartPx = Math.max(
+    0,
+    Math.min(totalWidth, Math.floor(rawSegmentStartPx / pageStepPx) * pageStepPx)
+  );
+  const segmentEndPx = Math.max(
+    segmentStartPx + 1,
+    Math.min(totalWidth, Math.max(segmentStartPx + targetSegmentWidth, visibleEndPx + overscanPx))
+  );
+  const segmentWidth = Math.max(1, segmentEndPx - segmentStartPx);
+  const bitmapWidth = Math.max(1, Math.min(segmentWidth, MAX_WAVEFORM_BITMAP_WIDTH));
+  const xScale = bitmapWidth / segmentWidth;
+  const startTime = segmentStartPx / pxPerSecond;
+  const endTime = segmentEndPx / pxPerSecond;
+
+  const resolvedPeaks = useMemo<AudioPeak[]>(() => {
+    if (peaks && peaks.length > 0) {
+      const padSeconds = Math.max(1, 4 / pxPerSecond);
+      return peaks.filter(peak =>
+        peak.time >= startTime - padSeconds && peak.time <= endTime + padSeconds
+      );
+    }
+    return generateMockPeaksForRange(startTime, endTime, pxPerSecond, seed);
+  }, [peaks, startTime, endTime, pxPerSecond, seed]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    canvas.width = Math.max(1, Math.floor(totalWidth * dpr));
+    canvas.width = Math.max(1, Math.floor(bitmapWidth * dpr));
     canvas.height = Math.max(1, Math.floor(height * dpr));
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     ctx.scale(dpr, dpr);
-    ctx.clearRect(0, 0, totalWidth, height);
+    ctx.clearRect(0, 0, bitmapWidth, height);
 
     const midY = height / 2;
 
@@ -98,13 +103,13 @@ export function AudioWaveformTrack({
 
     for (let i = 0; i < resolvedPeaks.length; i++) {
       const p = resolvedPeaks[i]!;
-      const x = p.time * pxPerSecond;
+      const x = (p.time * pxPerSecond - segmentStartPx) * xScale;
       const h = p.amplitude * (height / 2) * 0.9;
       ctx.lineTo(x, midY - h);
     }
     for (let i = resolvedPeaks.length - 1; i >= 0; i--) {
       const p = resolvedPeaks[i]!;
-      const x = p.time * pxPerSecond;
+      const x = (p.time * pxPerSecond - segmentStartPx) * xScale;
       const h = p.amplitude * (height / 2) * 0.9;
       ctx.lineTo(x, midY + h);
     }
@@ -116,16 +121,56 @@ export function AudioWaveformTrack({
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(0, midY);
-    ctx.lineTo(totalWidth, midY);
+    ctx.lineTo(bitmapWidth, midY);
     ctx.stroke();
-  }, [resolvedPeaks, totalWidth, height, color, pxPerSecond]);
+  }, [resolvedPeaks, segmentStartPx, bitmapWidth, height, color, pxPerSecond, xScale]);
 
   return (
     <div className="tl-waveform" style={{ width: `${totalWidth}px`, height: `${height}px` }}>
       <canvas
         ref={canvasRef}
-        style={{ width: `${totalWidth}px`, height: `${height}px`, display: 'block' }}
+        style={{
+          position: 'absolute',
+          left: `${segmentStartPx}px`,
+          width: `${segmentWidth}px`,
+          height: `${height}px`,
+          display: 'block'
+        }}
       />
     </div>
   );
+}
+
+function generateMockPeaksForRange(
+  startTime: number,
+  endTime: number,
+  pxPerSecond: number,
+  seed: string
+): AudioPeak[] {
+  const samplesPerSecond = Math.max(20, Math.min(120, Math.ceil(pxPerSecond * 0.9)));
+  const startIndex = Math.max(0, Math.floor(startTime * samplesPerSecond));
+  const endIndex = Math.max(startIndex + 1, Math.ceil(endTime * samplesPerSecond));
+  const out: AudioPeak[] = new Array(endIndex - startIndex + 1);
+
+  for (let i = startIndex; i <= endIndex; i += 1) {
+    const t = i / samplesPerSecond;
+    const amp = deterministicMockAmplitude(t, seed);
+    out[i - startIndex] = { time: t, amplitude: amp };
+  }
+  return out;
+}
+
+function deterministicMockAmplitude(time: number, seed: string): number {
+  const seedHash = hashSeed(seed);
+  const slow = 0.52 + 0.28 * Math.sin(time * 0.17 + (seedHash % 97));
+  const beat = 0.25 + 0.75 * Math.abs(Math.sin(time * Math.PI * 1.8));
+  const texture = pseudoNoise(Math.floor(time * 18), seedHash) * 0.42 + 0.58;
+  return Math.max(0.08, Math.min(1, slow * beat * texture));
+}
+
+function pseudoNoise(index: number, seed: number): number {
+  let x = (index + 1) ^ seed;
+  x = Math.imul(x ^ (x >>> 16), 2246822507);
+  x = Math.imul(x ^ (x >>> 13), 3266489909);
+  return ((x ^ (x >>> 16)) >>> 0) / 4294967295;
 }
