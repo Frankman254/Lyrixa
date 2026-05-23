@@ -1,58 +1,45 @@
 import { useMemo, useState } from 'react';
 import { normalizeLyricsText } from '../../core/lyrics/normalize';
-import type { LyricLayer } from '../../core/types/layer';
-import type { ClipDurationStrategy } from '../../core/timeline/durationStrategies';
 import type { ApplyLyricsOptions } from './useLyrixaProject';
 import './LyricsImportPanel.css';
 
 interface LyricsImportPanelProps {
   open: boolean;
   initialText: string;
-  layers: LyricLayer[];
+  /** Title suggested for the lyric source when adding it. */
+  initialTitle?: string;
+  /** When true, the form starts in "add as new source" mode. */
+  defaultAsNewSource?: boolean;
   onClose: () => void;
   onApply: (rawText: string, options: ApplyLyricsOptions) => void;
 }
 
-const STRATEGY_DESCRIPTIONS: Record<ClipDurationStrategy, string> = {
-  fixed: 'Every clip gets the same duration. Quickest baseline.',
-  'line-length-weighted':
-    'Short lines get short clips, long lines get longer clips.'
-};
-
+/**
+ * Lyrics imports are SOURCE-ONLY. They never auto-place clips on a layer; the
+ * Sync Lyrics button is the single path that puts lyric paragraphs onto a
+ * specific layer with real timings, and it preserves clips it has already
+ * synced. This panel just edits the lyric source library.
+ */
 export function LyricsImportPanel({
   open,
   initialText,
-  layers,
+  initialTitle,
+  defaultAsNewSource = false,
   onClose,
   onApply
 }: LyricsImportPanelProps) {
   const [text, setText] = useState(initialText);
-  const [defaultDuration, setDefaultDuration] = useState(2.5);
-  const [minDuration, setMinDuration] = useState(1.5);
-  const [maxDuration, setMaxDuration] = useState(5.0);
-  const [preserveTiming, setPreserveTiming] = useState(true);
-  const [layerId, setLayerId] = useState(layers[0]?.id ?? 'layer-main');
-  const [strategy, setStrategy] = useState<ClipDurationStrategy>('line-length-weighted');
-  const [sourceTitle, setSourceTitle] = useState('Lyrics 1');
-  const [addAsNewSource, setAddAsNewSource] = useState(false);
-  const [appendAfterExisting, setAppendAfterExisting] = useState(true);
+  const [sourceTitle, setSourceTitle] = useState(initialTitle ?? 'Lyrics');
+  const [addAsNewSource, setAddAsNewSource] = useState(defaultAsNewSource);
 
-  const effectiveStrategy = strategy;
   const preview = useMemo(() => normalizeLyricsText(text), [text]);
 
   if (!open) return null;
 
   const handleApply = () => {
     onApply(text, {
-      defaultDuration,
-      minDuration,
-      maxDuration,
-      preserveExistingTiming: preserveTiming,
-      layerId,
-      strategy: effectiveStrategy,
       sourceMode: addAsNewSource ? 'add' : 'replace-active',
-      sourceTitle,
-      appendAfterExisting
+      sourceTitle
     });
     onClose();
   };
@@ -68,7 +55,12 @@ export function LyricsImportPanel({
         <header className="lip-header">
           <div>
             <h2>Import Lyrics</h2>
-            <p>Paste your raw lyrics. Single-enter lines work. Blank lines between verses work. LRC timestamps are stripped automatically.</p>
+            <p>
+              Paste lyrics here. They become a <strong>lyric source</strong> in
+              your project — they are not placed on a layer yet. Use{' '}
+              <strong>Sync lyrics</strong> on a layer to time them with the song.
+              LRC timestamps are stripped automatically.
+            </p>
           </div>
           <button className="lip-close" onClick={onClose} aria-label="Close">✕</button>
         </header>
@@ -107,67 +99,6 @@ export function LyricsImportPanel({
         <footer className="lip-footer">
           <div className="lip-options">
             <label>
-              Strategy
-              <select
-                value={effectiveStrategy}
-                onChange={(e) => setStrategy(e.target.value as ClipDurationStrategy)}
-              >
-                <option value="fixed">Fixed duration</option>
-                <option value="line-length-weighted">Line-length weighted</option>
-              </select>
-            </label>
-
-            {effectiveStrategy === 'fixed' && (
-              <label>
-                Duration
-                <input
-                  type="number"
-                  min={0.25}
-                  step={0.25}
-                  value={defaultDuration}
-                  onChange={(e) => {
-                    const v = parseFloat(e.target.value);
-                    if (Number.isFinite(v) && v > 0) setDefaultDuration(v);
-                  }}
-                />
-                <span className="lip-suffix">s</span>
-              </label>
-            )}
-
-            {effectiveStrategy !== 'fixed' && (
-              <>
-                <label>
-                  Min
-                  <input
-                    type="number"
-                    min={0.25}
-                    step={0.25}
-                    value={minDuration}
-                    onChange={(e) => {
-                      const v = parseFloat(e.target.value);
-                      if (Number.isFinite(v) && v > 0) setMinDuration(v);
-                    }}
-                  />
-                  <span className="lip-suffix">s</span>
-                </label>
-                <label>
-                  Max
-                  <input
-                    type="number"
-                    min={0.5}
-                    step={0.25}
-                    value={maxDuration}
-                    onChange={(e) => {
-                      const v = parseFloat(e.target.value);
-                      if (Number.isFinite(v) && v > 0) setMaxDuration(v);
-                    }}
-                  />
-                  <span className="lip-suffix">s</span>
-                </label>
-              </>
-            )}
-
-            <label>
               Source name
               <input
                 type="text"
@@ -182,39 +113,14 @@ export function LyricsImportPanel({
                 checked={addAsNewSource}
                 onChange={(e) => setAddAsNewSource(e.target.checked)}
               />
-              Add as new lyrics source
-            </label>
-
-            <label className="lip-check">
-              <input
-                type="checkbox"
-                checked={appendAfterExisting}
-                disabled={!addAsNewSource}
-                onChange={(e) => setAppendAfterExisting(e.target.checked)}
-              />
-              Append after existing clips
-            </label>
-
-            <label>
-              Layer
-              <select value={layerId} onChange={(e) => setLayerId(e.target.value)}>
-                {layers.map(l => (
-                  <option key={l.id} value={l.id}>{l.name}</option>
-                ))}
-              </select>
-            </label>
-
-            <label className="lip-check">
-              <input
-                type="checkbox"
-                checked={preserveTiming}
-                onChange={(e) => setPreserveTiming(e.target.checked)}
-              />
-              Preserve existing timing
+              Add as a new lyric source (keep existing sources)
             </label>
           </div>
 
-          <p className="lip-strategy-hint">{STRATEGY_DESCRIPTIONS[effectiveStrategy]}</p>
+          <p className="lip-strategy-hint">
+            Imports never overwrite clips you have already synced. After applying,
+            open Sync lyrics, pick the target layer, and time the new source line by line.
+          </p>
 
           <div className="lip-actions">
             <button className="lip-btn ghost" onClick={onClose}>Cancel</button>
@@ -223,7 +129,7 @@ export function LyricsImportPanel({
               onClick={handleApply}
               disabled={preview.lines.length === 0}
             >
-              Apply to timeline
+              Save lyric source
             </button>
           </div>
         </footer>

@@ -6,12 +6,15 @@ interface ClipInspectorProps {
   selectedClip: LyricClip | null;
   layers: LyricLayer[];
   onPatchClip: (patch: Partial<LyricClip>) => void;
+  /** Clone this clip on the same layer (used for repeated verses/choruses). */
+  onDuplicateClip?: (clipId: string) => void;
 }
 
 export function ClipInspector({
   selectedClip,
   layers,
-  onPatchClip
+  onPatchClip,
+  onDuplicateClip
 }: ClipInspectorProps) {
   if (!selectedClip) {
     return <EmptyText text="Select a clip to edit clip text, timing and override toggles." />;
@@ -67,6 +70,17 @@ export function ClipInspector({
             ))}
           </select>
         </label>
+        {onDuplicateClip && (
+          <button
+            type="button"
+            className="ls-btn small"
+            onClick={() => onDuplicateClip(selectedClip.id)}
+            title="Place a copy of this clip right after itself — handy for repeated verses or choruses."
+            style={{ alignSelf: 'flex-start' }}
+          >
+            ⎘ Duplicate clip
+          </button>
+        )}
       </Group>
 
       <Group title="Overrides" open>

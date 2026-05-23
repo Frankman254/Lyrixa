@@ -36,10 +36,14 @@ interface InspectorPanelProps {
   onProgressChange: (next: ClipProgressIndicatorConfig) => void;
   onClipsChange: (next: LyricClip[]) => void;
   onLayersChange: (next: LyricLayer[]) => void;
+  /** Clone the selected clip on the same layer (for repeated verses). */
+  onDuplicateClip?: (clipId: string) => void;
   onImportLyrics: () => void;
   onExportProject: () => void;
   onImportProject: () => void;
   onHardResetProject: () => void;
+  onRenameLyricSource: (id: string, title: string) => void;
+  onRemoveLyricSource: (id: string) => void;
 }
 
 /**
@@ -60,10 +64,13 @@ export function InspectorPanel({
   onProgressChange,
   onClipsChange,
   onLayersChange,
+  onDuplicateClip,
   onImportLyrics,
   onExportProject,
   onImportProject,
-  onHardResetProject
+  onHardResetProject,
+  onRenameLyricSource,
+  onRemoveLyricSource
 }: InspectorPanelProps) {
   const selectedClip = useMemo(
     () => selectedClipId ? project.clips.find(clip => clip.id === selectedClipId) ?? null : null,
@@ -173,6 +180,8 @@ export function InspectorPanel({
             onExportProject={onExportProject}
             onImportProject={onImportProject}
             onHardResetProject={onHardResetProject}
+            onRenameLyricSource={onRenameLyricSource}
+            onRemoveLyricSource={onRemoveLyricSource}
           />
         )}
 
@@ -188,6 +197,7 @@ export function InspectorPanel({
             selectedClip={selectedClip}
             layers={project.layers}
             onPatchClip={patchClip}
+            onDuplicateClip={onDuplicateClip}
           />
         )}
 

@@ -14,12 +14,8 @@ import type {
   AudioChannelRole
 } from '../../core/types/audio';
 import { buildAudioFileKey } from '../../core/types/audio';
-import { MAIN_LAYER_ID } from '../../core/types/layer';
 import { normalizeLyricsText } from '../../core/lyrics/normalize';
 import type { NormalizeLyricsOptions } from '../../core/lyrics/normalize';
-import { createClipsFromNormalizedLyrics } from '../../core/timeline/clipsFromLyrics';
-import type { ClipDurationStrategy } from '../../core/timeline/durationStrategies';
-import { createTapSyncSourceId } from '../../core/timeline/tapSync';
 import {
   clearLyrixaLocalStorage,
   createEmptyProject,
@@ -62,23 +58,11 @@ export interface LoadAudioOptions {
 }
 
 export interface ApplyLyricsOptions {
-  /** Default duration in seconds. Used by `fixed` and as fallback. */
-  defaultDuration?: number;
-  /** When true, reuse existing clip timing for lines at the same index. */
-  preserveExistingTiming?: boolean;
-  /** Layer id to place the new clips on. Defaults to the main lyrics layer. */
-  layerId?: string;
   /** Normalization options forwarded to normalizeLyricsText. */
   normalizeOptions?: NormalizeLyricsOptions;
-  /** How clip durations are decided. Default: `fixed`. */
-  strategy?: ClipDurationStrategy;
-  minDuration?: number;
-  maxDuration?: number;
   /** Replace the active lyrics source or add a new ordered source. */
   sourceMode?: 'replace-active' | 'add';
   sourceTitle?: string;
-  /** When adding a source, place its generated clips after the last clip on the layer. */
-  appendAfterExisting?: boolean;
 }
 
 export interface UseLyrixaProjectResult {
@@ -94,6 +78,11 @@ export interface UseLyrixaProjectResult {
 
   setRawLyricsText: (text: string) => void;
   applyLyrics: (rawText: string, options?: ApplyLyricsOptions) => void;
+  /** Rename one lyric source (no effect on clips). */
+  setLyricSourceTitle: (id: string, title: string) => void;
+  /** Delete a lyric source from the library. Existing clips on layers stay
+   *  put — they remain independent timing artifacts you may still want. */
+  removeLyricSource: (id: string) => void;
 
   setClips: (next: ClipUpdate) => void;
   updateClip: (clipId: string, patch: Partial<LyricClip>) => void;
@@ -418,20 +407,18 @@ export function useLyrixaProject({
 
   const applyLyrics = useCallback((rawText: string, options: ApplyLyricsOptions = {}) => {
     const {
-      defaultDuration = 2.5,
-      preserveExistingTiming = true,
-      layerId = MAIN_LAYER_ID,
       normalizeOptions,
-      strategy = 'fixed',
-      minDuration = 1.0,
-      maxDuration = 6.0,
       sourceMode = 'replace-active',
-      sourceTitle,
-      appendAfterExisting = false
+      sourceTitle
     } = options;
 
     const { lines } = normalizeLyricsText(rawText, normalizeOptions);
 
+    // Lyrics imports are SOURCE-ONLY: they update the lyric source library
+    // (rawLyricsText / normalizedLyrics / lyricSources) and never touch clips.
+    // The only path that places clips onto a layer is the Sync Lyrics flow,
+    // which preserves clips it has already published. This avoids the previous
+    // "second import wrecks main lyrics with bad heuristic timings" problem.
     setProject(p => {
       const now = new Date().toISOString();
       const currentSources = p.lyricSources ?? [];
@@ -458,83 +445,48 @@ export function useLyrixaProject({
       const sortedSources = [...nextSources].sort((a, b) => a.order - b.order);
       const combinedRawLyricsText = sortedSources.map(source => source.rawText.trim()).filter(Boolean).join('\n\n');
       const combinedNormalizedLyrics = sortedSources.flatMap(source => source.normalizedLines);
-      const hasSourceScopedClips = p.clips.some(c => c.layerId === layerId && c.lyricSourceId);
-      const replacingLegacyLayer = !addingSource && !hasSourceScopedClips;
-      const otherClips = addingSource
-        ? p.clips
-        : p.clips.filter(c =>
-            c.layerId !== layerId ||
-            (!replacingLegacyLayer && c.lyricSourceId !== lyricSourceId)
-          );
-
-      if (lines.length === 0) {
-        return {
-          ...p,
-          rawLyricsText: combinedRawLyricsText,
-          normalizedLyrics: combinedNormalizedLyrics,
-          lyricSources: sortedSources,
-          activeLyricSourceId: lyricSourceId,
-          clips: otherClips
-        };
-      }
-
-      const trackDuration = p.audioTracks.master?.duration;
-      const idPrefix = `clip-${Date.now()}`;
-
-      const existingLayerClips = p.clips
-        .filter(c => c.layerId === layerId)
-        .sort((a, b) => a.startTime - b.startTime);
-      const appendOffset = addingSource && appendAfterExisting
-        ? Math.max(0, ...p.clips.filter(c => c.layerId === layerId).map(c => c.endTime)) + 1
-        : 0;
-
-      const fresh = createClipsFromNormalizedLyrics(lines, {
-        layerId,
-        defaultDuration,
-        minDuration,
-        maxDuration,
-        trackDuration,
-        strategy,
-        idPrefix
-      }).map((clip, index) => ({
-        ...clip,
-        startTime: clip.startTime + appendOffset,
-        endTime: clip.endTime + appendOffset,
-        sourceIndex: index,
-        sourceId: createTapSyncSourceId(index, clip.text, lyricSourceId),
-        lyricSourceId,
-        createdBy: 'import' as const
-      }));
-
-      let nextClips: LyricClip[] = fresh;
-
-      if (preserveExistingTiming && existingLayerClips.length > 0) {
-        // Reuse existing timing wherever an old clip exists at the same index;
-        // append fresh clips for new indexes.
-        nextClips = fresh.map((generated, index) => {
-          const reused = existingLayerClips[index];
-          if (reused) {
-            return {
-              ...reused,
-              text: generated.text,
-              muted: generated.muted,
-              sourceIndex: generated.sourceIndex,
-              sourceId: generated.sourceId,
-              lyricSourceId,
-              createdBy: reused.createdBy ?? 'import'
-            };
-          }
-          return generated;
-        });
-      }
 
       return {
         ...p,
         rawLyricsText: combinedRawLyricsText,
         normalizedLyrics: combinedNormalizedLyrics,
         lyricSources: sortedSources,
-        activeLyricSourceId: lyricSourceId,
-        clips: [...otherClips, ...nextClips]
+        activeLyricSourceId: lyricSourceId
+      };
+    });
+  }, []);
+
+  const setLyricSourceTitle = useCallback((id: string, title: string) => {
+    const trimmed = title.trim();
+    if (!trimmed) return;
+    setProject(p => {
+      const sources = p.lyricSources ?? [];
+      if (!sources.some(source => source.id === id)) return p;
+      const now = new Date().toISOString();
+      const nextSources = sources.map(source =>
+        source.id === id ? { ...source, title: trimmed, updatedAt: now } : source
+      );
+      return { ...p, lyricSources: nextSources };
+    });
+  }, []);
+
+  const removeLyricSource = useCallback((id: string) => {
+    setProject(p => {
+      const sources = p.lyricSources ?? [];
+      if (!sources.some(source => source.id === id)) return p;
+      const nextSources = sources.filter(source => source.id !== id);
+      const sortedSources = [...nextSources].sort((a, b) => a.order - b.order);
+      const combinedRawLyricsText = sortedSources.map(s => s.rawText.trim()).filter(Boolean).join('\n\n');
+      const combinedNormalizedLyrics = sortedSources.flatMap(s => s.normalizedLines);
+      const nextActiveId = p.activeLyricSourceId === id
+        ? sortedSources[0]?.id
+        : p.activeLyricSourceId;
+      return {
+        ...p,
+        lyricSources: sortedSources,
+        activeLyricSourceId: nextActiveId,
+        rawLyricsText: combinedRawLyricsText,
+        normalizedLyrics: combinedNormalizedLyrics
       };
     });
   }, []);
@@ -643,6 +595,8 @@ export function useLyrixaProject({
     getAudioBlob,
     setRawLyricsText,
     applyLyrics,
+    setLyricSourceTitle,
+    removeLyricSource,
     setClips,
     updateClip,
     setLayers,

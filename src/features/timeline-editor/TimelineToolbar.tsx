@@ -10,6 +10,8 @@ interface TimelineToolbarProps {
   pxPerSecond: number;
   masterChannel?: AudioChannel | null;
   bandMode: AudioBandMode;
+  /** When true, band-pass extraction is disabled because the file is too long. */
+  bandModeDisabled?: boolean;
   snapSeconds: number;
   onPlayToggle: () => void;
   onZoomOut: () => void;
@@ -32,6 +34,7 @@ export function TimelineToolbar({
   pxPerSecond,
   masterChannel,
   bandMode,
+  bandModeDisabled = false,
   snapSeconds,
   onPlayToggle,
   onZoomOut,
@@ -98,9 +101,12 @@ export function TimelineToolbar({
           <label className="tl-snap">
             Band
             <select
-              value={bandMode}
+              value={bandModeDisabled ? 'auto' : bandMode}
               onChange={(e) => onBandModeChange(e.target.value as AudioBandMode)}
-              title="Waveform band mode — which frequency range to emphasize in the master lane"
+              disabled={bandModeDisabled}
+              title={bandModeDisabled
+                ? 'Band analysis disabled for long audio (>30 min). Switch to a shorter master to enable it.'
+                : 'Waveform band mode — which frequency range to emphasize in the master lane'}
             >
               <option value="auto">Auto</option>
               <option value="full-mix">Full Mix</option>

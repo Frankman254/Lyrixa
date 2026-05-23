@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { LyricClip } from '../../core/types/clip';
 import type { LyricLayer } from '../../core/types/layer';
+import type { LyricSource } from '../../core/types/project';
 import type { TapSyncLine } from '../../core/timeline/tapSync';
 import { isTapSyncLinePublished } from '../../core/timeline/tapSync';
 import { FloatingPanel } from '../../shared/components/FloatingPanel';
@@ -19,6 +20,10 @@ interface TapSyncPanelProps {
   layers: LyricLayer[];
   layerId: string | null;
   layerName: string;
+  /** All lyric sources stored in the project. */
+  sources: LyricSource[];
+  /** Currently selected source; null = stream every source in order. */
+  sourceId: string | null;
   isPlaying: boolean;
   playbackTime: number;
   speed: number;
@@ -27,6 +32,7 @@ interface TapSyncPanelProps {
   onSeek: (time: number) => void;
   onSpeedChange: (speed: number) => void;
   onLayerChange: (layerId: string) => void;
+  onSourceChange: (sourceId: string | null) => void;
   onRestart: () => void;
   onClose: () => void;
 }
@@ -59,6 +65,8 @@ export function TapSyncPanel({
   layers,
   layerId,
   layerName,
+  sources,
+  sourceId,
   isPlaying,
   playbackTime,
   speed,
@@ -67,6 +75,7 @@ export function TapSyncPanel({
   onSeek,
   onSpeedChange,
   onLayerChange,
+  onSourceChange,
   onRestart,
   onClose
 }: TapSyncPanelProps) {
@@ -163,6 +172,27 @@ export function TapSyncPanel({
             ))}
           </select>
         </label>
+
+        {sources.length > 1 && (
+          <label className="tapsync-layer">
+            <span>Lyric source</span>
+            <select
+              value={sourceId ?? ''}
+              onChange={(e) => {
+                const v = e.target.value;
+                onSourceChange(v === '' ? null : v);
+                e.currentTarget.blur();
+              }}
+              disabled={isHolding}
+              title="Pick which lyric source you want to time onto the selected layer"
+            >
+              <option value="">All sources (in order)</option>
+              {sources.map(source => (
+                <option key={source.id} value={source.id}>{source.title}</option>
+              ))}
+            </select>
+          </label>
+        )}
 
         <div className="tapsync-status" aria-label="Sync status">
           <span>Layer <strong>{layerName}</strong></span>

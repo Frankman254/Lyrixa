@@ -162,6 +162,7 @@ export async function extractBandPeaksFromBlob(
     for (let c = 0; c < channels; c++) data.push(rendered.getChannelData(c));
 
     const peaks: AudioPeak[] = new Array(totalPeaks);
+    let bandMax = 0;
     for (let p = 0; p < totalPeaks; p++) {
       const start = p * samplesPerPeak;
       const end   = Math.min(start + samplesPerPeak, totalSamples);
@@ -172,7 +173,16 @@ export async function extractBandPeaksFromBlob(
         const v = acc / channels;
         if (v > max) max = v;
       }
-      peaks[p] = { time: p / peaksPerSecond, amplitude: Math.min(1, max) };
+      peaks[p] = { time: p / peaksPerSecond, amplitude: max };
+      if (max > bandMax) bandMax = max;
+    }
+    // Normalize per-band so the envelope shape stays visible regardless of how
+    // much the filter attenuated the signal. Without this, narrow filters (e.g.
+    // 'kick' at 80Hz Q=3) produce a flat-looking waveform indistinguishable
+    // from a quiet master track.
+    const norm = bandMax > 0 ? 1 / bandMax : 1;
+    for (let p = 0; p < peaks.length; p++) {
+      peaks[p] = { time: peaks[p]!.time, amplitude: Math.min(1, peaks[p]!.amplitude * norm) };
     }
     return peaks;
   } catch (err) {

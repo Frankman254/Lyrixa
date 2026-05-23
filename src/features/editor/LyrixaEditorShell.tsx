@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
 import { AudioEngine } from '../player/AudioEngine';
 import { TimelineEditor } from '../timeline-editor/TimelineEditor';
@@ -14,6 +14,8 @@ import { LayersSidebar } from './LayersSidebar';
 import { InspectorPanel } from '../inspector/InspectorPanel';
 import { TapSyncPanel } from '../sync/TapSyncPanel';
 import { useTapSync } from '../sync/useTapSync';
+import { ShortcutsPanel } from '../shortcuts/ShortcutsPanel';
+import { useShortcuts } from '../shortcuts/useShortcuts';
 import type { TapSyncLine } from '../../core/timeline/tapSync';
 import {
   createTapSyncSourceId,
@@ -48,6 +50,8 @@ export function LyrixaEditorShell() {
     getAudioBlob,
     setRawLyricsText,
     applyLyrics,
+    setLyricSourceTitle,
+    removeLyricSource,
     setClips,
     setLayers,
     setStyleConfig,
@@ -69,7 +73,10 @@ export function LyrixaEditorShell() {
   const [syncLines, setSyncLines] = useState<TapSyncLine[]>([]);
   const [syncInitialCursor, setSyncInitialCursor] = useState(0);
   const [syncTargetLayerId, setSyncTargetLayerId] = useState<string | null>(null);
+  /** When null, sync streams every project lyric source in order. */
+  const [syncSourceId, setSyncSourceId] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [transparentPreviewOpen, setTransparentPreviewOpen] = useState(false);
   const [floatingPreviewWidth, setFloatingPreviewWidth] = useState(() =>
@@ -85,6 +92,24 @@ export function LyrixaEditorShell() {
   );
 
   const { accent, setAccent } = useAccentTheme();
+  const { matches: matchesShortcut } = useShortcuts();
+
+  // Global shortcut: Shift+? opens (and toggles) the shortcuts reference panel.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName;
+      const editable = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' ||
+        (target as HTMLElement | null)?.isContentEditable;
+      if (editable) return;
+      if (matchesShortcut(e, 'shortcuts.open')) {
+        e.preventDefault();
+        setShortcutsOpen(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [matchesShortcut]);
 
   const masterChannel = project.audioTracks.master;
 
@@ -166,6 +191,13 @@ export function LyrixaEditorShell() {
   const isLongAudio = detectLongAudio(masterChannel?.sizeBytes, masterChannel?.duration);
   const showMini = miniPreviewVisible && !previewOpen;
 
+  const activeLyricSource = useMemo(
+    () => project.lyricSources.find(source => source.id === project.activeLyricSourceId)
+      ?? project.lyricSources[0]
+      ?? null,
+    [project.lyricSources, project.activeLyricSourceId]
+  );
+
   const activeLayerId = selectedLayerId ?? project.layers[0]?.id ?? null;
   const syncLayerId = syncMode
     ? syncTargetLayerId ?? activeLayerId
@@ -177,8 +209,8 @@ export function LyrixaEditorShell() {
     [project.clips, project.layers, syncLayerId]
   );
   const orderedProjectLyricLines = useMemo(
-    () => getOrderedProjectLyricLines(project),
-    [project]
+    () => getOrderedProjectLyricLines(project, syncSourceId),
+    [project, syncSourceId]
   );
   const canSync =
     !!masterChannel?.objectUrl &&
@@ -198,17 +230,23 @@ export function LyrixaEditorShell() {
     onSeek: handleSeek
   });
 
-  const buildSyncLines = useCallback((layerId: string): TapSyncLine[] => {
+  const buildSyncLines = useCallback((
+    layerId: string,
+    sourceFilterId: string | null = syncSourceId
+  ): TapSyncLine[] => {
     const layerClips = orderedLayerClips(project.clips, layerId);
     const fallbackSourceClips = findBestLyricSourceClips(project.clips, project.layers, layerId);
-    const sourceLines = orderedProjectLyricLines.length > 0
-      ? orderedProjectLyricLines
-      : fallbackSourceClips.map((clip, index) => ({
-          text: clip.text,
-          sourceIndex: index,
-          sourceId: clip.sourceId ?? createTapSyncSourceId(index, clip.text),
-          lyricSourceId: clip.lyricSourceId
-        }));
+    const filteredProjectLines = getOrderedProjectLyricLines(project, sourceFilterId);
+    const sourceLines = filteredProjectLines.length > 0
+      ? filteredProjectLines
+      : sourceFilterId
+        ? []
+        : fallbackSourceClips.map((clip, index) => ({
+            text: clip.text,
+            sourceIndex: index,
+            sourceId: clip.sourceId ?? createTapSyncSourceId(index, clip.text),
+            lyricSourceId: clip.lyricSourceId
+          }));
 
     return sourceLines.map((line, index) => {
       const sameTextAtIndex = layerClips[index]?.text.trim() === line.text.trim()
@@ -224,16 +262,19 @@ export function LyrixaEditorShell() {
         template
       };
     });
-  }, [orderedProjectLyricLines, project.clips, project.layers]);
+  }, [project, syncSourceId]);
 
   const clearSyncLayer = useCallback((layerId = syncLayerId) => {
     if (!layerId) return;
     setClips(previous => previous.filter(clip => clip.layerId !== layerId));
   }, [syncLayerId, setClips]);
 
-  const startSyncForLayer = useCallback((layerId: string) => {
+  const startSyncForLayer = useCallback((
+    layerId: string,
+    sourceFilterId: string | null = syncSourceId
+  ) => {
     if (!layerId) return;
-    const lines = buildSyncLines(layerId);
+    const lines = buildSyncLines(layerId, sourceFilterId);
     const hydratedClips = attachSourceIdentityToLayerClips(project.clips, layerId, lines);
     if (project.rawLyricsText.trim().length === 0 && project.lyricSources.length === 0 && lines.length > 0) {
       setRawLyricsText(lines.map(line => line.text).join('\n'));
@@ -246,7 +287,7 @@ export function LyrixaEditorShell() {
     setSyncTargetLayerId(layerId);
     setSelectedLayerId(layerId);
     tapSync.reset();
-  }, [buildSyncLines, project.clips, project.lyricSources.length, project.rawLyricsText, setClips, setRawLyricsText, tapSync]);
+  }, [buildSyncLines, project.clips, project.lyricSources.length, project.rawLyricsText, setClips, setRawLyricsText, syncSourceId, tapSync]);
 
   const handleToggleSync = useCallback(() => {
     if (syncMode) {
@@ -258,17 +299,31 @@ export function LyrixaEditorShell() {
       return;
     }
 
+    // Default the sync source to the project's active source so the user
+    // doesn't have to pick when there's exactly one set of lyrics.
+    const initialSourceId = syncSourceId ?? activeLyricSource?.id ?? null;
+    setSyncSourceId(initialSourceId);
     const initialLayerId = syncTargetLayerId ?? activeLayerId;
-    if (initialLayerId) startSyncForLayer(initialLayerId);
+    if (initialLayerId) startSyncForLayer(initialLayerId, initialSourceId);
     setIsPlaying(false);
     setMiniPreviewVisible(true);
     handleSeek(0);
     setSyncMode(true);
-  }, [activeLayerId, handleSeek, setIsPlaying, startSyncForLayer, syncMode, syncTargetLayerId]);
+  }, [activeLayerId, activeLyricSource?.id, handleSeek, setIsPlaying, startSyncForLayer, syncMode, syncSourceId, syncTargetLayerId]);
 
   const handleSyncLayerChange = useCallback((layerId: string) => {
     startSyncForLayer(layerId);
   }, [startSyncForLayer]);
+
+  const handleSyncSourceChange = useCallback((nextSourceId: string | null) => {
+    setSyncSourceId(nextSourceId);
+    // Rebuild the sync queue against the new source so the cursor jumps to that
+    // source's first un-timed line on the active layer. Existing synced clips
+    // for other sources stay put — they're keyed by their own sourceId.
+    if (syncTargetLayerId) {
+      startSyncForLayer(syncTargetLayerId, nextSourceId);
+    }
+  }, [startSyncForLayer, syncTargetLayerId]);
 
   const handleSyncRestart = useCallback(() => {
     clearSyncLayer();
@@ -276,6 +331,36 @@ export function LyrixaEditorShell() {
     tapSync.reset();
     handleSeek(0);
   }, [clearSyncLayer, tapSync, handleSeek]);
+
+  /**
+   * Clone an existing clip on the same layer for repeated verses/choruses, so
+   * the user doesn't need to re-import lyrics just to repeat a paragraph. The
+   * duplicate gets a fresh `sourceId` so tap-sync won't mistake it for the
+   * original line, and is placed just after the original (capped by the song
+   * duration). Selecting it lets the user fine-tune timing from the inspector.
+   */
+  const handleDuplicateClip = useCallback((clipId: string) => {
+    const original = project.clips.find(c => c.id === clipId);
+    if (!original) return;
+    const duration = Math.max(0.25, original.endTime - original.startTime);
+    const gap = 0.1;
+    const cap = Math.max(duration, effectiveDuration - duration);
+    const startTime = Math.max(0, Math.min(cap, original.endTime + gap));
+    const dupId = `dup-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+    const dupSourceId = original.sourceId ? `${original.sourceId}-dup-${dupId}` : dupId;
+    const duplicate: LyricClip = {
+      ...original,
+      id: dupId,
+      sourceId: dupSourceId,
+      sourceIndex: undefined,
+      lyricSourceId: original.lyricSourceId,
+      startTime,
+      endTime: startTime + duration,
+      createdBy: 'manual'
+    };
+    setClips(previous => [...previous, duplicate]);
+    setSelectedClipId(dupId);
+  }, [project.clips, effectiveDuration, setClips]);
 
   const handleHardResetProject = useCallback(async () => {
     const confirmed = window.confirm(
@@ -370,6 +455,7 @@ export function LyrixaEditorShell() {
         onResetProject={handleHardResetProject}
         accent={accent}
         onAccentChange={setAccent}
+        onOpenShortcuts={() => setShortcutsOpen(true)}
       />
 
       <EditorAlerts
@@ -420,6 +506,7 @@ export function LyrixaEditorShell() {
           <TimelineEditor
             embedded
             disableShortcuts={syncMode}
+            onDuplicateClip={handleDuplicateClip}
             clips={project.clips}
             layers={project.layers}
             currentTime={playbackTime}
@@ -489,21 +576,27 @@ export function LyrixaEditorShell() {
         onProgressChange={setProgressIndicatorConfig}
         onClipsChange={setClips}
         onLayersChange={setLayers}
+        onDuplicateClip={handleDuplicateClip}
         onImportLyrics={() => setImportOpen(true)}
         onExportProject={handleExportProject}
         onImportProject={openProjectImportPicker}
         onHardResetProject={handleHardResetProject}
+        onRenameLyricSource={setLyricSourceTitle}
+        onRemoveLyricSource={removeLyricSource}
       />
 
       {importOpen && (
         <LyricsImportPanel
           open={importOpen}
-          initialText={project.rawLyricsText}
-          layers={project.layers}
+          initialText={activeLyricSource?.rawText ?? project.rawLyricsText}
+          initialTitle={activeLyricSource?.title}
+          defaultAsNewSource={!!activeLyricSource && project.lyricSources.length > 0}
           onClose={() => setImportOpen(false)}
           onApply={applyLyrics}
         />
       )}
+
+      <ShortcutsPanel open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
 
       {syncMode && (
         <TapSyncPanel
@@ -512,6 +605,8 @@ export function LyrixaEditorShell() {
           layers={project.layers}
           layerId={syncLayerId}
           layerName={syncLayerName}
+          sources={project.lyricSources}
+          sourceId={syncSourceId}
           isPlaying={isPlaying}
           playbackTime={playbackTime}
           speed={syncSpeed}
@@ -520,6 +615,7 @@ export function LyrixaEditorShell() {
           onSeek={handleSeek}
           onSpeedChange={setSyncSpeed}
           onLayerChange={handleSyncLayerChange}
+          onSourceChange={handleSyncSourceChange}
           onRestart={handleSyncRestart}
           onClose={handleToggleSync}
         />
@@ -632,12 +728,21 @@ function findBestLyricSourceClips(
   return best;
 }
 
-function getOrderedProjectLyricLines(project: LyrixaProject): TapSyncLine[] {
-  const sources = [...(project.lyricSources ?? [])]
+function getOrderedProjectLyricLines(
+  project: LyrixaProject,
+  sourceFilterId: string | null = null
+): TapSyncLine[] {
+  const allSources = [...(project.lyricSources ?? [])]
     .filter(source => source.normalizedLines.length > 0 || source.rawText.trim().length > 0)
     .sort((a, b) => a.order - b.order);
+  const sources = sourceFilterId
+    ? allSources.filter(source => source.id === sourceFilterId)
+    : allSources;
 
   if (sources.length === 0) {
+    // Falling back to the project's combined rawLyricsText only makes sense
+    // when no specific source is requested.
+    if (sourceFilterId) return [];
     return normalizeLyricsText(project.rawLyricsText).lines.map((text, index) => ({
       sourceIndex: index,
       sourceId: createTapSyncSourceId(index, text),

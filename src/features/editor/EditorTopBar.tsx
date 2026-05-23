@@ -57,6 +57,7 @@ interface EditorTopBarProps {
   onSeek: (time: number) => void;
   onResetProject: () => void;
   onAccentChange: (next: AccentName) => void;
+  onOpenShortcuts: () => void;
 }
 
 export function EditorTopBar({
@@ -97,7 +98,8 @@ export function EditorTopBar({
   onPlayToggle,
   onSeek,
   onResetProject,
-  onAccentChange
+  onAccentChange,
+  onOpenShortcuts
 }: EditorTopBarProps) {
   const saveTone = SAVE_TONE[saveStatus];
   const masterLabel = masterChannel?.fileName ?? 'No master loaded';
@@ -234,6 +236,14 @@ export function EditorTopBar({
           ))}
         </select>
       </label>
+
+      <button
+        className="tr-btn small"
+        onClick={onOpenShortcuts}
+        title="Keyboard shortcuts (Shift+?)"
+      >
+        ⌨ Shortcuts
+      </button>
 
       <button className="tr-btn danger" onClick={onResetProject} title="Delete the current project and clear Lyrixa local data">
         Reset

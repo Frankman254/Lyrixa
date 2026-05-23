@@ -22,6 +22,7 @@ import { TimelineMinimap } from './TimelineMinimap';
 import { TimelineSelectionToolbar } from './TimelineSelectionToolbar';
 import { TimelineToolbar } from './TimelineToolbar';
 import { useTimelineBandPeaks } from './useTimelineBandPeaks';
+import { useShortcuts } from '../shortcuts/useShortcuts';
 import { syncDebug } from '../sync/syncDebug';
 import type { ClipPointerModifiers, DragMode } from './LyricClip';
 import {
@@ -45,6 +46,8 @@ interface TimelineEditorProps {
   embedded?: boolean;
   /** When true, the timeline's global keyboard shortcuts are suspended (e.g. during tap-sync). */
   disableShortcuts?: boolean;
+  /** Optional clip duplicator (D key + clip inspector). */
+  onDuplicateClip?: (clipId: string) => void;
   /** When false, the audio lane stays usable for seeking but skips waveform rendering/extraction. */
   waveformEnabled?: boolean;
   /** True when the master track is too long/large for full waveform analysis. */
@@ -85,6 +88,7 @@ export function TimelineEditor({
   disableShortcuts = false,
   waveformEnabled = true,
   isLongAudio = false,
+  onDuplicateClip,
   onExtractBandPeaks,
   onClipsChange,
   onLayersChange,
@@ -556,6 +560,13 @@ export function TimelineEditor({
   }, [effectiveSelectedLayerId, onSelectionChange, selectedClip?.id]);
 
   // ── Keyboard shortcuts ─────────────────────────────────────────
+  // Keys are sourced from the shortcut registry so users can rebind everything
+  // from the Shortcuts panel. We still apply context rules locally (selection
+  // required for clip nudge, no-typing-in-fields, etc.).
+  const { matches } = useShortcuts();
+  const onDuplicateClipRef = useRef(onDuplicateClip);
+  useEffect(() => { onDuplicateClipRef.current = onDuplicateClip; }, [onDuplicateClip]);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (disableShortcutsRef.current) return;
@@ -570,32 +581,41 @@ export function TimelineEditor({
         if (editable) return;
       }
 
-      const meta = e.metaKey || e.ctrlKey;
-
-      // Space = play / pause (most important transport shortcut)
-      if (e.code === 'Space') {
+      if (matches(e, 'transport.playPause')) {
         e.preventDefault();
         onPlayToggleRef.current();
         return;
       }
 
-      if (meta && e.key.toLowerCase() === 'a') {
+      if (matches(e, 'timeline.selectAll')) {
         e.preventDefault();
         selectAll();
         return;
       }
-      if (e.key === 'Escape') {
+
+      if (matches(e, 'timeline.clearSelection')) {
         if (selectedIdsRef.current.size === 0) return;
         e.preventDefault();
         clearSelection();
         return;
       }
 
+      if (matches(e, 'clip.duplicate')) {
+        if (selectedIdsRef.current.size !== 1) return;
+        const onlyId = selectedIdsRef.current.values().next().value as string | undefined;
+        if (!onlyId) return;
+        e.preventDefault();
+        onDuplicateClipRef.current?.(onlyId);
+        return;
+      }
+
       if (selectedIdsRef.current.size === 0) return;
 
-      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      const isEarlier = matches(e, 'timeline.nudgeEarlier');
+      const isLater = matches(e, 'timeline.nudgeLater');
+      if (isEarlier || isLater) {
         e.preventDefault();
-        const sign = e.key === 'ArrowLeft' ? -1 : 1;
+        const sign = isEarlier ? -1 : 1;
         let magnitude: number;
         if (e.altKey) magnitude = 1;
         else if (e.shiftKey) magnitude = 0.5;
@@ -606,7 +626,7 @@ export function TimelineEditor({
 
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [selectAll, clearSelection, nudgeSelected]);
+  }, [matches, selectAll, clearSelection, nudgeSelected]);
 
   const {
     displayPeaks,
@@ -641,6 +661,7 @@ export function TimelineEditor({
         pxPerSecond={pxPerSecond}
         masterChannel={masterChannel}
         bandMode={bandMode}
+        bandModeDisabled={isLongAudio || !waveformEnabled}
         snapSeconds={snapSeconds}
         onPlayToggle={onPlayToggle}
         onZoomOut={zoomOut}

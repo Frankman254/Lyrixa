@@ -9,6 +9,7 @@ import {
   publishLineStart
 } from '../../core/timeline/tapSync';
 import { syncDebug } from './syncDebug';
+import { useShortcuts } from '../shortcuts/useShortcuts';
 
 type ClipUpdate = LyricClip[] | ((previous: LyricClip[]) => LyricClip[]);
 
@@ -294,6 +295,8 @@ export function useTapSync({
   }, [onSeek]);
 
   // Keyboard: active only in sync mode, ignored while typing in a field.
+  // All bindings come from the shortcut registry so users can rebind them.
+  const { matches } = useShortcuts();
   useEffect(() => {
     if (!enabled) return;
     const isField = (el: EventTarget | null) =>
@@ -301,35 +304,43 @@ export function useTapSync({
 
     const onKeyDown = (e: KeyboardEvent) => {
       if (isField(e.target)) return;
-      switch (e.key) {
-        case ' ':
-          e.preventDefault();
-          if (e.repeat) return; // ignore auto-repeat while held
-          holdStart();
-          break;
-        case 'Backspace':
-          e.preventDefault();
-          undo();
-          break;
-        case 'p':
-        case 'k':
-          e.preventDefault();
-          onPlayToggle();
-          break;
-        case 'ArrowLeft':
-          e.preventDefault();
-          if (e.shiftKey) stepBack();
-          else nudge(-NUDGE_KEY_STEP);
-          break;
-        case 'ArrowRight':
-          e.preventDefault();
-          nudge(NUDGE_KEY_STEP);
-          break;
+      // Order matters when bindings collide: stepBack (Shift+←) before
+      // nudgeEarlier (←) so the modifier path wins.
+      if (matches(e, 'sync.stepBack')) {
+        e.preventDefault();
+        stepBack();
+        return;
+      }
+      if (matches(e, 'sync.holdTap')) {
+        e.preventDefault();
+        if (e.repeat) return; // ignore auto-repeat while held
+        holdStart();
+        return;
+      }
+      if (matches(e, 'sync.undo')) {
+        e.preventDefault();
+        undo();
+        return;
+      }
+      if (matches(e, 'sync.playPause') || matches(e, 'sync.playPauseAlt')) {
+        e.preventDefault();
+        onPlayToggle();
+        return;
+      }
+      if (matches(e, 'sync.nudgeEarlier')) {
+        e.preventDefault();
+        nudge(-NUDGE_KEY_STEP);
+        return;
+      }
+      if (matches(e, 'sync.nudgeLater')) {
+        e.preventDefault();
+        nudge(NUDGE_KEY_STEP);
+        return;
       }
     };
 
     const onKeyUp = (e: KeyboardEvent) => {
-      if (e.key === ' ') {
+      if (matches(e, 'sync.holdTap')) {
         e.preventDefault();
         holdEnd();
       }
@@ -346,7 +357,7 @@ export function useTapSync({
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('blur', onBlur);
     };
-  }, [enabled, holdStart, holdEnd, undo, stepBack, nudge, onPlayToggle]);
+  }, [enabled, matches, holdStart, holdEnd, undo, stepBack, nudge, onPlayToggle]);
 
   const done = cursorIndex >= total && total > 0;
 
