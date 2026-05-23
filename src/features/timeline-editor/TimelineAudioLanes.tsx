@@ -68,7 +68,12 @@ export const TimelineAudioLanes = memo(function TimelineAudioLanes({
           style={{ width: `${laneWidth}px`, height: `${rulerHeight}px` }}
           onClick={onRulerClick}
         >
-          <TimelineRuler duration={duration} pxPerSecond={pxPerSecond} />
+          <TimelineRuler
+            duration={duration}
+            pxPerSecond={pxPerSecond}
+            visibleStartPx={visibleStartPx}
+            visibleWidthPx={visibleWidthPx}
+          />
         </div>
       </div>
 
