@@ -26,6 +26,7 @@ import { useAccentTheme } from '../../shared/theme/useAccentTheme';
 import type { AudioChannelRole, AudioBandMode } from '../../core/types/audio';
 import {
   extractBandPeaksFromBlob,
+  isLongAudio as detectLongAudio,
   shouldExtractRealPeaks
 } from './peakExtraction';
 import { usePlaybackController } from './usePlaybackController';
@@ -162,6 +163,7 @@ export function LyrixaEditorShell() {
   });
 
   const effectiveDuration = masterChannel?.duration ?? 60;
+  const isLongAudio = detectLongAudio(masterChannel?.sizeBytes, masterChannel?.duration);
   const showMini = miniPreviewVisible && !previewOpen;
 
   const activeLayerId = selectedLayerId ?? project.layers[0]?.id ?? null;
@@ -426,6 +428,7 @@ export function LyrixaEditorShell() {
             trackName={masterChannel?.fileName ?? 'No audio loaded'}
             masterChannel={masterChannel}
             waveformEnabled={waveformEnabled}
+            isLongAudio={isLongAudio}
             onExtractBandPeaks={waveformEnabled ? extractBandPeaksForMode : undefined}
             onClipsChange={setClips}
             onLayersChange={setLayers}

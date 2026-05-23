@@ -20,6 +20,16 @@ export function shouldExtractRealPeaks(blob: Blob, durationSeconds: number): boo
 }
 
 /**
+ * Render-side equivalent of `shouldExtractRealPeaks` that only needs metadata.
+ * Lets the UI surface a "long audio" mode badge without holding the Blob.
+ */
+export function isLongAudio(sizeBytes: number | undefined, durationSeconds: number | undefined): boolean {
+  if (typeof durationSeconds === 'number' && durationSeconds > REAL_PEAK_MAX_DURATION_SECONDS) return true;
+  if (typeof sizeBytes === 'number' && sizeBytes > REAL_PEAK_MAX_BLOB_BYTES) return true;
+  return false;
+}
+
+/**
  * Decode an audio Blob and produce a downsampled peak array.
  *
  * Returns null when decoding fails (unsupported codec, corrupt file, no Web

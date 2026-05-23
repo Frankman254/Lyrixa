@@ -13,6 +13,9 @@ interface TimelineLayerListProps {
   selectedClipIds: Set<string>;
   selectedLayerId: string | null;
   hoveredLayerId: string | null;
+  /** Inclusive time window for clip virtualization (already includes overscan). */
+  renderStartTime: number;
+  renderEndTime: number;
   setLaneRef: (layerId: string) => RefCallback<HTMLDivElement>;
   onClipPointerDown: (
     clipId: string,
@@ -36,6 +39,8 @@ export const TimelineLayerList = memo(function TimelineLayerList({
   selectedClipIds,
   selectedLayerId,
   hoveredLayerId,
+  renderStartTime,
+  renderEndTime,
   setLaneRef,
   onClipPointerDown,
   onLayerToggleVisible,
@@ -56,6 +61,8 @@ export const TimelineLayerList = memo(function TimelineLayerList({
           selectedClipIds={selectedClipIds}
           selectedLayer={selectedLayerId === layer.id}
           isDropTarget={hoveredLayerId === layer.id}
+          renderStartTime={renderStartTime}
+          renderEndTime={renderEndTime}
           laneRef={setLaneRef(layer.id)}
           onClipPointerDown={onClipPointerDown}
           onLayerToggleVisible={onLayerToggleVisible}

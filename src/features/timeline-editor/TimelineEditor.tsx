@@ -47,6 +47,8 @@ interface TimelineEditorProps {
   disableShortcuts?: boolean;
   /** When false, the audio lane stays usable for seeking but skips waveform rendering/extraction. */
   waveformEnabled?: boolean;
+  /** True when the master track is too long/large for full waveform analysis. */
+  isLongAudio?: boolean;
   /** Async callback to extract frequency-filtered peaks for a given band mode. */
   onExtractBandPeaks?: (mode: AudioBandMode) => Promise<AudioPeak[] | null>;
   onClipsChange: (next: LyricClipModel[]) => void;
@@ -82,6 +84,7 @@ export function TimelineEditor({
   embedded = false,
   disableShortcuts = false,
   waveformEnabled = true,
+  isLongAudio = false,
   onExtractBandPeaks,
   onClipsChange,
   onLayersChange,
@@ -146,6 +149,16 @@ export function TimelineEditor({
   const totalLaneContainerWidth = laneWidth + headerWidth;
   const visibleLaneStartPx = Math.max(0, scrollMetrics.scrollLeft - headerWidth);
   const visibleLaneWidthPx = Math.max(1, scrollMetrics.clientWidth);
+
+  // Visible time window with overscan, for virtualizing lyric clips so projects
+  // with thousands of clips don't mount thousands of DOM nodes.
+  const visibleStartTime = pxPerSecond > 0 ? visibleLaneStartPx / pxPerSecond : 0;
+  const visibleEndTime = pxPerSecond > 0
+    ? (visibleLaneStartPx + visibleLaneWidthPx) / pxPerSecond
+    : effectiveDuration;
+  const overscanSec = Math.max(10, (visibleEndTime - visibleStartTime) * 0.25);
+  const renderStartTime = Math.max(0, visibleStartTime - overscanSec);
+  const renderEndTime = visibleEndTime + overscanSec;
 
   const sortedLayers = useMemo(
     () => [...layers].sort((a, b) => a.order - b.order),
@@ -710,6 +723,7 @@ export function TimelineEditor({
             displayPeaks={displayPeaks}
             bandPeaks={bandPeaks}
             masterIsMock={masterIsMock}
+            isLongAudio={isLongAudio}
             visibleStartPx={visibleLaneStartPx}
             visibleWidthPx={visibleLaneWidthPx}
             onRulerClick={handleRulerClick}
@@ -726,6 +740,8 @@ export function TimelineEditor({
               selectedClipIds={selectedClipIds}
               selectedLayerId={effectiveSelectedLayerId}
               hoveredLayerId={hoveredLayerId}
+              renderStartTime={renderStartTime}
+              renderEndTime={renderEndTime}
               setLaneRef={setLaneRef}
               onClipPointerDown={handleClipPointerDown}
               onLayerToggleVisible={toggleLayerVisible}

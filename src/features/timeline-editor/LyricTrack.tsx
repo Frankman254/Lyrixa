@@ -23,6 +23,10 @@ interface LyricTrackProps {
   selectedLayer?: boolean;
   /** True when a drag is currently hovering this lane and a drop here is legal. */
   isDropTarget?: boolean;
+  /** Inclusive time window for virtualization (already includes overscan).
+   *  When omitted, every clip is rendered (backwards compatible). */
+  renderStartTime?: number;
+  renderEndTime?: number;
   laneRef?: (el: HTMLDivElement | null) => void;
   onClipPointerDown: (
     clipId: string,
@@ -46,6 +50,8 @@ export function LyricTrack({
   selectedClipIds,
   selectedLayer = false,
   isDropTarget = false,
+  renderStartTime,
+  renderEndTime,
   laneRef,
   onClipPointerDown,
   onLayerToggleVisible,
@@ -54,6 +60,12 @@ export function LyricTrack({
   onLayerSelect
 }: LyricTrackProps) {
   const totalWidth = Math.max(duration, 1) * pxPerSecond;
+  // Virtualize: only mount clips that overlap the visible window (caller already
+  // included overscan). Drag/selection still work because the clips array in
+  // parent state is full; we only filter rendering.
+  const visibleClips = (renderStartTime != null && renderEndTime != null)
+    ? clips.filter(c => c.endTime >= renderStartTime && c.startTime <= renderEndTime)
+    : clips;
   const trackClass = [
     'tl-track',
     layer.locked ? 'locked' : '',
@@ -112,7 +124,7 @@ export function LyricTrack({
         data-layer-id={layer.id}
         style={{ width: `${totalWidth}px`, height: `${trackHeight}px` }}
       >
-        {clips.map(clip => (
+        {visibleClips.map(clip => (
           <LyricClip
             key={clip.id}
             clip={clip}

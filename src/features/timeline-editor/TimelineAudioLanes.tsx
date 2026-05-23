@@ -17,6 +17,8 @@ interface TimelineAudioLanesProps {
   displayPeaks?: AudioPeak[];
   bandPeaks: AudioPeak[] | null;
   masterIsMock: boolean;
+  /** True when audio length/size triggers lightweight long-audio mode. */
+  isLongAudio?: boolean;
   visibleStartPx: number;
   visibleWidthPx: number;
   onRulerClick: (e: MouseEvent<HTMLDivElement>) => void;
@@ -46,11 +48,17 @@ export const TimelineAudioLanes = memo(function TimelineAudioLanes({
   displayPeaks,
   bandPeaks,
   masterIsMock,
+  isLongAudio = false,
   visibleStartPx,
   visibleWidthPx,
   onRulerClick,
   onLaneClick
 }: TimelineAudioLanesProps) {
+  const badge = !waveformEnabled
+    ? 'waveform off'
+    : isLongAudio
+      ? 'Long audio mode'
+      : getBandBadge(bandMode, bandPeaksLoading, !!masterChannel?.fileName);
   return (
     <>
       <div className="tl-track tl-ruler-row" style={{ height: `${rulerHeight}px` }}>
@@ -71,7 +79,7 @@ export const TimelineAudioLanes = memo(function TimelineAudioLanes({
         pxPerSecond={pxPerSecond}
         height={masterHeight}
         peaks={displayPeaks}
-        badge={waveformEnabled ? getBandBadge(bandMode, bandPeaksLoading, !!masterChannel?.fileName) : 'waveform off'}
+        badge={badge}
         mockFallback={masterIsMock && !bandPeaks && !bandPeaksLoading}
         showWaveform={waveformEnabled}
         visibleStartPx={visibleStartPx}
