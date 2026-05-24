@@ -80,6 +80,12 @@ export interface LyricClip {
   locked?: boolean;
   /** When true, the clip is skipped by the preview renderer. */
   muted?: boolean;
+  /**
+   * Opt-in to rendering text on a layer where `renderSettings.suppressClipText`
+   * is true (e.g. FX/Adlibs). Useful for the occasional accent line that does
+   * need to show on screen.
+   */
+  forceTextRender?: boolean;
 }
 
 /** Minimum duration (in seconds) a clip is allowed to shrink to. */

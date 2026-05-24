@@ -141,6 +141,39 @@
   margin: 0 var(--s-1);
 }
 
+.tr-mode-switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  padding: 3px;
+  border-radius: 8px;
+  background: var(--bg-2, rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--border);
+}
+.tr-mode-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted, var(--fg-2));
+  font-size: 12px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.tr-mode-tab:hover { color: var(--fg-0, var(--text-main)); background: rgba(255,255,255,0.04); }
+.tr-mode-tab.active {
+  background: var(--accent);
+  color: var(--accent-fg, #0b0b0f);
+}
+.tr-mode-tab.active .tr-mode-icon { opacity: 1; }
+.tr-mode-icon { font-size: 13px; opacity: 0.75; }
+.tr-mode-label { letter-spacing: 0.04em; text-transform: uppercase; font-size: 11px; }
+
 .tr-name,
 .tr-name-input {
   background: var(--bg-2);
@@ -668,3 +701,53 @@ select option { background: var(--bg-2); color: var(--fg-0); }
 }
 .ls-btn.danger:hover { background: oklch(from var(--danger) l c h / 0.12); }
 .ls-btn.small { padding: 4px 8px; font-size: 11px; }
+
+/* Top-bar More ▾ menu */
+.tr-more {
+  position: relative;
+}
+.tr-more > summary {
+  list-style: none;
+  cursor: pointer;
+}
+.tr-more > summary::-webkit-details-marker { display: none; }
+.tr-more[open] > summary { background: var(--bg-3, rgba(255,255,255,0.08)); }
+
+.tr-more-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 240px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  background: var(--glass-bg, rgba(20, 22, 30, 0.96));
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow-panel, 0 16px 40px rgba(0,0,0,0.45));
+  z-index: 80;
+}
+
+.tr-more-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: none;
+  background: transparent;
+  color: var(--fg-1, var(--text-main));
+  padding: 7px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.tr-more-item:hover { background: var(--bg-3, rgba(255,255,255,0.06)); }
+.tr-more-item.danger { color: var(--danger, #ff7878); }
+.tr-more-item.danger:hover { background: rgba(245, 80, 80, 0.12); }
+.tr-more-key {
+  font-family: var(--font-mono, monospace);
+  font-size: 10px;
+  color: var(--fg-3, var(--text-muted));
+}

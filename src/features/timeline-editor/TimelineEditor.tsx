@@ -657,13 +657,11 @@ export function TimelineEditor({
         trackName={trackName}
         currentTime={currentTime}
         duration={effectiveDuration}
-        isPlaying={isPlaying}
         pxPerSecond={pxPerSecond}
         masterChannel={masterChannel}
         bandMode={bandMode}
         bandModeDisabled={isLongAudio || !waveformEnabled}
         snapSeconds={snapSeconds}
-        onPlayToggle={onPlayToggle}
         onZoomOut={zoomOut}
         onZoomIn={zoomIn}
         onFitSong={fitSong}

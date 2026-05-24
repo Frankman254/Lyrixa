@@ -46,6 +46,23 @@ export function LayerInspector({
         </label>
       </Group>
 
+      <Group title="Rendering">
+        <label className="tl-inline-check">
+          <input
+            type="checkbox"
+            checked={!!selectedLayer.renderSettings?.suppressClipText}
+            onChange={(e) => onPatchLayer({
+              renderSettings: {
+                positionPreset: selectedLayer.renderSettings?.positionPreset ?? 'center',
+                ...selectedLayer.renderSettings,
+                suppressClipText: e.target.checked
+              }
+            })}
+          />
+          Treat as FX accent (don't render clip text by default)
+        </label>
+      </Group>
+
       <Group title="Audio reactive">
         <LayerAudioReactiveEditor
           value={selectedLayer.audioReactive}

@@ -190,3 +190,72 @@
   color: var(--fg-3);
   font-variant-numeric: tabular-nums;
 }
+
+/* Preset picker */
+.preset-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.preset-picker-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.preset-scope {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--fg-3, var(--text-muted));
+}
+
+.preset-scope select {
+  font-size: 12px;
+  padding: 4px 8px;
+}
+
+.preset-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.preset-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-2, rgba(255,255,255,0.04));
+  color: var(--fg-1, var(--text-main));
+  font-size: 12px;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+.preset-card:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft, rgba(120, 130, 255, 0.12));
+}
+.preset-card-name { font-weight: 700; font-size: 12px; }
+.preset-card-group {
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--fg-3, var(--text-muted));
+}
+.preset-card-desc {
+  font-size: 11px;
+  color: var(--fg-3, var(--text-muted));
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}

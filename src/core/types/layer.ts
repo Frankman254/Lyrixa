@@ -18,6 +18,13 @@ export interface LayerRenderSettings {
   textAlign?: 'left' | 'center' | 'right';
   /** Stacking z-index in the preview. Higher = in front. */
   zIndex?: number;
+  /**
+   * When true, the lyric text of clips on this layer is NOT rendered — only
+   * the layer's FX/background still apply. Intended for the FX/Adlibs layer
+   * so it behaves as a visual accent track instead of a third paragraph row.
+   * A clip can opt back in with `forceTextRender: true`.
+   */
+  suppressClipText?: boolean;
 }
 
 /** Where the reactive signal is sampled from when rendering. */
@@ -181,7 +188,10 @@ export function createDefaultLayers(): LyricLayer[] {
       visible: true,
       locked: false,
       order: 2,
-      renderSettings: { positionPreset: 'top-right', textAlign: 'right', zIndex: 30 },
+      // suppressClipText keeps the FX layer purely accent-y by default: clips
+      // placed here drive FX/glow but don't render normal paragraph text.
+      // Toggle off in the Layer inspector if you want adlib text on screen.
+      renderSettings: { positionPreset: 'top-right', textAlign: 'right', zIndex: 30, suppressClipText: true },
       styleDefaults: {
         fontSize: '1.15rem',
         fontWeight: '900',

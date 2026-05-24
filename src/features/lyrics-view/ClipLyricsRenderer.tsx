@@ -216,7 +216,9 @@ export function ClipLyricsRenderer({
             data-layer-type={layerType}
           >
             <span className="clip-lyric-content">
-              <span className="clip-lyric-text" data-text={transformText(clip.text, style.textTransform)}>{transformText(clip.text, style.textTransform)}</span>
+              {(!layer?.renderSettings?.suppressClipText || clip.forceTextRender) && (
+                <span className="clip-lyric-text" data-text={transformText(clip.text, style.textTransform)}>{transformText(clip.text, style.textTransform)}</span>
+              )}
               {showProgressDot && (
                 <span className="clip-progress-track" aria-hidden>
                   <span className="clip-progress-dot" />

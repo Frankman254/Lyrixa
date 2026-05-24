@@ -5,6 +5,28 @@ import { ACCENT_OPTIONS } from '../../shared/theme/useAccentTheme';
 import type { AccentName } from '../../shared/theme/useAccentTheme';
 import { EditorHiddenFileInputs } from './EditorHiddenFileInputs';
 import { EditorPlaybackControls } from './EditorPlaybackControls';
+import type { EditorMode } from './useEditorMode';
+
+const MODE_LABELS: Record<EditorMode, string> = {
+  sync: 'Sync',
+  edit: 'Edit',
+  style: 'Style',
+  preview: 'Preview'
+};
+
+const MODE_ICONS: Record<EditorMode, string> = {
+  sync: '◉',
+  edit: '✎',
+  style: '◐',
+  preview: '▶'
+};
+
+const MODE_TITLES: Record<EditorMode, string> = {
+  sync: 'Sync mode — hold Space to time lyric paragraphs',
+  edit: 'Edit mode — drag, resize and nudge clips on the timeline',
+  style: 'Style mode — pick presets and tweak text/animation/FX',
+  preview: 'Preview mode — clean playback view'
+};
 
 const SAVE_LABEL: Record<SaveStatus, string> = {
   idle: 'Saved',
@@ -29,6 +51,8 @@ interface EditorTopBarProps {
   saveStatus: SaveStatus;
   syncMode: boolean;
   canSync: boolean;
+  editorMode: EditorMode;
+  onEditorModeChange: (next: EditorMode) => void;
   previewOpen: boolean;
   transparentPreviewOpen: boolean;
   miniPreviewVisible: boolean;
@@ -71,6 +95,8 @@ export function EditorTopBar({
   saveStatus,
   syncMode,
   canSync,
+  editorMode,
+  onEditorModeChange,
   previewOpen,
   transparentPreviewOpen,
   miniPreviewVisible,
@@ -146,6 +172,25 @@ export function EditorTopBar({
 
       <div className="tr-divider" />
 
+      <div className="tr-mode-switcher" role="tablist" aria-label="Editor mode">
+        {(['sync', 'edit', 'style', 'preview'] as const).map(m => (
+          <button
+            key={m}
+            type="button"
+            role="tab"
+            aria-selected={editorMode === m}
+            className={`tr-mode-tab ${editorMode === m ? 'active' : ''}`}
+            onClick={() => onEditorModeChange(m)}
+            title={MODE_TITLES[m]}
+          >
+            <span className="tr-mode-icon" aria-hidden>{MODE_ICONS[m]}</span>
+            <span className="tr-mode-label">{MODE_LABELS[m]}</span>
+          </button>
+        ))}
+      </div>
+
+      <div className="tr-divider" />
+
       <EditorPlaybackControls
         isPlaying={isPlaying}
         currentTime={currentTime}
@@ -181,25 +226,8 @@ export function EditorTopBar({
       </div>
 
       <div className="tr-group">
-        <button className="tr-btn small" onClick={onOpenProjectImportPicker} title="Import a .lyrixa.json project">
-          Import
-        </button>
         <button className="tr-btn small" onClick={onExportProject} title="Export the full Lyrixa project">
           Export
-        </button>
-        <button
-          className="tr-btn small"
-          onClick={onExportLyricsBundle}
-          title="Export the cross-app lyrics bundle (.lyrixa-lyrics.json)"
-        >
-          Bundle
-        </button>
-        <button
-          className="tr-btn small ghost"
-          onClick={onOpenLyricsBundleImportPicker}
-          title="Import a .lyrixa-lyrics.json bundle"
-        >
-          ⤓
         </button>
       </div>
 
@@ -237,17 +265,26 @@ export function EditorTopBar({
         </select>
       </label>
 
-      <button
-        className="tr-btn small"
-        onClick={onOpenShortcuts}
-        title="Keyboard shortcuts (Shift+?)"
-      >
-        ⌨ Shortcuts
-      </button>
-
-      <button className="tr-btn danger" onClick={onResetProject} title="Delete the current project and clear Lyrixa local data">
-        Reset
-      </button>
+      <details className="tr-more">
+        <summary className="tr-btn small">More ▾</summary>
+        <div className="tr-more-menu" role="menu">
+          <button className="tr-more-item" onClick={onOpenProjectImportPicker}>
+            Import project (.lyrixa.json)
+          </button>
+          <button className="tr-more-item" onClick={onExportLyricsBundle}>
+            Export lyrics bundle
+          </button>
+          <button className="tr-more-item" onClick={onOpenLyricsBundleImportPicker}>
+            Import lyrics bundle
+          </button>
+          <button className="tr-more-item" onClick={onOpenShortcuts}>
+            ⌨ Keyboard shortcuts <span className="tr-more-key">Shift+?</span>
+          </button>
+          <button className="tr-more-item danger" onClick={onResetProject}>
+            ⚠ Delete project
+          </button>
+        </div>
+      </details>
 
       <EditorHiddenFileInputs
         masterFileInputRef={masterFileInputRef}

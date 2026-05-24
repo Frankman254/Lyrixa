@@ -22,7 +22,7 @@ export function ClipInspector({
 
   return (
     <section className="insp-stack">
-      <Group title="Clip" open>
+      <Group title="Basic" open>
         <label>
           Text
           <textarea
@@ -32,6 +32,32 @@ export function ClipInspector({
             onChange={(e) => onPatchClip({ text: e.target.value })}
           />
         </label>
+        <label>
+          Assigned layer
+          <select
+            className="form-control form-select"
+            value={selectedClip.layerId}
+            onChange={(e) => onPatchClip({ layerId: e.target.value })}
+          >
+            {layers.map(layer => (
+              <option key={layer.id} value={layer.id}>{layer.name}</option>
+            ))}
+          </select>
+        </label>
+        {onDuplicateClip && (
+          <button
+            type="button"
+            className="ls-btn small"
+            onClick={() => onDuplicateClip(selectedClip.id)}
+            title="Place a copy of this clip right after itself — handy for repeated verses or choruses."
+            style={{ alignSelf: 'flex-start' }}
+          >
+            ⎘ Duplicate clip
+          </button>
+        )}
+      </Group>
+
+      <Group title="Timing" open>
         <div className="inspector-grid">
           <label>
             Start
@@ -58,32 +84,23 @@ export function ClipInspector({
             />
           </label>
         </div>
-        <label>
-          Assigned layer
-          <select
-            className="form-control form-select"
-            value={selectedClip.layerId}
-            onChange={(e) => onPatchClip({ layerId: e.target.value })}
-          >
-            {layers.map(layer => (
-              <option key={layer.id} value={layer.id}>{layer.name}</option>
-            ))}
-          </select>
-        </label>
-        {onDuplicateClip && (
-          <button
-            type="button"
-            className="ls-btn small"
-            onClick={() => onDuplicateClip(selectedClip.id)}
-            title="Place a copy of this clip right after itself — handy for repeated verses or choruses."
-            style={{ alignSelf: 'flex-start' }}
-          >
-            ⎘ Duplicate clip
-          </button>
-        )}
+        <p className="insp-muted">
+          Duration: {(selectedClip.endTime - selectedClip.startTime).toFixed(2)}s
+        </p>
       </Group>
 
-      <Group title="Overrides" open>
+      <Group title="Advanced overrides">
+        <p className="insp-muted">
+          Toggle to override a config field per-clip. Use the Style / FX / Animation tabs to edit it once enabled.
+        </p>
+        <label className="tl-inline-check">
+          <input
+            type="checkbox"
+            checked={!!selectedClip.forceTextRender}
+            onChange={(e) => onPatchClip({ forceTextRender: e.target.checked || undefined })}
+          />
+          Force show text (overrides FX-layer suppression)
+        </label>
         <label className="tl-inline-check">
           <input
             type="checkbox"

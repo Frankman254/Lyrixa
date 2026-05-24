@@ -14,6 +14,8 @@ import { LayersSidebar } from './LayersSidebar';
 import { InspectorPanel } from '../inspector/InspectorPanel';
 import { TapSyncPanel } from '../sync/TapSyncPanel';
 import { useTapSync } from '../sync/useTapSync';
+import { useEditorMode } from './useEditorMode';
+import type { EditorMode } from './useEditorMode';
 import { ShortcutsPanel } from '../shortcuts/ShortcutsPanel';
 import { useShortcuts } from '../shortcuts/useShortcuts';
 import type { TapSyncLine } from '../../core/timeline/tapSync';
@@ -68,7 +70,15 @@ export function LyrixaEditorShell() {
 
   const masterFileInputRef = useRef<HTMLInputElement>(null);
 
-  const [syncMode, setSyncMode] = useState(false);
+  const { mode, setMode, isSync: syncMode, isPreview } = useEditorMode();
+  // Tracks whether the sync side-effects (cursor, lines, layer wiring) have
+  // already run. Lets the mode switcher AND the "Sync lyrics" button share
+  // one idempotent entry/exit path.
+  const syncEnteredRef = useRef(false);
+  const setSyncMode = useCallback((next: boolean) => {
+    if (next) setMode('sync');
+    else if (mode === 'sync') setMode('edit');
+  }, [mode, setMode]);
   const [syncSpeed, setSyncSpeed] = useState(1);
   const [syncLines, setSyncLines] = useState<TapSyncLine[]>([]);
   const [syncInitialCursor, setSyncInitialCursor] = useState(0);
@@ -289,16 +299,19 @@ export function LyrixaEditorShell() {
     tapSync.reset();
   }, [buildSyncLines, project.clips, project.lyricSources.length, project.rawLyricsText, setClips, setRawLyricsText, syncSourceId, tapSync]);
 
-  const handleToggleSync = useCallback(() => {
-    if (syncMode) {
-      setSyncMode(false);
-      setSyncSpeed(1);
-      setSyncLines([]);
-      setSyncInitialCursor(0);
-      setSyncTargetLayerId(null);
-      return;
-    }
+  const exitSyncMode = useCallback(() => {
+    if (!syncEnteredRef.current) return;
+    syncEnteredRef.current = false;
+    setSyncSpeed(1);
+    setSyncLines([]);
+    setSyncInitialCursor(0);
+    setSyncTargetLayerId(null);
+    if (mode === 'sync') setMode('edit');
+  }, [mode, setMode]);
 
+  const enterSyncMode = useCallback(() => {
+    if (syncEnteredRef.current) return;
+    syncEnteredRef.current = true;
     // Default the sync source to the project's active source so the user
     // doesn't have to pick when there's exactly one set of lyrics.
     const initialSourceId = syncSourceId ?? activeLyricSource?.id ?? null;
@@ -308,8 +321,20 @@ export function LyrixaEditorShell() {
     setIsPlaying(false);
     setMiniPreviewVisible(true);
     handleSeek(0);
-    setSyncMode(true);
-  }, [activeLayerId, activeLyricSource?.id, handleSeek, setIsPlaying, startSyncForLayer, syncMode, syncSourceId, syncTargetLayerId]);
+    if (mode !== 'sync') setMode('sync');
+  }, [activeLayerId, activeLyricSource?.id, handleSeek, mode, setIsPlaying, setMode, startSyncForLayer, syncSourceId, syncTargetLayerId]);
+
+  const handleToggleSync = useCallback(() => {
+    if (syncMode) exitSyncMode();
+    else enterSyncMode();
+  }, [syncMode, enterSyncMode, exitSyncMode]);
+
+  // Bridge the editor-mode setting to the sync wiring so both the "Sync lyrics"
+  // button and the Sync tab on the mode switcher share one idempotent path.
+  useEffect(() => {
+    if (mode === 'sync') enterSyncMode();
+    else exitSyncMode();
+  }, [mode, enterSyncMode, exitSyncMode]);
 
   const handleSyncLayerChange = useCallback((layerId: string) => {
     startSyncForLayer(layerId);
@@ -381,7 +406,7 @@ export function LyrixaEditorShell() {
     setSelectedLayerId(null);
     await hardResetProject();
     window.alert('Project reset complete');
-  }, [hardResetProject, setIsPlaying, setPlaybackTime]);
+  }, [hardResetProject, setIsPlaying, setPlaybackTime, setSyncMode]);
 
   const handleFloatingPreviewSize = (width: number) => {
     const next = Math.max(320, Math.min(760, width));
@@ -414,6 +439,14 @@ export function LyrixaEditorShell() {
   return (
     <div className={shellClass}>
       <EditorTopBar
+        editorMode={mode}
+        onEditorModeChange={(next: EditorMode) => {
+          setMode(next);
+          // Preview mode also opens the large preview so the user sees their
+          // work without other panels stealing focus.
+          if (next === 'preview') setPreviewOpen(true);
+          if (next !== 'preview' && previewOpen) setPreviewOpen(false);
+        }}
         projectName={project.name}
         nameEditing={nameEditing}
         draftName={nameEditing ? draftName : project.name}
@@ -527,7 +560,7 @@ export function LyrixaEditorShell() {
             }}
           />
 
-          {showMini && (
+          {showMini && !isPreview && (
             <FloatingPreview
               clips={project.clips}
               layers={project.layers}
@@ -565,7 +598,7 @@ export function LyrixaEditorShell() {
         </section>
       </main>
 
-      <InspectorPanel
+      {!isPreview && <InspectorPanel
         project={project}
         selectedClipId={selectedClipId}
         selectedLayerId={selectedLayerId}
@@ -583,7 +616,8 @@ export function LyrixaEditorShell() {
         onHardResetProject={handleHardResetProject}
         onRenameLyricSource={setLyricSourceTitle}
         onRemoveLyricSource={removeLyricSource}
-      />
+        editorMode={mode}
+      />}
 
       {importOpen && (
         <LyricsImportPanel

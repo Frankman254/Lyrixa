@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { LyricClip } from '../../core/types/clip';
 import type { LyricLayer } from '../../core/types/layer';
 import type {
@@ -21,6 +21,10 @@ import { LayerInspector } from './LayerInspector';
 import { ProjectInspector } from './ProjectInspector';
 import { StyleInspector } from './StyleInspector';
 import { TextureInspector } from './TextureInspector';
+import { PresetPicker, type PresetScope } from './PresetPicker';
+import { Group } from './InspectorPrimitives';
+import type { LyricVisualPreset } from '../../core/presets/visualPresets';
+import type { EditorMode } from '../editor/useEditorMode';
 import './InspectorPanel.css';
 
 type InspectorTab = 'project' | 'layer' | 'clip' | 'style' | 'texture' | 'fx' | 'animation';
@@ -44,6 +48,8 @@ interface InspectorPanelProps {
   onHardResetProject: () => void;
   onRenameLyricSource: (id: string, title: string) => void;
   onRemoveLyricSource: (id: string) => void;
+  /** Which editor mode the workspace is in. Filters which tabs are visible. */
+  editorMode?: EditorMode;
 }
 
 /**
@@ -70,7 +76,8 @@ export function InspectorPanel({
   onImportProject,
   onHardResetProject,
   onRenameLyricSource,
-  onRemoveLyricSource
+  onRemoveLyricSource,
+  editorMode = 'edit'
 }: InspectorPanelProps) {
   const selectedClip = useMemo(
     () => selectedClipId ? project.clips.find(clip => clip.id === selectedClipId) ?? null : null,
@@ -84,6 +91,25 @@ export function InspectorPanel({
     ? project.layers.find(layer => layer.id === selectedClip.layerId) ?? null
     : selectedLayer;
   const [tab, setTab] = useState<InspectorTab>('project');
+
+  // Each mode reveals a different subset of tabs so the inspector isn't an
+  // undifferentiated grid of 7 controls. Style mode shows everything.
+  const visibleTabs = useMemo<InspectorTab[]>(() => {
+    switch (editorMode) {
+      case 'sync':    return ['project', 'clip'];
+      case 'edit':    return ['project', 'layer', 'clip'];
+      case 'style':   return ['project', 'layer', 'clip', 'style', 'texture', 'fx', 'animation'];
+      case 'preview': return [];
+      default:        return ['project', 'layer', 'clip', 'style', 'texture', 'fx', 'animation'];
+    }
+  }, [editorMode]);
+
+  // If the active tab is hidden by the current mode, fall back to the first
+  // visible one — keeps the panel from rendering a blank body.
+  useEffect(() => {
+    if (visibleTabs.length === 0) return;
+    if (!visibleTabs.includes(tab)) setTab(visibleTabs[0]!);
+  }, [visibleTabs, tab]);
 
   const scope = selectedClip?.styleOverride
     ? 'clip'
@@ -157,6 +183,43 @@ export function InspectorPanel({
 
   const patchFill = (fill: TextFillConfig) => patchScopedStyle({ textFill: fill });
 
+  /**
+   * Apply a curated preset to the requested scope. We bypass the active scope
+   * for this one action because the picker has its own scope selector — that
+   * way a user with a clip selected can still apply a preset to the whole
+   * project without first changing what's selected.
+   */
+  const applyPreset = (preset: LyricVisualPreset, targetScope: PresetScope) => {
+    if (targetScope === 'clip') {
+      if (!selectedClip) return;
+      const nextClip: Partial<LyricClip> = {};
+      if (preset.style) nextClip.styleOverride = { ...(selectedClip.styleOverride ?? {}), ...preset.style };
+      if (preset.animation) nextClip.animationOverride = { ...(selectedClip.animationOverride ?? {}), ...preset.animation };
+      if (preset.fx) nextClip.fxOverride = { ...(selectedClip.fxOverride ?? {}), ...preset.fx };
+      onClipsChange(project.clips.map(clip => clip.id === selectedClip.id ? { ...clip, ...nextClip } : clip));
+      return;
+    }
+    if (targetScope === 'layer') {
+      if (!selectedLayer) return;
+      const nextLayer: Partial<LyricLayer> = {};
+      if (preset.style) nextLayer.styleDefaults = { ...(selectedLayer.styleDefaults ?? {}), ...preset.style };
+      if (preset.animation) nextLayer.animationDefaults = { ...(selectedLayer.animationDefaults ?? {}), ...preset.animation };
+      if (preset.fx) nextLayer.fxDefaults = { ...(selectedLayer.fxDefaults ?? {}), ...preset.fx };
+      onLayersChange(project.layers.map(layer => layer.id === selectedLayer.id ? { ...layer, ...nextLayer } : layer));
+      return;
+    }
+    // project scope
+    if (preset.style) onStyleChange({ ...project.styleConfig, ...preset.style });
+    if (preset.animation) onAnimationChange({ ...project.animationConfig, ...preset.animation });
+    if (preset.fx) onFxChange({ ...project.fxConfig, ...preset.fx });
+  };
+
+  const availableScopes: PresetScope[] = [
+    'project',
+    ...(selectedLayer ? ['layer' as PresetScope] : []),
+    ...(selectedClip ? ['clip' as PresetScope] : [])
+  ];
+
   return (
     <aside className="inspector-panel">
       <header className="insp-header">
@@ -164,13 +227,21 @@ export function InspectorPanel({
         <span>{scope === 'clip' ? 'Clip override' : scope === 'layer' ? selectedLayer?.name : 'Project defaults'}</span>
       </header>
       <nav className="insp-tabs" aria-label="Inspector tabs">
-        {(['project', 'layer', 'clip', 'style', 'texture', 'fx', 'animation'] as InspectorTab[]).map(value => (
+        {visibleTabs.map(value => (
           <button key={value} className={tab === value ? 'active' : ''} onClick={() => setTab(value)}>
             {value}
           </button>
         ))}
       </nav>
       <div className="insp-body">
+        <Group title="Visual preset" open>
+          <PresetPicker
+            availableScopes={availableScopes}
+            defaultScope={scope}
+            onApply={applyPreset}
+          />
+        </Group>
+
         {tab === 'project' && (
           <ProjectInspector
             project={project}
