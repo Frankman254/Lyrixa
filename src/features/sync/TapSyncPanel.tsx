@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { LyricClip } from '../../core/types/clip';
 import type { LyricLayer } from '../../core/types/layer';
-import type { LyricSource } from '../../core/types/project';
+import type { LyricProjectMode, LyricSource } from '../../core/types/project';
 import type { TapSyncLine } from '../../core/timeline/tapSync';
 import { isTapSyncLinePublished } from '../../core/timeline/tapSync';
 import { FloatingPanel } from '../../shared/components/FloatingPanel';
@@ -24,6 +24,7 @@ interface TapSyncPanelProps {
   sources: LyricSource[];
   /** Currently selected source; null = stream every source in order. */
   sourceId: string | null;
+  lyricMode: LyricProjectMode;
   isPlaying: boolean;
   playbackTime: number;
   speed: number;
@@ -67,6 +68,7 @@ export function TapSyncPanel({
   layerName,
   sources,
   sourceId,
+  lyricMode,
   isPlaying,
   playbackTime,
   speed,
@@ -173,7 +175,7 @@ export function TapSyncPanel({
           </select>
         </label>
 
-        {sources.length > 1 && (
+        {lyricMode === 'multi' && sources.length > 1 && (
           <label className="tapsync-layer">
             <span>Lyric source</span>
             <select

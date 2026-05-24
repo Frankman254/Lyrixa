@@ -77,6 +77,7 @@ export function createEmptyProject(): LyrixaProject {
   return {
     id: generateId(),
     name: 'Untitled Project',
+    lyricMode: 'single',
     audioTracks: createEmptyAudioTracks(),
     rawLyricsText: '',
     normalizedLyrics: [],
@@ -181,10 +182,11 @@ function migrateV1(legacy: LegacyV1Project): LyrixaProject {
         }
       : null
   };
-  return normalizeProject({
-    id: legacy.id,
-    name: legacy.name,
-    audioTracks,
+    return normalizeProject({
+      id: legacy.id,
+      name: legacy.name,
+      lyricMode: 'single',
+      audioTracks,
     rawLyricsText: legacy.rawLyricsText ?? '',
     normalizedLyrics: legacy.normalizedLyrics ?? [],
     layers: normalizeLayers(legacy.layers),

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { normalizeLyricsText } from '../../core/lyrics/normalize';
+import type { LyricProjectMode } from '../../core/types/project';
 import type { ApplyLyricsOptions } from './useLyrixaProject';
 import './LyricsImportPanel.css';
 
@@ -8,6 +9,9 @@ interface LyricsImportPanelProps {
   initialText: string;
   /** Title suggested for the lyric source when adding it. */
   initialTitle?: string;
+  initialStartTime?: number;
+  currentTime: number;
+  lyricMode: LyricProjectMode;
   /** When true, the form starts in "add as new source" mode. */
   defaultAsNewSource?: boolean;
   onClose: () => void;
@@ -24,13 +28,17 @@ export function LyricsImportPanel({
   open,
   initialText,
   initialTitle,
+  initialStartTime,
+  currentTime,
+  lyricMode,
   defaultAsNewSource = false,
   onClose,
   onApply
 }: LyricsImportPanelProps) {
   const [text, setText] = useState(initialText);
   const [sourceTitle, setSourceTitle] = useState(initialTitle ?? 'Lyrics');
-  const [addAsNewSource, setAddAsNewSource] = useState(defaultAsNewSource);
+  const [startTime, setStartTime] = useState(initialStartTime ?? currentTime ?? 0);
+  const [addAsNewSource, setAddAsNewSource] = useState(lyricMode === 'multi' && defaultAsNewSource);
 
   const preview = useMemo(() => normalizeLyricsText(text), [text]);
 
@@ -38,8 +46,9 @@ export function LyricsImportPanel({
 
   const handleApply = () => {
     onApply(text, {
-      sourceMode: addAsNewSource ? 'add' : 'replace-active',
-      sourceTitle
+      sourceMode: lyricMode === 'multi' && addAsNewSource ? 'add' : 'replace-active',
+      sourceTitle,
+      sourceStartTime: startTime
     });
     onClose();
   };
@@ -107,13 +116,35 @@ export function LyricsImportPanel({
               />
             </label>
 
+            <label>
+              Start checkpoint
+              <input
+                type="number"
+                min={0}
+                step={0.1}
+                value={formatSecondsValue(startTime)}
+                onChange={(e) => setStartTime(Math.max(0, Number(e.target.value) || 0))}
+              />
+              <button
+                type="button"
+                className="lip-inline-btn"
+                onClick={() => setStartTime(currentTime)}
+                title="Use the current playhead time"
+              >
+                Current
+              </button>
+            </label>
+
             <label className="lip-check">
               <input
                 type="checkbox"
                 checked={addAsNewSource}
                 onChange={(e) => setAddAsNewSource(e.target.checked)}
+                disabled={lyricMode === 'single'}
               />
-              Add as a new lyric source (keep existing sources)
+              {lyricMode === 'multi'
+                ? 'Add as a new lyric source (keep existing sources)'
+                : 'Single mode: replace the active lyric source'}
             </label>
           </div>
 
@@ -136,4 +167,9 @@ export function LyricsImportPanel({
       </aside>
     </div>
   );
+}
+
+function formatSecondsValue(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) return '0';
+  return Number(seconds.toFixed(1)).toString();
 }

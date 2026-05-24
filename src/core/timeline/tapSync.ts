@@ -97,7 +97,7 @@ function createLineClip(
 }
 
 export function tapSyncClipId(layerId: string, line: TapSyncLine): string {
-  return `tap-${layerId}-${line.sourceIndex}`;
+  return `tap-${layerId}-${line.sourceId.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
 }
 
 export function findTapSyncClip(

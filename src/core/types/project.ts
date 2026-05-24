@@ -32,14 +32,23 @@ export interface LyricSource {
   title: string;
   rawText: string;
   normalizedLines: string[];
+  /** Seconds on the master track where this lyric source starts. */
+  startTime?: number;
   order: number;
   createdAt: string;
   updatedAt: string;
 }
 
+export type LyricProjectMode = 'single' | 'multi';
+
 export interface LyrixaProject {
   id: string;
   name: string;
+  /**
+   * single: one active lyric source for one song/audio.
+   * multi: ordered lyric sources for long mixes, medleys, or DJ sets.
+   */
+  lyricMode: LyricProjectMode;
   /** Audio channels bound to this project. `master` is the track that plays. */
   audioTracks: ProjectAudioTracks;
   /** Raw paste from the user, kept verbatim for re-normalization. */

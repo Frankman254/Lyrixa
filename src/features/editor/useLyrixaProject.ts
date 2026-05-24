@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { LyrixaProject } from '../../core/types/project';
+import type { LyricProjectMode, LyrixaProject } from '../../core/types/project';
 import type { LyricClip } from '../../core/types/clip';
 import type { LyricLayer } from '../../core/types/layer';
 import type {
@@ -62,6 +62,7 @@ export interface ApplyLyricsOptions {
   /** Replace the active lyrics source or add a new ordered source. */
   sourceMode?: 'replace-active' | 'add';
   sourceTitle?: string;
+  sourceStartTime?: number;
 }
 
 export interface UseLyrixaProjectResult {
@@ -77,8 +78,12 @@ export interface UseLyrixaProjectResult {
 
   setRawLyricsText: (text: string) => void;
   applyLyrics: (rawText: string, options?: ApplyLyricsOptions) => void;
+  setLyricMode: (mode: LyricProjectMode) => void;
+  setActiveLyricSource: (id: string) => void;
   /** Rename one lyric source (no effect on clips). */
   setLyricSourceTitle: (id: string, title: string) => void;
+  /** Set the source checkpoint in seconds on the master audio. */
+  setLyricSourceStartTime: (id: string, startTime: number) => void;
   /** Delete a lyric source from the library. Existing clips on layers stay
    *  put — they remain independent timing artifacts you may still want. */
   removeLyricSource: (id: string) => void;
@@ -418,7 +423,8 @@ export function useLyrixaProject({
     const {
       normalizeOptions,
       sourceMode = 'replace-active',
-      sourceTitle
+      sourceTitle,
+      sourceStartTime
     } = options;
 
     const { lines } = normalizeLyricsText(rawText, normalizeOptions);
@@ -433,15 +439,21 @@ export function useLyrixaProject({
       const currentSources = p.lyricSources ?? [];
       const activeSource = currentSources.find(source => source.id === p.activeLyricSourceId)
         ?? currentSources[0];
-      const addingSource = sourceMode === 'add' || !activeSource;
+      const addingSource = !activeSource || (p.lyricMode === 'multi' && sourceMode === 'add');
       const lyricSourceId = addingSource
         ? createLyricSourceId()
         : activeSource.id;
+      const startTime = typeof sourceStartTime === 'number' && Number.isFinite(sourceStartTime)
+        ? Math.max(0, sourceStartTime)
+        : addingSource
+          ? 0
+          : activeSource.startTime ?? 0;
       const nextSource = {
         id: lyricSourceId,
         title: sourceTitle?.trim() || (addingSource ? `Lyrics ${currentSources.length + 1}` : activeSource?.title) || 'Lyrics 1',
         rawText,
         normalizedLines: lines,
+        startTime,
         order: addingSource
           ? Math.max(-1, ...currentSources.map(source => source.order)) + 1
           : activeSource.order,
@@ -465,6 +477,21 @@ export function useLyrixaProject({
     });
   }, []);
 
+  const setLyricMode = useCallback((mode: LyricProjectMode) => {
+    setProject(p => ({
+      ...p,
+      lyricMode: mode,
+      activeLyricSourceId: p.activeLyricSourceId ?? p.lyricSources[0]?.id
+    }));
+  }, []);
+
+  const setActiveLyricSource = useCallback((id: string) => {
+    setProject(p => {
+      if (!p.lyricSources.some(source => source.id === id)) return p;
+      return { ...p, activeLyricSourceId: id };
+    });
+  }, []);
+
   const setLyricSourceTitle = useCallback((id: string, title: string) => {
     const trimmed = title.trim();
     if (!trimmed) return;
@@ -476,6 +503,23 @@ export function useLyrixaProject({
         source.id === id ? { ...source, title: trimmed, updatedAt: now } : source
       );
       return { ...p, lyricSources: nextSources };
+    });
+  }, []);
+
+  const setLyricSourceStartTime = useCallback((id: string, startTime: number) => {
+    const nextTime = Math.max(0, Number.isFinite(startTime) ? startTime : 0);
+    setProject(p => {
+      const sources = p.lyricSources ?? [];
+      if (!sources.some(source => source.id === id)) return p;
+      const now = new Date().toISOString();
+      return {
+        ...p,
+        lyricSources: sources.map(source =>
+          source.id === id
+            ? { ...source, startTime: nextTime, updatedAt: now }
+            : source
+        )
+      };
     });
   }, []);
 
@@ -604,7 +648,10 @@ export function useLyrixaProject({
     getAudioBlob,
     setRawLyricsText,
     applyLyrics,
+    setLyricMode,
+    setActiveLyricSource,
     setLyricSourceTitle,
+    setLyricSourceStartTime,
     removeLyricSource,
     setClips,
     updateClip,

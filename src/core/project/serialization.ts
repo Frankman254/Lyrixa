@@ -79,6 +79,11 @@ export function normalizeProject(input: Partial<LyrixaProject>): LyrixaProject {
   return {
     id: typeof input.id === 'string' && input.id ? input.id : emptyId,
     name: typeof input.name === 'string' && input.name ? input.name : 'Imported Project',
+    lyricMode: input.lyricMode === 'multi' || input.lyricMode === 'single'
+      ? input.lyricMode
+      : lyricSources.length > 1
+        ? 'multi'
+        : 'single',
     audioTracks,
     rawLyricsText: input.rawLyricsText ?? '',
     normalizedLyrics: Array.isArray(input.normalizedLyrics) ? input.normalizedLyrics : [],
@@ -113,6 +118,7 @@ export function normalizeLyricSources(
           title: typeof source.title === 'string' && source.title ? source.title : `Lyrics ${index + 1}`,
           rawText,
           normalizedLines,
+          startTime: clampNumber(source.startTime, 0, Number.POSITIVE_INFINITY, 0),
           order: Number.isFinite(source.order) ? source.order : index,
           createdAt: typeof source.createdAt === 'string' ? source.createdAt : now,
           updatedAt: typeof source.updatedAt === 'string' ? source.updatedAt : now
@@ -130,6 +136,7 @@ export function normalizeLyricSources(
     normalizedLines: Array.isArray(normalizedLyrics) && normalizedLyrics.length > 0
       ? normalizedLyrics
       : normalizeLyricsText(rawLyricsText).lines,
+    startTime: 0,
     order: 0,
     createdAt: new Date(0).toISOString(),
     updatedAt: new Date(0).toISOString()

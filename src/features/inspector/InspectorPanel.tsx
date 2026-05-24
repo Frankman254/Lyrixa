@@ -9,6 +9,7 @@ import type {
 } from '../../core/types/render';
 import type { TextFillConfig } from '../../core/types/texture';
 import type { LyrixaProject } from '../../core/types/project';
+import type { LyricProjectMode } from '../../core/types/project';
 import {
   resolveLyricAnimationConfig,
   resolveLyricFxConfig,
@@ -33,7 +34,9 @@ interface InspectorPanelProps {
   project: LyrixaProject;
   selectedClipId: string | null;
   selectedLayerId: string | null;
+  currentTime: number;
   onProjectNameChange: (name: string) => void;
+  onLyricModeChange: (mode: LyricProjectMode) => void;
   onStyleChange: (next: LyricVisualStyle) => void;
   onAnimationChange: (next: LyricAnimationConfig) => void;
   onFxChange: (next: LyricFxConfig) => void;
@@ -46,7 +49,10 @@ interface InspectorPanelProps {
   onExportProject: () => void;
   onImportProject: () => void;
   onHardResetProject: () => void;
+  onSelectLyricSource: (id: string) => void;
   onRenameLyricSource: (id: string, title: string) => void;
+  onSetLyricSourceStartTime: (id: string, startTime: number) => void;
+  onJumpToLyricSource: (id: string) => void;
   onRemoveLyricSource: (id: string) => void;
   /** Which editor mode the workspace is in. Filters which tabs are visible. */
   editorMode?: EditorMode;
@@ -63,7 +69,9 @@ export function InspectorPanel({
   project,
   selectedClipId,
   selectedLayerId,
+  currentTime,
   onProjectNameChange,
+  onLyricModeChange,
   onStyleChange,
   onAnimationChange,
   onFxChange,
@@ -75,7 +83,10 @@ export function InspectorPanel({
   onExportProject,
   onImportProject,
   onHardResetProject,
+  onSelectLyricSource,
   onRenameLyricSource,
+  onSetLyricSourceStartTime,
+  onJumpToLyricSource,
   onRemoveLyricSource,
   editorMode = 'edit'
 }: InspectorPanelProps) {
@@ -256,13 +267,18 @@ export function InspectorPanel({
         {effectiveTab === 'project' && (
           <ProjectInspector
             project={project}
+            currentTime={currentTime}
             onProjectNameChange={onProjectNameChange}
+            onLyricModeChange={onLyricModeChange}
             onProgressChange={onProgressChange}
             onImportLyrics={onImportLyrics}
             onExportProject={onExportProject}
             onImportProject={onImportProject}
             onHardResetProject={onHardResetProject}
+            onSelectLyricSource={onSelectLyricSource}
             onRenameLyricSource={onRenameLyricSource}
+            onSetLyricSourceStartTime={onSetLyricSourceStartTime}
+            onJumpToLyricSource={onJumpToLyricSource}
             onRemoveLyricSource={onRemoveLyricSource}
           />
         )}

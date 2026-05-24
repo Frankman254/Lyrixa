@@ -144,6 +144,34 @@
   flex-wrap: wrap;
 }
 
+.insp-mode-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  padding: 3px;
+  gap: 3px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-2);
+  background: var(--bg-2);
+}
+
+.insp-mode-toggle button {
+  min-width: 0;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: calc(var(--r-2) - 2px);
+  background: transparent;
+  color: var(--fg-3);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11.5px;
+}
+
+.insp-mode-toggle button.active {
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-weight: 650;
+}
+
 .insp-empty,
 .insp-muted,
 .insp-warning {
@@ -164,6 +192,51 @@
 .insp-source-list {
   display: grid;
   gap: 6px;
+}
+
+.insp-source-card {
+  display: grid;
+  gap: 8px;
+  padding: 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-2);
+  background: var(--bg-2);
+}
+
+.insp-source-card.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px oklch(from var(--accent) l c h / 0.22);
+}
+
+.insp-source-title-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.insp-source-count,
+.insp-source-time {
+  color: var(--fg-3);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.insp-source-checkpoint {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 8px;
+}
+
+.insp-source-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.insp-muted.compact {
+  padding: 8px 10px;
 }
 
 .insp-source-row {

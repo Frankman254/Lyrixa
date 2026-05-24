@@ -41,6 +41,7 @@ interface TimelineEditorProps {
   currentTime: number;
   duration: number;
   isPlaying: boolean;
+  focusRequest?: { time: number; nonce: number } | null;
   trackName: string;
   masterChannel?: AudioChannel | null;
   peaks?: AudioPeak[];
@@ -80,6 +81,7 @@ export function TimelineEditor({
   currentTime,
   duration,
   isPlaying,
+  focusRequest,
   trackName,
   masterChannel,
   peaks,
@@ -234,6 +236,20 @@ export function TimelineEditor({
       el.scrollLeft = Math.max(0, playheadPx - el.clientWidth / 2);
     }
   }, [currentTime, pxPerSecond, isPlaying, headerWidth]);
+
+  // Explicit jump/focus requests are used by lyric-source checkpoints so long
+  // mixes can jump to a section without manual horizontal scrolling.
+  useEffect(() => {
+    if (!focusRequest) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollLeft = scrollLeftForCenteredTime(
+      focusRequest.time,
+      pxPerSecond,
+      el.clientWidth,
+      headerWidth
+    );
+  }, [focusRequest, pxPerSecond, headerWidth]);
 
   const zoomIn = () => setPxPerSecond(p => clampZoom(p * 1.4));
   const zoomOut = () => setPxPerSecond(p => clampZoom(p / 1.4));
