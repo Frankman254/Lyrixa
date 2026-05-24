@@ -24,6 +24,7 @@ import {
   findNextUnpublishedLineIndex,
   orderedLayerClips
 } from '../../core/timeline/tapSync';
+import { duplicateClipSelection } from '../../core/timeline/duplicateClips';
 import { normalizeLyricsText } from '../../core/lyrics/normalize';
 import { useLyrixaProject } from './useLyrixaProject';
 import { useAccentTheme } from '../../shared/theme/useAccentTheme';
@@ -137,6 +138,33 @@ export function LyrixaEditorShell() {
     activeAudioChannel: masterChannel,
     onCurrentTimeCommit: setCurrentTime
   });
+
+  useEffect(() => {
+    if (!previewOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName;
+      const editable = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' ||
+        (target as HTMLElement | null)?.isContentEditable;
+      if (editable) return;
+
+      if (matchesShortcut(e, 'transport.playPause')) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        handlePlayToggle();
+        return;
+      }
+
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        setPreviewOpen(false);
+      }
+    };
+
+    window.addEventListener('keydown', onKey, { capture: true });
+    return () => window.removeEventListener('keydown', onKey, { capture: true });
+  }, [handlePlayToggle, matchesShortcut, previewOpen]);
 
   const openMasterPicker = () => masterFileInputRef.current?.click();
 
@@ -365,26 +393,14 @@ export function LyrixaEditorShell() {
    * duration). Selecting it lets the user fine-tune timing from the inspector.
    */
   const handleDuplicateClip = useCallback((clipId: string) => {
-    const original = project.clips.find(c => c.id === clipId);
-    if (!original) return;
-    const duration = Math.max(0.25, original.endTime - original.startTime);
-    const gap = 0.1;
-    const cap = Math.max(duration, effectiveDuration - duration);
-    const startTime = Math.max(0, Math.min(cap, original.endTime + gap));
-    const dupId = `dup-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
-    const dupSourceId = original.sourceId ? `${original.sourceId}-dup-${dupId}` : dupId;
-    const duplicate: LyricClip = {
-      ...original,
-      id: dupId,
-      sourceId: dupSourceId,
-      sourceIndex: undefined,
-      lyricSourceId: original.lyricSourceId,
-      startTime,
-      endTime: startTime + duration,
-      createdBy: 'manual'
-    };
-    setClips(previous => [...previous, duplicate]);
-    setSelectedClipId(dupId);
+    const { clips: nextClips, duplicatedIds } = duplicateClipSelection(
+      project.clips,
+      [clipId],
+      { trackDuration: effectiveDuration }
+    );
+    if (duplicatedIds.length === 0) return;
+    setClips(nextClips);
+    setSelectedClipId(duplicatedIds[0] ?? null);
   }, [project.clips, effectiveDuration, setClips]);
 
   const handleHardResetProject = useCallback(async () => {
@@ -539,7 +555,6 @@ export function LyrixaEditorShell() {
           <TimelineEditor
             embedded
             disableShortcuts={syncMode}
-            onDuplicateClip={handleDuplicateClip}
             clips={project.clips}
             layers={project.layers}
             currentTime={playbackTime}
@@ -667,6 +682,36 @@ export function LyrixaEditorShell() {
               fxConfig={project.fxConfig}
               progressIndicatorConfig={project.progressIndicatorConfig}
             />
+            <div className="ls-preview-controls" onClick={(e) => e.stopPropagation()}>
+              <button
+                className="ls-preview-control-btn"
+                type="button"
+                disabled={!masterChannel?.objectUrl}
+                onClick={() => handleSeek(Math.max(0, playbackTime - 5))}
+              >
+                -5s
+              </button>
+              <button
+                className="ls-preview-play"
+                type="button"
+                disabled={!masterChannel?.objectUrl}
+                onClick={handlePlayToggle}
+                aria-label={isPlaying ? 'Pause song' : 'Play song'}
+              >
+                {isPlaying ? 'Pause' : 'Play'}
+              </button>
+              <button
+                className="ls-preview-control-btn"
+                type="button"
+                disabled={!masterChannel?.objectUrl}
+                onClick={() => handleSeek(Math.min(effectiveDuration, playbackTime + 5))}
+              >
+                +5s
+              </button>
+              <span className="ls-preview-time mono">
+                {formatPreviewTime(playbackTime)} / {formatPreviewTime(effectiveDuration)}
+              </span>
+            </div>
             <button
               className="ls-btn ghost ls-preview-close"
               onClick={() => setPreviewOpen(false)}
@@ -741,6 +786,18 @@ function readStoredBoolean(key: string, fallback: boolean): boolean {
   if (raw === '1') return true;
   if (raw === '0') return false;
   return fallback;
+}
+
+function formatPreviewTime(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 0) return '0:00';
+  const total = Math.floor(seconds);
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const secs = total % 60;
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  }
+  return `${minutes}:${String(secs).padStart(2, '0')}`;
 }
 
 function findBestLyricSourceClips(

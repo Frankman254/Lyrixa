@@ -96,8 +96,8 @@ export const SHORTCUT_DEFINITIONS: ShortcutDefinition[] = [
   // ── Clip ──────────────────────────────────────────────────────
   {
     id: 'clip.duplicate',
-    label: 'Duplicate selected clip',
-    description: 'Places a copy of the selected clip just after it on the same layer.',
+    label: 'Duplicate selected clips',
+    description: 'Places a copy of the selected clip or clip group just after the selection.',
     group: 'Clip',
     default: { key: 'd' }
   },

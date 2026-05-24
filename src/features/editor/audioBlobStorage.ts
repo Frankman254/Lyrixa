@@ -13,8 +13,6 @@ import type { AudioChannelRole } from '../../core/types/audio';
 const DB_NAME = 'lyrixa';
 const DB_VERSION = 2;
 const STORE_AUDIO = 'audio';
-export const AUDIO_PERSIST_MAX_BLOB_BYTES = 50 * 1024 * 1024;
-export const AUDIO_PERSIST_MAX_DURATION_SECONDS = 20 * 60;
 
 export interface StoredAudio {
   blob: Blob;
@@ -28,6 +26,11 @@ export interface StoredAudio {
 }
 
 export function shouldPersistAudioBlob(blob: Blob, durationSeconds: number): boolean {
+  void durationSeconds;
+  // Audio bytes live in IndexedDB, not localStorage. IndexedDB can handle long
+  // mixes far better than localStorage, so Lyrixa should attempt persistence
+  // for any real audio file and let the browser quota system be the authority.
+  if (blob.size <= 0) return false;
   return shouldPersistAudioMetadata(blob.size, durationSeconds);
 }
 
@@ -35,8 +38,11 @@ export function shouldPersistAudioMetadata(
   sizeBytes: number | undefined,
   durationSeconds: number | undefined
 ): boolean {
-  if (typeof sizeBytes === 'number' && sizeBytes > AUDIO_PERSIST_MAX_BLOB_BYTES) return false;
-  if (typeof durationSeconds === 'number' && durationSeconds > AUDIO_PERSIST_MAX_DURATION_SECONDS) return false;
+  void sizeBytes;
+  void durationSeconds;
+  // Metadata is tiny and should always remain in the project JSON so reload can
+  // attempt IndexedDB restoration and show a precise reload prompt if quota was
+  // unavailable.
   return true;
 }
 
@@ -101,6 +107,7 @@ export async function putAudio(
     lastModified: meta?.lastModified,
     fileKey: meta?.fileKey
   };
+  await requestPersistentBrowserStorage();
   await withStore('readwrite', store => store.put(record, audioKey(projectId, role)));
 }
 
@@ -163,4 +170,13 @@ export async function deleteAllProjectAudio(projectId: string): Promise<void> {
 
 export function audioStorageAvailable(): boolean {
   return isAvailable();
+}
+
+async function requestPersistentBrowserStorage(): Promise<void> {
+  try {
+    if (typeof navigator === 'undefined' || !navigator.storage?.persist) return;
+    await navigator.storage.persist();
+  } catch {
+    /* best-effort only; IndexedDB still works without persistent quota */
+  }
 }

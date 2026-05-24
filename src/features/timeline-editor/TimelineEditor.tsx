@@ -15,6 +15,7 @@ import {
   getClipsAfterTime,
   getSelectionBounds
 } from '../../core/timeline/clipSelection';
+import { duplicateClipSelection } from '../../core/timeline/duplicateClips';
 import { TimelinePlayhead } from './TimelinePlayhead';
 import { TimelineAudioLanes } from './TimelineAudioLanes';
 import { TimelineLayerList } from './TimelineLayerList';
@@ -46,8 +47,6 @@ interface TimelineEditorProps {
   embedded?: boolean;
   /** When true, the timeline's global keyboard shortcuts are suspended (e.g. during tap-sync). */
   disableShortcuts?: boolean;
-  /** Optional clip duplicator (D key + clip inspector). */
-  onDuplicateClip?: (clipId: string) => void;
   /** When false, the audio lane stays usable for seeking but skips waveform rendering/extraction. */
   waveformEnabled?: boolean;
   /** True when the master track is too long/large for full waveform analysis. */
@@ -88,7 +87,6 @@ export function TimelineEditor({
   disableShortcuts = false,
   waveformEnabled = true,
   isLongAudio = false,
-  onDuplicateClip,
   onExtractBandPeaks,
   onClipsChange,
   onLayersChange,
@@ -118,6 +116,7 @@ export function TimelineEditor({
   const layersRef = useRef<LyricLayer[]>(layers);
   const laneRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const selectedIdsRef = useRef<Set<string>>(selectedClipIds);
+  const lastSelectedClipIdRef = useRef<string | null>(null);
   const snapRef = useRef(snapSeconds);
   // Stable ref so the keyboard handler can call onPlayToggle without stale closure.
   const onPlayToggleRef = useRef(onPlayToggle);
@@ -319,7 +318,25 @@ export function TimelineEditor({
 
   const clearSelection = useCallback(() => {
     setSelectedClipIds(new Set());
+    lastSelectedClipIdRef.current = null;
   }, []);
+
+  const duplicateSelected = useCallback(() => {
+    const selected = selectedIdsRef.current;
+    if (selected.size === 0) return;
+    const { clips: nextClips, duplicatedIds } = duplicateClipSelection(
+      clipsRef.current,
+      selected,
+      { trackDuration: effectiveDuration }
+    );
+    if (duplicatedIds.length === 0) return;
+    onClipsChange(nextClips);
+    const nextSelection = new Set(duplicatedIds);
+    setSelectedClipIds(nextSelection);
+    lastSelectedClipIdRef.current = duplicatedIds[duplicatedIds.length - 1] ?? null;
+    const firstDuplicate = nextClips.find(clip => clip.id === duplicatedIds[0]);
+    if (firstDuplicate) setSelectedLayerId(firstDuplicate.layerId);
+  }, [effectiveDuration, onClipsChange]);
 
   const nudgeSelected = useCallback(
     (delta: number) => {
@@ -367,12 +384,40 @@ export function TimelineEditor({
       if (!clip) return;
       setSelectedLayerId(clip.layerId);
 
-      if (modifiers.toggle && mode === 'move') {
-        // Toggle selection only — no drag.
+      if ((modifiers.additive || modifiers.range) && mode === 'move') {
         setSelectedClipIds(prev => {
+          if (modifiers.range) {
+            const anchorId = lastSelectedClipIdRef.current
+              ?? Array.from(prev).find(id => {
+                const selected = clipsRef.current.find(c => c.id === id);
+                return selected?.layerId === clip.layerId;
+              })
+              ?? clipId;
+            const anchor = clipsRef.current.find(c => c.id === anchorId);
+            const layerClips = clipsRef.current
+              .filter(c => c.layerId === clip.layerId)
+              .sort((a, b) => a.startTime - b.startTime);
+            const anchorIndex = anchor ? layerClips.findIndex(c => c.id === anchor.id) : -1;
+            const clipIndex = layerClips.findIndex(c => c.id === clipId);
+            if (anchorIndex < 0 || clipIndex < 0) {
+              lastSelectedClipIdRef.current = clipId;
+              return modifiers.additive ? new Set([...prev, clipId]) : new Set([clipId]);
+            }
+            const [from, to] = anchorIndex <= clipIndex
+              ? [anchorIndex, clipIndex]
+              : [clipIndex, anchorIndex];
+            const rangeIds = layerClips.slice(from, to + 1).map(c => c.id);
+            lastSelectedClipIdRef.current = clipId;
+            return modifiers.additive ? new Set([...prev, ...rangeIds]) : new Set(rangeIds);
+          }
+
           const next = new Set(prev);
-          if (next.has(clipId)) next.delete(clipId);
-          else next.add(clipId);
+          if (next.has(clipId)) {
+            next.delete(clipId);
+          } else {
+            next.add(clipId);
+            lastSelectedClipIdRef.current = clipId;
+          }
           return next;
         });
         return;
@@ -395,6 +440,7 @@ export function TimelineEditor({
       ) {
         setSelectedClipIds(effective);
       }
+      lastSelectedClipIdRef.current = clipId;
 
       const initial = clipsRef.current
         .filter(c => effective.has(c.id))
@@ -564,9 +610,6 @@ export function TimelineEditor({
   // from the Shortcuts panel. We still apply context rules locally (selection
   // required for clip nudge, no-typing-in-fields, etc.).
   const { matches } = useShortcuts();
-  const onDuplicateClipRef = useRef(onDuplicateClip);
-  useEffect(() => { onDuplicateClipRef.current = onDuplicateClip; }, [onDuplicateClip]);
-
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (disableShortcutsRef.current) return;
@@ -601,11 +644,9 @@ export function TimelineEditor({
       }
 
       if (matches(e, 'clip.duplicate')) {
-        if (selectedIdsRef.current.size !== 1) return;
-        const onlyId = selectedIdsRef.current.values().next().value as string | undefined;
-        if (!onlyId) return;
+        if (selectedIdsRef.current.size === 0) return;
         e.preventDefault();
-        onDuplicateClipRef.current?.(onlyId);
+        duplicateSelected();
         return;
       }
 
@@ -626,7 +667,7 @@ export function TimelineEditor({
 
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [matches, selectAll, clearSelection, nudgeSelected]);
+  }, [matches, selectAll, clearSelection, duplicateSelected, nudgeSelected]);
 
   const {
     displayPeaks,
@@ -683,6 +724,7 @@ export function TimelineEditor({
         onSelectAll={selectAll}
         onSelectAfterPlayhead={selectAfterPlayhead}
         onClearSelection={clearSelection}
+        onDuplicateSelected={duplicateSelected}
         onNudgeSelected={nudgeSelected}
         onOffsetInputChange={setOffsetInput}
         onApplyOffsetInput={applyOffsetInput}

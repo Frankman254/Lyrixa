@@ -28,7 +28,6 @@ import {
   deleteAudio,
   deleteAllProjectAudio,
   shouldPersistAudioBlob,
-  shouldPersistAudioMetadata,
   type StoredAudio
 } from './audioBlobStorage';
 import {
@@ -171,10 +170,6 @@ export function useLyrixaProject({
 
     const restore = async (role: AudioChannelRole, channel: AudioChannel | null | undefined) => {
       if (!channel) return;
-      if (!shouldPersistAudioMetadata(channel.sizeBytes, channel.duration)) {
-        if (role === 'master') setAudioNeedsReload(true);
-        return;
-      }
       const stored = await getAudio(initial.id, role).catch(() => null);
       if (cancelled) return;
       if (!stored) {
@@ -333,10 +328,6 @@ export function useLyrixaProject({
       };
     });
     if (role === 'master') setAudioNeedsReload(false);
-
-    if (!shouldPersistAudioMetadata(sizeBytes, undefined)) {
-      void deleteAudio(projectIdRef.current, role);
-    }
 
     void readAudioDuration(file)
       .catch(() => 0)

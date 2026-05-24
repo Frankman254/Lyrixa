@@ -7,8 +7,10 @@ import { timeToPx, formatTimecode } from '../../core/timeline/clips';
 type DragMode = 'move' | 'resize-start' | 'resize-end';
 
 export interface ClipPointerModifiers {
-  /** Shift / Cmd / Ctrl was held — caller should toggle selection instead of replacing it. */
-  toggle: boolean;
+  /** Cmd / Ctrl was held — caller should toggle this clip in the selection. */
+  additive: boolean;
+  /** Shift was held — caller should select a range inside this clip's layer. */
+  range: boolean;
 }
 
 interface LyricClipProps {
@@ -19,7 +21,7 @@ interface LyricClipProps {
   locked: boolean;
   /**
    * Single entry point for both selection and drag-start. The parent decides
-   * whether to toggle selection (modifiers.toggle) or begin a drag.
+   * whether to extend/range-select or begin a drag.
    */
   onPointerDown: (
     clipId: string,
@@ -48,7 +50,8 @@ export function LyricClip({
       if (locked || clip.locked) return;
       e.stopPropagation();
       const modifiers: ClipPointerModifiers = {
-        toggle: e.shiftKey || e.metaKey || e.ctrlKey
+        additive: e.metaKey || e.ctrlKey,
+        range: e.shiftKey
       };
       onPointerDown(clip.id, mode, e.pointerId, e.clientX, modifiers);
     },

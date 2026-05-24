@@ -15,6 +15,7 @@ interface TimelineSelectionToolbarProps {
   onSelectAll: () => void;
   onSelectAfterPlayhead: () => void;
   onClearSelection: () => void;
+  onDuplicateSelected: () => void;
   onNudgeSelected: (delta: number) => void;
   onOffsetInputChange: (value: string) => void;
   onApplyOffsetInput: () => void;
@@ -31,6 +32,7 @@ export function TimelineSelectionToolbar({
   onSelectAll,
   onSelectAfterPlayhead,
   onClearSelection,
+  onDuplicateSelected,
   onNudgeSelected,
   onOffsetInputChange,
   onApplyOffsetInput,
@@ -54,6 +56,14 @@ export function TimelineSelectionToolbar({
           disabled={!hasSelection}
         >
           Clear
+        </button>
+        <button
+          className="tl-btn small"
+          onClick={onDuplicateSelected}
+          disabled={!hasSelection}
+          title="Duplicate selected clips"
+        >
+          ⎘ Duplicate
         </button>
       </div>
 

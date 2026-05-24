@@ -78,6 +78,8 @@
 
 .transport {
   grid-area: transport;
+  position: relative;
+  z-index: 300;
   display: flex;
   align-items: center;
   flex-wrap: nowrap;
@@ -89,7 +91,7 @@
   /* Allow overflow when the toolbar exceeds the window width — better than
      clipping buttons. Scrollbar is visually hidden but functional. */
   overflow-x: auto;
-  overflow-y: hidden;
+  overflow-y: visible;
   scrollbar-width: none;
 }
 .transport::-webkit-scrollbar { display: none; }
@@ -588,6 +590,60 @@ select option { background: var(--bg-2); color: var(--fg-0); }
   right: 14px;
   z-index: 5;
 }
+.ls-preview-controls {
+  position: absolute;
+  left: 50%;
+  bottom: 16px;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  transform: translateX(-50%);
+  background: oklch(0.12 0.025 260 / 0.84);
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  box-shadow: var(--shadow-panel);
+  backdrop-filter: blur(14px);
+}
+.ls-preview-control-btn,
+.ls-preview-play {
+  height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.ls-preview-control-btn {
+  min-width: 46px;
+  padding: 0 12px;
+  color: var(--fg-1);
+  background: var(--bg-3);
+}
+.ls-preview-play {
+  min-width: 72px;
+  padding: 0 16px;
+  color: var(--accent-fg);
+  background: var(--accent);
+  border-color: color-mix(in oklch, var(--accent) 65%, white);
+}
+.ls-preview-control-btn:hover:not(:disabled),
+.ls-preview-play:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+.ls-preview-control-btn:disabled,
+.ls-preview-play:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+.ls-preview-time {
+  padding: 0 6px;
+  color: var(--fg-2);
+  font-size: 12px;
+  white-space: nowrap;
+}
 
 .ls-transparent-preview {
   position: fixed;
@@ -714,9 +770,9 @@ select option { background: var(--bg-2); color: var(--fg-0); }
 .tr-more[open] > summary { background: var(--bg-3, rgba(255,255,255,0.08)); }
 
 .tr-more-menu {
-  position: absolute;
-  top: calc(100% + 4px);
-  right: 0;
+  position: fixed;
+  top: 52px;
+  right: 12px;
   min-width: 240px;
   display: flex;
   flex-direction: column;
@@ -726,7 +782,7 @@ select option { background: var(--bg-2); color: var(--fg-0); }
   border: 1px solid var(--border);
   border-radius: 10px;
   box-shadow: var(--shadow-panel, 0 16px 40px rgba(0,0,0,0.45));
-  z-index: 80;
+  z-index: 1000;
 }
 
 .tr-more-item {
