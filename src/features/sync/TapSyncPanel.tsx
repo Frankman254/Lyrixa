@@ -234,7 +234,7 @@ export function TapSyncPanel({
 
         <div className="tapsync-list">
           {lines.length === 0 && (
-            <div className="tapsync-empty">No lyric clips on this layer. Import lyrics, then come back to sync.</div>
+            <div className="tapsync-empty">No lyric source lines found. Import lyrics, then come back to sync.</div>
           )}
           {lines.map((line, idx) => {
             const state =

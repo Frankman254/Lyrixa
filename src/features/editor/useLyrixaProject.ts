@@ -125,9 +125,14 @@ export function useLyrixaProject({
   const blobsRef = useRef<{ master: Blob | null }>({ master: null });
 
   const projectIdRef = useRef(project.id);
+  const projectRef = useRef(project);
   useEffect(() => {
     projectIdRef.current = project.id;
   }, [project.id]);
+
+  useEffect(() => {
+    projectRef.current = project;
+  }, [project]);
 
   // Track latest objectUrls so we can revoke them on unmount.
   const objectUrlsRef = useRef<{ master: string | null }>({ master: null });
@@ -251,6 +256,19 @@ export function useLyrixaProject({
     const t = window.setTimeout(() => setSaveStatus('idle'), 1500);
     return () => window.clearTimeout(t);
   }, [saveStatus]);
+
+  useEffect(() => {
+    const flushSave = () => saveProject(projectRef.current);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') flushSave();
+    };
+    window.addEventListener('pagehide', flushSave);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      window.removeEventListener('pagehide', flushSave);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
 
   const setProjectName = useCallback((name: string) => {
     setProject(p => ({ ...p, name }));

@@ -246,14 +246,19 @@ export function LyrixaEditorShell() {
     () => findBestLyricSourceClips(project.clips, project.layers, syncLayerId),
     [project.clips, project.layers, syncLayerId]
   );
+  const allProjectLyricLines = useMemo(
+    () => getOrderedProjectLyricLines(project, null),
+    [project]
+  );
   const orderedProjectLyricLines = useMemo(
     () => getOrderedProjectLyricLines(project, syncSourceId),
     [project, syncSourceId]
   );
+  const hasImportedLyrics = allProjectLyricLines.length > 0;
   const canSync =
     !!masterChannel?.objectUrl &&
     !!syncLayerId &&
-    (orderedProjectLyricLines.length > 0 || fallbackLyricSourceClips.length > 0);
+    (hasImportedLyrics || orderedProjectLyricLines.length > 0 || fallbackLyricSourceClips.length > 0);
 
   const tapSync = useTapSync({
     enabled: syncMode,
@@ -342,7 +347,11 @@ export function LyrixaEditorShell() {
     syncEnteredRef.current = true;
     // Default the sync source to the project's active source so the user
     // doesn't have to pick when there's exactly one set of lyrics.
-    const initialSourceId = syncSourceId ?? activeLyricSource?.id ?? null;
+    const syncSourceExists = syncSourceId == null ||
+      project.lyricSources.some(source => source.id === syncSourceId);
+    const initialSourceId = syncSourceExists
+      ? syncSourceId ?? activeLyricSource?.id ?? null
+      : activeLyricSource?.id ?? null;
     setSyncSourceId(initialSourceId);
     const initialLayerId = syncTargetLayerId ?? activeLayerId;
     if (initialLayerId) startSyncForLayer(initialLayerId, initialSourceId);
@@ -350,7 +359,7 @@ export function LyrixaEditorShell() {
     setMiniPreviewVisible(true);
     handleSeek(0);
     if (mode !== 'sync') setMode('sync');
-  }, [activeLayerId, activeLyricSource?.id, handleSeek, mode, setIsPlaying, setMode, startSyncForLayer, syncSourceId, syncTargetLayerId]);
+  }, [activeLayerId, activeLyricSource?.id, handleSeek, mode, project.lyricSources, setIsPlaying, setMode, startSyncForLayer, syncSourceId, syncTargetLayerId]);
 
   const handleToggleSync = useCallback(() => {
     if (syncMode) exitSyncMode();
@@ -601,7 +610,7 @@ export function LyrixaEditorShell() {
             />
           )}
 
-          {project.clips.length === 0 && masterChannel && (
+          {!hasImportedLyrics && project.clips.length === 0 && masterChannel && (
             <EmptyLaneHint
               icon="📝"
               title="No lyrics yet"
