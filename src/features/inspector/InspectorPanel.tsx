@@ -104,12 +104,17 @@ export function InspectorPanel({
     }
   }, [editorMode]);
 
-  // If the active tab is hidden by the current mode, fall back to the first
-  // visible one — keeps the panel from rendering a blank body.
+  // Derive the rendered tab in-render: when the stored tab isn't allowed in the
+  // current mode, fall back to the first visible one for THIS paint so the body
+  // never flashes empty. The effect below keeps state in sync for subsequent
+  // clicks and `setTab` calls.
+  const effectiveTab: InspectorTab | null = visibleTabs.includes(tab)
+    ? tab
+    : (visibleTabs[0] ?? null);
+
   useEffect(() => {
-    if (visibleTabs.length === 0) return;
-    if (!visibleTabs.includes(tab)) setTab(visibleTabs[0]!);
-  }, [visibleTabs, tab]);
+    if (effectiveTab && effectiveTab !== tab) setTab(effectiveTab);
+  }, [effectiveTab, tab]);
 
   const scope = selectedClip?.styleOverride
     ? 'clip'
@@ -220,6 +225,12 @@ export function InspectorPanel({
     ...(selectedClip ? ['clip' as PresetScope] : [])
   ];
 
+  // Preview mode hides the inspector entirely so the user gets a clean stage.
+  // The shell also wraps this component with a conditional, but a defensive
+  // early-return guarantees the panel can never leak into preview mode even if
+  // a future caller forgets the outer guard.
+  if (editorMode === 'preview') return null;
+
   return (
     <aside className="inspector-panel">
       <header className="insp-header">
@@ -228,7 +239,7 @@ export function InspectorPanel({
       </header>
       <nav className="insp-tabs" aria-label="Inspector tabs">
         {visibleTabs.map(value => (
-          <button key={value} className={tab === value ? 'active' : ''} onClick={() => setTab(value)}>
+          <button key={value} className={effectiveTab === value ? 'active' : ''} onClick={() => setTab(value)}>
             {value}
           </button>
         ))}
@@ -242,7 +253,7 @@ export function InspectorPanel({
           />
         </Group>
 
-        {tab === 'project' && (
+        {effectiveTab === 'project' && (
           <ProjectInspector
             project={project}
             onProjectNameChange={onProjectNameChange}
@@ -256,14 +267,14 @@ export function InspectorPanel({
           />
         )}
 
-        {tab === 'layer' && (
+        {effectiveTab ==='layer' && (
           <LayerInspector
             selectedLayer={selectedLayer}
             onPatchLayer={patchLayer}
           />
         )}
 
-        {tab === 'clip' && (
+        {effectiveTab ==='clip' && (
           <ClipInspector
             selectedClip={selectedClip}
             layers={project.layers}
@@ -272,14 +283,14 @@ export function InspectorPanel({
           />
         )}
 
-        {tab === 'style' && (
+        {effectiveTab ==='style' && (
           <StyleInspector
             style={styleTarget}
             onPatchStyle={patchScopedStyle}
           />
         )}
 
-        {tab === 'texture' && (
+        {effectiveTab ==='texture' && (
           <TextureInspector
             projectId={project.id}
             style={styleTarget}
@@ -287,14 +298,14 @@ export function InspectorPanel({
           />
         )}
 
-        {tab === 'fx' && (
+        {effectiveTab ==='fx' && (
           <FxInspector
             fx={fxTarget}
             onPatchFx={patchScopedFx}
           />
         )}
 
-        {tab === 'animation' && (
+        {effectiveTab ==='animation' && (
           <AnimationInspector
             animation={animationTarget}
             onPatchAnimation={patchScopedAnimation}
