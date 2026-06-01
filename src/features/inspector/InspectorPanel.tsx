@@ -161,6 +161,19 @@ export function InspectorPanel({
     onLayersChange(project.layers.map(layer => layer.id === selectedLayer.id ? { ...layer, ...patch } : layer));
   };
 
+  const deleteClip = (clipId: string) => {
+    const clip = project.clips.find(item => item.id === clipId);
+    const layer = clip ? project.layers.find(item => item.id === clip.layerId) : null;
+    if (!clip || clip.locked || layer?.locked) return;
+    onClipsChange(project.clips.filter(item => item.id !== clipId));
+  };
+
+  const clearLayerClips = (layerId: string) => {
+    const layer = project.layers.find(item => item.id === layerId);
+    if (!layer || layer.locked) return;
+    onClipsChange(project.clips.filter(clip => clip.layerId !== layerId || clip.locked));
+  };
+
   const patchScopedStyle = (patch: Partial<LyricVisualStyle>) => {
     if (scope === 'clip' && selectedClip) {
       patchClip({ styleOverride: { ...(selectedClip.styleOverride ?? {}), ...patch } });
@@ -287,6 +300,7 @@ export function InspectorPanel({
           <LayerInspector
             selectedLayer={selectedLayer}
             onPatchLayer={patchLayer}
+            onClearLayerClips={clearLayerClips}
           />
         )}
 
@@ -296,6 +310,7 @@ export function InspectorPanel({
             layers={project.layers}
             onPatchClip={patchClip}
             onDuplicateClip={onDuplicateClip}
+            onDeleteClip={deleteClip}
           />
         )}
 

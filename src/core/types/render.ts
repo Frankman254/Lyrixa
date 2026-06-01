@@ -125,7 +125,7 @@ export const DEFAULT_LYRIC_STYLE: LyricVisualStyle = {
   glowColor: 'rgba(255, 255, 255, 0.5)',
   glowIntensity: 0.7,
   shadowIntensity: 0.5,
-  blurAmount: 2,
+  blurAmount: 0,
   fontSize: '2.5rem',
   fontWeight: '800',
   fontFamily: 'inherit',

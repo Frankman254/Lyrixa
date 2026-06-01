@@ -131,6 +131,13 @@ export function TimelineEditor({
   useEffect(() => { layersRef.current = layers; }, [layers]);
   useEffect(() => { selectedIdsRef.current = selectedClipIds; }, [selectedClipIds]);
   useEffect(() => { snapRef.current = snapSeconds; }, [snapSeconds]);
+  useEffect(() => {
+    const clipIds = new Set(clips.map(clip => clip.id));
+    setSelectedClipIds(previous => {
+      const next = new Set(Array.from(previous).filter(id => clipIds.has(id)));
+      return next.size === previous.size ? previous : next;
+    });
+  }, [clips]);
 
   const setLaneRef = useCallback(
     (layerId: string) => (el: HTMLDivElement | null) => {
@@ -353,6 +360,18 @@ export function TimelineEditor({
     const firstDuplicate = nextClips.find(clip => clip.id === duplicatedIds[0]);
     if (firstDuplicate) setSelectedLayerId(firstDuplicate.layerId);
   }, [effectiveDuration, onClipsChange]);
+
+  const deleteSelected = useCallback(() => {
+    const selected = selectedIdsRef.current;
+    if (selected.size === 0) return;
+    const lockedLayers = new Set(layersRef.current.filter(layer => layer.locked).map(layer => layer.id));
+    const nextClips = clipsRef.current.filter(clip =>
+      !selected.has(clip.id) || clip.locked || lockedLayers.has(clip.layerId)
+    );
+    if (nextClips.length === clipsRef.current.length) return;
+    onClipsChange(nextClips);
+    clearSelection();
+  }, [clearSelection, onClipsChange]);
 
   const nudgeSelected = useCallback(
     (delta: number) => {
@@ -666,6 +685,13 @@ export function TimelineEditor({
         return;
       }
 
+      if (matches(e, 'clip.delete') || e.key === 'Delete') {
+        if (selectedIdsRef.current.size === 0) return;
+        e.preventDefault();
+        deleteSelected();
+        return;
+      }
+
       if (selectedIdsRef.current.size === 0) return;
 
       const isEarlier = matches(e, 'timeline.nudgeEarlier');
@@ -683,7 +709,7 @@ export function TimelineEditor({
 
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [matches, selectAll, clearSelection, duplicateSelected, nudgeSelected]);
+  }, [matches, selectAll, clearSelection, deleteSelected, duplicateSelected, nudgeSelected]);
 
   const {
     displayPeaks,
@@ -741,6 +767,7 @@ export function TimelineEditor({
         onSelectAfterPlayhead={selectAfterPlayhead}
         onClearSelection={clearSelection}
         onDuplicateSelected={duplicateSelected}
+        onDeleteSelected={deleteSelected}
         onNudgeSelected={nudgeSelected}
         onOffsetInputChange={setOffsetInput}
         onApplyOffsetInput={applyOffsetInput}

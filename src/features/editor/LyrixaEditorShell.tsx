@@ -96,7 +96,9 @@ export function LyrixaEditorShell() {
   const [floatingPreviewWidth, setFloatingPreviewWidth] = useState(() =>
     readStoredNumber('lyrixa_floating_preview_width', 420)
   );
-  const [miniPreviewVisible, setMiniPreviewVisible] = useState(true);
+  const [miniPreviewVisible, setMiniPreviewVisibleState] = useState(() =>
+    readStoredBoolean('lyrixa_floating_preview_visible', false)
+  );
   const [nameEditing, setNameEditing] = useState(false);
   const [draftName, setDraftName] = useState('');
   const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
@@ -108,6 +110,15 @@ export function LyrixaEditorShell() {
 
   const { accent, setAccent } = useAccentTheme();
   const { matches: matchesShortcut } = useShortcuts();
+
+  const setMiniPreviewVisible = useCallback((visible: boolean) => {
+    setMiniPreviewVisibleState(visible);
+    try {
+      window.localStorage.setItem('lyrixa_floating_preview_visible', visible ? '1' : '0');
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   // Global shortcut: Shift+? opens (and toggles) the shortcuts reference panel.
   useEffect(() => {
@@ -230,7 +241,6 @@ export function LyrixaEditorShell() {
     onProjectImported: imported => {
       setIsPlaying(false);
       setPlaybackTime(imported.currentTime ?? 0);
-      setMiniPreviewVisible(true);
     }
   });
 
@@ -370,7 +380,6 @@ export function LyrixaEditorShell() {
     const initialLayerId = syncTargetLayerId ?? activeLayerId;
     if (initialLayerId) startSyncForLayer(initialLayerId, initialSourceId);
     setIsPlaying(false);
-    setMiniPreviewVisible(true);
     const startTime = getLyricSourceStartTime(project, initialSourceId);
     handleSeek(startTime);
     focusTimelineAt(startTime);
@@ -454,13 +463,13 @@ export function LyrixaEditorShell() {
     setSyncTargetLayerId(null);
     setPreviewOpen(false);
     setTransparentPreviewOpen(false);
-    setMiniPreviewVisible(true);
+    setMiniPreviewVisible(false);
     setWaveformEnabled(false);
     setSelectedClipId(null);
     setSelectedLayerId(null);
     await hardResetProject();
     window.alert('Project reset complete');
-  }, [hardResetProject, setIsPlaying, setPlaybackTime, setSyncMode]);
+  }, [hardResetProject, setIsPlaying, setMiniPreviewVisible, setPlaybackTime, setSyncMode]);
 
   const handleFloatingPreviewSize = (width: number) => {
     const next = Math.max(320, Math.min(760, width));
@@ -483,7 +492,7 @@ export function LyrixaEditorShell() {
       return;
     }
     setMiniPreviewVisible(true);
-  }, [miniPreviewVisible, previewOpen]);
+  }, [miniPreviewVisible, previewOpen, setMiniPreviewVisible]);
 
   const shellClass = [
     'lyrixa-shell',
@@ -620,6 +629,7 @@ export function LyrixaEditorShell() {
               clips={project.clips}
               layers={project.layers}
               currentTime={playbackTime}
+              selectedLayerId={selectedLayerId}
               styleConfig={project.styleConfig}
               animationConfig={project.animationConfig}
               fxConfig={project.fxConfig}

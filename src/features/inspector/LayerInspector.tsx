@@ -6,11 +6,13 @@ import { LayerAudioReactiveEditor } from './LayerAudioReactiveEditor';
 interface LayerInspectorProps {
   selectedLayer: LyricLayer | null;
   onPatchLayer: (patch: Partial<LyricLayer>) => void;
+  onClearLayerClips?: (layerId: string) => void;
 }
 
 export function LayerInspector({
   selectedLayer,
-  onPatchLayer
+  onPatchLayer,
+  onClearLayerClips
 }: LayerInspectorProps) {
   if (!selectedLayer) {
     return <EmptyText text="Select a layer to edit layer defaults." />;
@@ -69,6 +71,21 @@ export function LayerInspector({
           onChange={(next) => onPatchLayer({ audioReactive: next })}
         />
       </Group>
+
+      {onClearLayerClips && (
+        <Group title="Danger zone">
+          <button
+            type="button"
+            className="ls-btn small danger"
+            onClick={() => {
+              const confirmed = window.confirm(`Delete every clip from "${selectedLayer.name}"?`);
+              if (confirmed) onClearLayerClips(selectedLayer.id);
+            }}
+          >
+            Clear layer clips
+          </button>
+        </Group>
+      )}
     </section>
   );
 }

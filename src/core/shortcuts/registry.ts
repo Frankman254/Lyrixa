@@ -101,6 +101,13 @@ export const SHORTCUT_DEFINITIONS: ShortcutDefinition[] = [
     group: 'Clip',
     default: { key: 'd' }
   },
+  {
+    id: 'clip.delete',
+    label: 'Delete selected clips',
+    description: 'Deletes the selected clip or clip group from the timeline.',
+    group: 'Clip',
+    default: { key: 'Backspace' }
+  },
 
   // ── General ───────────────────────────────────────────────────
   {

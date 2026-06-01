@@ -23,7 +23,7 @@ import {
 } from '../../core/render/resolveVisualStyle';
 
 const STORAGE_KEY = 'lyrixa:project:v1';
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 const PERSISTED_WAVEFORM_PEAK_MAX_COUNT = 15_000;
 
 export interface HydratedProject {
@@ -135,10 +135,18 @@ export function loadProject(): HydratedProject {
       return { project: createEmptyProject(), audioNeedsReload: false };
     }
 
-    if (envelope.version === SCHEMA_VERSION || envelope.version === 2) {
+    if (envelope.version === SCHEMA_VERSION) {
       const v2 = envelope as PersistedEnvelope;
       return {
         project: rehydrateV2(v2.project),
+        audioNeedsReload: false
+      };
+    }
+
+    if (envelope.version === 2 || envelope.version === 3) {
+      const legacy = envelope as PersistedEnvelope;
+      return {
+        project: rehydrateV2(migrateLegacyDefaultBlur(legacy.project)),
         audioNeedsReload: false
       };
     }
@@ -170,6 +178,23 @@ function rehydrateV2(persisted: PersistedProject): LyrixaProject {
       master
     }
   });
+}
+
+function migrateLegacyDefaultBlur(project: PersistedProject): PersistedProject {
+  const style = project.styleConfig;
+  const looksLikeLegacyBaseStyle =
+    style?.blurAmount === 2 &&
+    style.fontSize === '2.5rem' &&
+    String(style.fontWeight) === '800' &&
+    style.textColor === '#ffffff' &&
+    style.glowIntensity === 0.7 &&
+    style.shadowIntensity === 0.5 &&
+    style.strokeWidth === 0;
+  if (!looksLikeLegacyBaseStyle) return project;
+  return {
+    ...project,
+    styleConfig: { ...style, blurAmount: 0 }
+  };
 }
 
 function migrateV1(legacy: LegacyV1Project): LyrixaProject {
