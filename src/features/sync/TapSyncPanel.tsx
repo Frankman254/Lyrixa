@@ -250,11 +250,12 @@ export function TapSyncPanel({
             <div className="tapsync-empty">No lyric source lines found. Import lyrics, then come back to sync.</div>
           )}
           {lines.map((line, idx) => {
+            const isPublished = !!layerId && isTapSyncLinePublished(clips, layerId, line);
             const state =
-              idx === cursorIndex
-                ? 'active'
-                : layerId && isTapSyncLinePublished(clips, layerId, line)
-                  ? 'done'
+              isPublished
+                ? 'done'
+                : idx === cursorIndex
+                  ? 'active'
                   : 'pending';
             const published = publishedBySourceId.get(line.sourceId);
             const duration = published ? Math.max(0, published.endTime - published.startTime) : 0;

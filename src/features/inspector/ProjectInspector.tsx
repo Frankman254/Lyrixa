@@ -23,6 +23,7 @@ interface ProjectInspectorProps {
   onSetLyricSourceStartTime: (id: string, startTime: number) => void;
   onJumpToLyricSource: (id: string) => void;
   onRemoveLyricSource: (id: string) => void;
+  onEditLyricSource: (id: string) => void;
   onAttachLyricSource: (id: string) => void;
   onSetLyricSourceAudioAssignment: (id: string, fileKey: string, assigned: boolean) => void;
 }
@@ -46,6 +47,7 @@ export function ProjectInspector({
   onSetLyricSourceStartTime,
   onJumpToLyricSource,
   onRemoveLyricSource,
+  onEditLyricSource,
   onAttachLyricSource,
   onSetLyricSourceAudioAssignment
 }: ProjectInspectorProps) {
@@ -219,6 +221,14 @@ export function ProjectInspector({
                       title="Make this the active lyric source"
                     >
                       {isActive ? 'Active' : 'Use'}
+                    </button>
+                    <button
+                      type="button"
+                      className="ls-btn small"
+                      onClick={() => onEditLyricSource(source.id)}
+                      title="Edit the global lyric source without changing placed timeline clips"
+                    >
+                      Edit
                     </button>
                     <button
                       type="button"

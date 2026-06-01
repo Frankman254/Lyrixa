@@ -59,6 +59,7 @@ interface InspectorPanelProps {
   onSetLyricSourceStartTime: (id: string, startTime: number) => void;
   onJumpToLyricSource: (id: string) => void;
   onRemoveLyricSource: (id: string) => void;
+  onEditLyricSource: (id: string) => void;
   onAttachLyricSource: (id: string) => void;
   onSetLyricSourceAudioAssignment: (id: string, fileKey: string, assigned: boolean) => void;
   /** Which editor mode the workspace is in. Filters which tabs are visible. */
@@ -99,6 +100,7 @@ export function InspectorPanel({
   onSetLyricSourceStartTime,
   onJumpToLyricSource,
   onRemoveLyricSource,
+  onEditLyricSource,
   onAttachLyricSource,
   onSetLyricSourceAudioAssignment,
   editorMode = 'edit'
@@ -310,6 +312,7 @@ export function InspectorPanel({
             onSetLyricSourceStartTime={onSetLyricSourceStartTime}
             onJumpToLyricSource={onJumpToLyricSource}
             onRemoveLyricSource={onRemoveLyricSource}
+            onEditLyricSource={onEditLyricSource}
             onAttachLyricSource={onAttachLyricSource}
             onSetLyricSourceAudioAssignment={onSetLyricSourceAudioAssignment}
           />

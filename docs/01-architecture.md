@@ -109,6 +109,28 @@ Project lyrics and device lyrics are separate:
 
 Lyrics are small enough for localStorage; audio is not.
 
+Editing a linked lyric source is intentionally non-destructive:
+
+- The source text is updated in the project and device library.
+- Existing timeline clips are not rewritten or deleted.
+- Paragraphs whose normalized text and index did not change keep the same
+  `sourceId`, so Sync recognizes their existing timings.
+- New, moved, or edited paragraphs receive new `sourceId` values and must be
+  synchronized again. Obsolete timeline clips stay visible until the user
+  deletes or replaces them deliberately.
+
+## Tap-sync resume lifecycle
+
+Tap-sync progress is stored in `project.clips`, never in the floating window.
+
+- `TapSyncLine.sourceId` identifies a normalized source paragraph.
+- A synchronized `LyricClip` stores the same `sourceId`, its `lyricSourceId`,
+  and the selected `layerId`.
+- Reopening Sync, switching layer, or switching lyric source derives the first
+  pending paragraph and resume time from persisted clips.
+- The list marks previously published paragraphs as done before highlighting
+  the current pending row.
+
 ## Import/export contracts
 
 - Lightweight project JSON envelope: `createProjectExportEnvelope` in `serialization.ts`.

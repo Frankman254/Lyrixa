@@ -68,6 +68,8 @@ export interface ApplyLyricsOptions {
   sourceMode?: 'replace-active' | 'add';
   sourceTitle?: string;
   sourceStartTime?: number;
+  /** Explicit existing source to edit. Clips already on layers remain untouched. */
+  sourceId?: string;
 }
 
 export interface UseLyrixaProjectResult {
@@ -482,7 +484,8 @@ export function useLyrixaProject({
       normalizeOptions,
       sourceMode = 'replace-active',
       sourceTitle,
-      sourceStartTime
+      sourceStartTime,
+      sourceId
     } = options;
 
     const { lines } = normalizeLyricsText(rawText, normalizeOptions);
@@ -495,7 +498,8 @@ export function useLyrixaProject({
     setProject(p => {
       const now = new Date().toISOString();
       const currentSources = p.lyricSources ?? [];
-      const activeSource = currentSources.find(source => source.id === p.activeLyricSourceId)
+      const activeSource = currentSources.find(source => source.id === sourceId)
+        ?? currentSources.find(source => source.id === p.activeLyricSourceId)
         ?? currentSources[0];
       const addingSource = !activeSource || (p.lyricMode === 'multi' && sourceMode === 'add');
       const lyricSourceId = addingSource

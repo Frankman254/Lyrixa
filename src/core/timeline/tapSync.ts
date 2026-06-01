@@ -71,6 +71,30 @@ export function findNextUnpublishedLineIndex(
   return lines.length;
 }
 
+/**
+ * Resume a sync session from persisted timeline clips.
+ *
+ * Sync progress is derived from project.clips instead of a private panel state,
+ * so closing the floating window, reloading, or switching layers cannot lose
+ * the current position. When nothing has been timed yet, use the source
+ * checkpoint supplied by the caller.
+ */
+export function findTapSyncResumeTime(
+  lines: TapSyncLine[],
+  clips: LyricClip[],
+  layerId: string,
+  fallbackTime = 0
+): number {
+  let latestEnd: number | null = null;
+  for (const line of lines) {
+    if (!isTapSyncLinePublished(clips, layerId, line)) continue;
+    const clip = findTapSyncClip(clips, layerId, line);
+    if (!clip) continue;
+    latestEnd = latestEnd == null ? clip.endTime : Math.max(latestEnd, clip.endTime);
+  }
+  return latestEnd ?? Math.max(0, fallbackTime);
+}
+
 function createLineClip(
   line: TapSyncLine,
   layerId: string,

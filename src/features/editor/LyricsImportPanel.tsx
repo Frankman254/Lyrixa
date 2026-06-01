@@ -14,8 +14,10 @@ interface LyricsImportPanelProps {
   lyricMode: LyricProjectMode;
   /** When true, the form starts in "add as new source" mode. */
   defaultAsNewSource?: boolean;
+  /** Existing source being edited. Its placed timeline clips are not mutated. */
+  editingSourceId?: string | null;
   onClose: () => void;
-  onApply: (rawText: string, options: ApplyLyricsOptions) => void;
+  onApply: (rawText: string, options: ApplyLyricsOptions) => boolean | void;
 }
 
 /**
@@ -32,6 +34,7 @@ export function LyricsImportPanel({
   currentTime,
   lyricMode,
   defaultAsNewSource = false,
+  editingSourceId = null,
   onClose,
   onApply
 }: LyricsImportPanelProps) {
@@ -45,11 +48,13 @@ export function LyricsImportPanel({
   if (!open) return null;
 
   const handleApply = () => {
-    onApply(text, {
+    const applied = onApply(text, {
       sourceMode: lyricMode === 'multi' && addAsNewSource ? 'add' : 'replace-active',
       sourceTitle,
-      sourceStartTime: startTime
+      sourceStartTime: startTime,
+      sourceId: editingSourceId ?? undefined
     });
+    if (applied === false) return;
     onClose();
   };
 
@@ -63,9 +68,9 @@ export function LyricsImportPanel({
       >
         <header className="lip-header">
           <div>
-            <h2>Import Lyrics</h2>
+            <h2>{editingSourceId ? 'Edit Lyrics Source' : 'Import Lyrics'}</h2>
             <p>
-              Paste lyrics here. They become a <strong>lyric source</strong> in
+              {editingSourceId ? 'Edit' : 'Paste'} lyrics here. They become a <strong>lyric source</strong> in
               your project — they are not placed on a layer yet. Use{' '}
               <strong>Sync lyrics</strong> on a layer to time them with the song.
               LRC timestamps are stripped automatically.
@@ -149,8 +154,9 @@ export function LyricsImportPanel({
           </div>
 
           <p className="lip-strategy-hint">
-            Imports never overwrite clips you have already synced. After applying,
-            open Sync lyrics, pick the target layer, and time the new source line by line.
+            {editingSourceId
+              ? 'Editing never overwrites clips already placed on layers. Unchanged paragraphs keep their timing; changed or new paragraphs must be synchronized again. Old timeline clips remain until you delete or replace them deliberately.'
+              : 'Imports never overwrite clips you have already synced. After applying, open Sync lyrics, pick the target layer, and time the new source line by line.'}
           </p>
 
           <div className="lip-actions">

@@ -22,6 +22,7 @@ import type { TapSyncLine } from '../../core/timeline/tapSync';
 import {
   createTapSyncSourceId,
   findNextUnpublishedLineIndex,
+  findTapSyncResumeTime,
   orderedLayerClips
 } from '../../core/timeline/tapSync';
 import { duplicateClipSelection } from '../../core/timeline/duplicateClips';
@@ -95,6 +96,7 @@ export function LyrixaEditorShell() {
   /** When null, sync streams every project lyric source in order. */
   const [syncSourceId, setSyncSourceId] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
+  const [editingLyricSourceId, setEditingLyricSourceId] = useState<string | null>(null);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [transparentPreviewOpen, setTransparentPreviewOpen] = useState(false);
@@ -259,6 +261,12 @@ export function LyrixaEditorShell() {
       ?? null,
     [project.lyricSources, project.activeLyricSourceId]
   );
+  const editingLyricSource = useMemo(
+    () => editingLyricSourceId
+      ? project.lyricSources.find(source => source.id === editingLyricSourceId) ?? null
+      : null,
+    [editingLyricSourceId, project.lyricSources]
+  );
   const effectiveSyncSourceId = project.lyricMode === 'single'
     ? activeLyricSource?.id ?? null
     : syncSourceId;
@@ -342,10 +350,17 @@ export function LyrixaEditorShell() {
   const startSyncForLayer = useCallback((
     layerId: string,
     sourceFilterId: string | null = effectiveSyncSourceId
-  ) => {
-    if (!layerId) return;
+  ): number => {
+    if (!layerId) return 0;
     const lines = buildSyncLines(layerId, sourceFilterId);
     const hydratedClips = attachSourceIdentityToLayerClips(project.clips, layerId, lines);
+    const nextCursor = findNextUnpublishedLineIndex(lines, hydratedClips, layerId);
+    const resumeTime = findTapSyncResumeTime(
+      lines,
+      hydratedClips,
+      layerId,
+      getLyricSourceStartTime(project, sourceFilterId)
+    );
     if (project.rawLyricsText.trim().length === 0 && project.lyricSources.length === 0 && lines.length > 0) {
       setRawLyricsText(lines.map(line => line.text).join('\n'));
     }
@@ -353,11 +368,12 @@ export function LyrixaEditorShell() {
       setClips(hydratedClips);
     }
     setSyncLines(lines);
-    setSyncInitialCursor(findNextUnpublishedLineIndex(lines, hydratedClips, layerId));
+    setSyncInitialCursor(nextCursor);
     setSyncTargetLayerId(layerId);
     setSelectedLayerId(layerId);
-    tapSync.reset();
-  }, [buildSyncLines, effectiveSyncSourceId, project.clips, project.lyricSources.length, project.rawLyricsText, setClips, setRawLyricsText, tapSync]);
+    tapSync.reset(nextCursor);
+    return resumeTime;
+  }, [buildSyncLines, effectiveSyncSourceId, project, setClips, setRawLyricsText, tapSync]);
 
   const exitSyncMode = useCallback(() => {
     if (!syncEnteredRef.current) return;
@@ -383,11 +399,12 @@ export function LyrixaEditorShell() {
       : activeLyricSource?.id ?? null;
     setSyncSourceId(initialSourceId);
     const initialLayerId = syncTargetLayerId ?? activeLayerId;
-    if (initialLayerId) startSyncForLayer(initialLayerId, initialSourceId);
+    const resumeTime = initialLayerId
+      ? startSyncForLayer(initialLayerId, initialSourceId)
+      : getLyricSourceStartTime(project, initialSourceId);
     setIsPlaying(false);
-    const startTime = getLyricSourceStartTime(project, initialSourceId);
-    handleSeek(startTime);
-    focusTimelineAt(startTime);
+    handleSeek(resumeTime);
+    focusTimelineAt(resumeTime);
     if (mode !== 'sync') setMode('sync');
   }, [activeLayerId, activeLyricSource?.id, effectiveSyncSourceId, focusTimelineAt, handleSeek, mode, project, setIsPlaying, setMode, startSyncForLayer, syncTargetLayerId]);
 
@@ -404,8 +421,10 @@ export function LyrixaEditorShell() {
   }, [mode, enterSyncMode, exitSyncMode]);
 
   const handleSyncLayerChange = useCallback((layerId: string) => {
-    startSyncForLayer(layerId);
-  }, [startSyncForLayer]);
+    const resumeTime = startSyncForLayer(layerId);
+    handleSeek(resumeTime);
+    focusTimelineAt(resumeTime);
+  }, [focusTimelineAt, handleSeek, startSyncForLayer]);
 
   const handleSyncSourceChange = useCallback((nextSourceId: string | null) => {
     setSyncSourceId(nextSourceId);
@@ -414,12 +433,48 @@ export function LyrixaEditorShell() {
     // source's first un-timed line on the active layer. Existing synced clips
     // for other sources stay put — they're keyed by their own sourceId.
     if (syncTargetLayerId) {
-      startSyncForLayer(syncTargetLayerId, nextSourceId);
+      const resumeTime = startSyncForLayer(syncTargetLayerId, nextSourceId);
+      handleSeek(resumeTime);
+      focusTimelineAt(resumeTime);
+      return;
     }
     const startTime = getLyricSourceStartTime(project, nextSourceId);
     handleSeek(startTime);
     focusTimelineAt(startTime);
   }, [focusTimelineAt, handleSeek, project, setActiveLyricSource, startSyncForLayer, syncTargetLayerId]);
+
+  const openLyricsImport = useCallback((sourceId: string | null = null) => {
+    if (sourceId) setActiveLyricSource(sourceId);
+    setEditingLyricSourceId(sourceId);
+    setImportOpen(true);
+  }, [setActiveLyricSource]);
+
+  const closeLyricsImport = useCallback(() => {
+    setImportOpen(false);
+    setEditingLyricSourceId(null);
+  }, []);
+
+  const handleApplyLyrics = useCallback((
+    rawText: string,
+    options: Parameters<typeof applyLyrics>[1]
+  ): boolean => {
+    const sourceId = options?.sourceId;
+    const existing = sourceId
+      ? project.lyricSources.find(source => source.id === sourceId)
+      : null;
+    const changesPlacedSource =
+      !!existing &&
+      existing.rawText !== rawText &&
+      project.clips.some(clip => clip.lyricSourceId === existing.id);
+    if (changesPlacedSource) {
+      const confirmed = window.confirm(
+        'This lyric source already has synchronized clips. Editing the global text will keep existing timeline clips unchanged. Modified or new paragraphs must be synchronized again, and obsolete timeline clips must be deleted manually. Continue?'
+      );
+      if (!confirmed) return false;
+    }
+    applyLyrics(rawText, options);
+    return true;
+  }, [applyLyrics, project.clips, project.lyricSources]);
 
   const handleSyncRestart = useCallback(() => {
     clearSyncLayer();
@@ -545,7 +600,7 @@ export function LyrixaEditorShell() {
         onAudioFileSelected={handleAudioFileSelected}
         onProjectFileSelected={handleProjectFileSelected}
         onLyricsBundleFileSelected={handleLyricsBundleFileSelected}
-        onOpenLyricsImport={() => setImportOpen(true)}
+        onOpenLyricsImport={() => openLyricsImport()}
         onToggleSync={handleToggleSync}
         onExportProject={handleExportProject}
         onExportLyricsBundle={handleExportLyricsBundle}
@@ -662,7 +717,7 @@ export function LyrixaEditorShell() {
               title="No lyrics yet"
               description="Paste or import lyrics to create draggable text clips on the timeline."
               actionLabel="Import lyrics"
-              onAction={() => setImportOpen(true)}
+              onAction={() => openLyricsImport()}
             />
           )}
         </section>
@@ -682,7 +737,7 @@ export function LyrixaEditorShell() {
         onClipsChange={setClips}
         onLayersChange={setLayers}
         onDuplicateClip={handleDuplicateClip}
-        onImportLyrics={() => setImportOpen(true)}
+        onImportLyrics={() => openLyricsImport()}
         onExportProject={handleExportProject}
         onImportProject={openProjectImportPicker}
         audioLibrary={audioLibrary}
@@ -700,6 +755,7 @@ export function LyrixaEditorShell() {
         onSetLyricSourceStartTime={setLyricSourceStartTime}
         onJumpToLyricSource={handleJumpToLyricSource}
         onRemoveLyricSource={removeLyricSource}
+        onEditLyricSource={(sourceId) => openLyricsImport(sourceId)}
         onAttachLyricSource={attachLyricSourceFromLibrary}
         onSetLyricSourceAudioAssignment={setLyricSourceAudioAssignment}
         editorMode={mode}
@@ -708,14 +764,15 @@ export function LyrixaEditorShell() {
       {importOpen && (
         <LyricsImportPanel
           open={importOpen}
-          initialText={importCreatesNewSource ? '' : activeLyricSource?.rawText ?? project.rawLyricsText}
-          initialTitle={importCreatesNewSource ? `Lyrics ${project.lyricSources.length + 1}` : activeLyricSource?.title}
-          initialStartTime={importCreatesNewSource ? playbackTime : activeLyricSource?.startTime ?? playbackTime}
+          initialText={editingLyricSource ? editingLyricSource.rawText : importCreatesNewSource ? '' : activeLyricSource?.rawText ?? project.rawLyricsText}
+          initialTitle={editingLyricSource?.title ?? (importCreatesNewSource ? `Lyrics ${project.lyricSources.length + 1}` : activeLyricSource?.title)}
+          initialStartTime={editingLyricSource?.startTime ?? (importCreatesNewSource ? playbackTime : activeLyricSource?.startTime ?? playbackTime)}
           currentTime={playbackTime}
           lyricMode={project.lyricMode}
-          defaultAsNewSource={importCreatesNewSource}
-          onClose={() => setImportOpen(false)}
-          onApply={applyLyrics}
+          defaultAsNewSource={!editingLyricSource && importCreatesNewSource}
+          editingSourceId={editingLyricSource?.id}
+          onClose={closeLyricsImport}
+          onApply={handleApplyLyrics}
         />
       )}
 

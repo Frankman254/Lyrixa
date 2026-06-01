@@ -50,7 +50,7 @@ export interface UseTapSyncResult {
   holdEnd: () => void;
   undo: () => void;
   stepBack: () => void;
-  reset: () => void;
+  reset: (cursorIndex?: number) => void;
   nudge: (deltaSeconds: number) => void;
   jumpToCursorTime: () => void;
 }
@@ -265,15 +265,15 @@ export function useTapSync({
     });
   }, []);
 
-  const reset = useCallback(() => {
+  const reset = useCallback((nextCursor = initialCursorIndex) => {
     historyRef.current = [];
     holdingRef.current = false;
     setIsHolding(false);
     setCanUndo(false);
     setLastCreatedClipId(null);
     setLastCommittedTime(null);
-    latest.current = { ...latest.current, cursorIndex: initialCursorIndex };
-    setCursorIndex(initialCursorIndex);
+    latest.current = { ...latest.current, cursorIndex: nextCursor };
+    setCursorIndex(nextCursor);
   }, [initialCursorIndex]);
 
   const nudge = useCallback((deltaSeconds: number) => {
