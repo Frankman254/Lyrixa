@@ -11,7 +11,8 @@ import type {
 } from '../../core/types/render';
 import type {
   AudioChannel,
-  AudioChannelRole
+  AudioChannelRole,
+  AudioLibraryAsset
 } from '../../core/types/audio';
 import { buildAudioFileKey } from '../../core/types/audio';
 import { normalizeLyricsText } from '../../core/lyrics/normalize';
@@ -24,12 +25,16 @@ import {
 } from './projectPersistence';
 import {
   putAudio,
+  putLibraryAudio,
   getAudio,
+  getLibraryAudio,
+  listLibraryAudio,
   deleteAudio,
   deleteAllProjectAudio,
   shouldPersistAudioBlob,
   type StoredAudio
 } from './audioBlobStorage';
+import { loadLyricsLibrary, upsertLyricsLibrary } from './lyricsLibraryStorage';
 import {
   extractPeaksFromBlob,
   shouldExtractRealPeaks
@@ -69,10 +74,13 @@ export interface UseLyrixaProjectResult {
   project: LyrixaProject;
   saveStatus: SaveStatus;
   audioNeedsReload: boolean;
+  audioLibrary: AudioLibraryAsset[];
+  lyricsLibrary: LyrixaProject['lyricSources'];
 
   setProjectName: (name: string) => void;
   loadAudioFile: (file: File, role?: AudioChannelRole, options?: LoadAudioOptions) => Promise<void>;
   removeAudio: (role?: AudioChannelRole) => Promise<void>;
+  activateAudioLibraryAsset: (fileKey: string) => Promise<void>;
   /** Returns the in-memory Blob for a loaded audio channel, or null if unavailable. */
   getAudioBlob: (role: AudioChannelRole) => Blob | null;
 
@@ -87,6 +95,8 @@ export interface UseLyrixaProjectResult {
   /** Delete a lyric source from the library. Existing clips on layers stay
    *  put — they remain independent timing artifacts you may still want. */
   removeLyricSource: (id: string) => void;
+  attachLyricSourceFromLibrary: (id: string) => void;
+  setLyricSourceAudioAssignment: (id: string, fileKey: string, assigned: boolean) => void;
 
   setClips: (next: ClipUpdate) => void;
   updateClip: (clipId: string, patch: Partial<LyricClip>) => void;
@@ -116,11 +126,25 @@ export function useLyrixaProject({
   const [hydrated] = useState(() => loadProject());
   const [project, setProject] = useState<LyrixaProject>(hydrated.project);
   const [audioNeedsReload, setAudioNeedsReload] = useState(false);
+  const [audioLibrary, setAudioLibrary] = useState<AudioLibraryAsset[]>([]);
+  const [lyricsLibrary, setLyricsLibrary] = useState(() => loadLyricsLibrary());
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
 
   const saveTimerRef = useRef<number | null>(null);
   const skipNextSaveRef = useRef(true);
   const waveformAnalysisEnabledRef = useRef(waveformAnalysisEnabled);
+
+  const refreshAudioLibrary = useCallback(async () => {
+    setAudioLibrary(await listLibraryAudio());
+  }, []);
+
+  useEffect(() => {
+    void refreshAudioLibrary();
+  }, [refreshAudioLibrary]);
+
+  useEffect(() => {
+    setLyricsLibrary(upsertLyricsLibrary(project.lyricSources));
+  }, [project.lyricSources]);
 
   useEffect(() => {
     waveformAnalysisEnabledRef.current = waveformAnalysisEnabled;
@@ -180,7 +204,7 @@ export function useLyrixaProject({
 
     const restore = async (role: AudioChannelRole, channel: AudioChannel | null | undefined) => {
       if (!channel) return;
-      const stored = await getAudio(initial.id, role).catch(() => null);
+      const stored = await findStoredAudio(initial.id, role, channel);
       if (cancelled) return;
       if (!stored) {
         if (role === 'master') setAudioNeedsReload(true);
@@ -204,13 +228,15 @@ export function useLyrixaProject({
           fileName: stored.fileName || current.fileName,
           sizeBytes: stored.sizeBytes ?? current.sizeBytes,
           lastModified: stored.lastModified ?? current.lastModified,
-          fileKey: stored.fileKey ?? current.fileKey
+          fileKey: stored.fileKey ?? current.fileKey,
+          mimeType: stored.mimeType ?? current.mimeType
         };
         return {
           ...p,
           audioTracks: { ...p.audioTracks, [role]: updated }
         };
       });
+      void refreshAudioLibrary();
       // Re-extract peaks if missing, unless performance mode forbids audio decoding.
       if (waveformAnalysisEnabledRef.current && (!channel.waveformPeaks || channel.waveformPeaks.length === 0)) {
         extractAndApplyPeaks(stored.blob, role, stored.duration);
@@ -343,47 +369,79 @@ export function useLyrixaProject({
         waveformPeaks: undefined,
         sizeBytes,
         lastModified,
-        fileKey
+        fileKey,
+        mimeType: file.type || undefined
       };
       return {
         ...p,
-        audioTracks: { ...p.audioTracks, [role]: channel }
+        audioTracks: { ...p.audioTracks, [role]: channel },
+        audioLibrary: upsertAudioLibraryAsset(p.audioLibrary, channel)
       };
     });
     if (role === 'master') setAudioNeedsReload(false);
 
-    void readAudioDuration(file)
-      .catch(() => 0)
-      .then(duration => {
-        setProject(p => {
-          const current = p.audioTracks[role];
-          if (!current || current.fileKey !== fileKey) return p;
-          if (current.duration === duration) return p;
-          return {
-            ...p,
-            audioTracks: {
-              ...p.audioTracks,
-              [role]: { ...current, duration }
-            }
-          };
+    const duration = await readAudioDuration(file).catch(() => 0);
+    setProject(p => {
+      const current = p.audioTracks[role];
+      if (!current || current.fileKey !== fileKey) return p;
+      if (current.duration === duration) return p;
+      return {
+        ...p,
+        audioTracks: {
+          ...p.audioTracks,
+          [role]: { ...current, duration }
+        },
+        audioLibrary: p.audioLibrary.map(asset =>
+          asset.fileKey === fileKey ? { ...asset, duration } : asset
+        )
+      };
+    });
+
+    if ((options.persistAudio ?? true) && shouldPersistAudioBlob(file, duration)) {
+      try {
+        await putAudio(projectIdRef.current, role, file, file.name, duration, {
+          sizeBytes,
+          lastModified,
+          fileKey
         });
+        await refreshAudioLibrary();
+      } catch (err) {
+        console.warn(`[Lyrixa] Could not persist ${role} audio blob:`, err);
+      }
+    } else {
+      await deleteAudio(projectIdRef.current, role);
+    }
 
-        if ((options.persistAudio ?? true) && shouldPersistAudioBlob(file, duration)) {
-          void putAudio(projectIdRef.current, role, file, file.name, duration, {
-            sizeBytes,
-            lastModified,
-            fileKey
-          }).catch(err => {
-            console.warn(`[Lyrixa] Could not persist ${role} audio blob:`, err);
-          });
-        } else {
-          void deleteAudio(projectIdRef.current, role);
-        }
+    if (options.analyzeWaveform ?? waveformAnalysisEnabledRef.current) {
+      extractAndApplyPeaks(file, role, duration);
+    }
+  }, [extractAndApplyPeaks, refreshAudioLibrary]);
 
-        if (options.analyzeWaveform ?? waveformAnalysisEnabledRef.current) {
-          extractAndApplyPeaks(file, role, duration);
-        }
-      });
+  const activateAudioLibraryAsset = useCallback(async (fileKey: string) => {
+    const stored = await getLibraryAudio(fileKey);
+    if (!stored?.fileKey) throw new Error('Audio file is missing from the device library.');
+    const objectUrl = URL.createObjectURL(stored.blob);
+    blobsRef.current.master = stored.blob;
+    setProject(p => {
+      const previous = p.audioTracks.master;
+      if (previous?.objectUrl) URL.revokeObjectURL(previous.objectUrl);
+      const channel: AudioChannel = {
+        fileKey: stored.fileKey,
+        fileName: stored.fileName,
+        duration: stored.duration,
+        sizeBytes: stored.sizeBytes,
+        lastModified: stored.lastModified,
+        mimeType: stored.mimeType,
+        objectUrl
+      };
+      return {
+        ...p,
+        audioTracks: { ...p.audioTracks, master: channel },
+        audioLibrary: upsertAudioLibraryAsset(p.audioLibrary, channel)
+      };
+    });
+    setAudioNeedsReload(false);
+    extractAndApplyPeaks(stored.blob, 'master', stored.duration);
   }, [extractAndApplyPeaks]);
 
   const removeAudio = useCallback(async (role: AudioChannelRole = 'master') => {
@@ -454,6 +512,9 @@ export function useLyrixaProject({
         rawText,
         normalizedLines: lines,
         startTime,
+        audioFileKeys: addingSource
+          ? (p.audioTracks.master?.fileKey ? [p.audioTracks.master.fileKey] : [])
+          : activeSource.audioFileKeys ?? [],
         order: addingSource
           ? Math.max(-1, ...currentSources.map(source => source.order)) + 1
           : activeSource.order,
@@ -542,6 +603,39 @@ export function useLyrixaProject({
         normalizedLyrics: combinedNormalizedLyrics
       };
     });
+  }, []);
+
+  const attachLyricSourceFromLibrary = useCallback((id: string) => {
+    const source = lyricsLibrary.find(item => item.id === id);
+    if (!source) return;
+    setProject(p => {
+      if (p.lyricSources.some(item => item.id === id)) {
+        return { ...p, activeLyricSourceId: id };
+      }
+      const lyricSources = [...p.lyricSources, { ...source, order: p.lyricSources.length }];
+      return {
+        ...p,
+        lyricMode: lyricSources.length > 1 ? 'multi' : p.lyricMode,
+        lyricSources,
+        activeLyricSourceId: id,
+        rawLyricsText: lyricSources.map(item => item.rawText.trim()).filter(Boolean).join('\n\n'),
+        normalizedLyrics: lyricSources.flatMap(item => item.normalizedLines)
+      };
+    });
+  }, [lyricsLibrary]);
+
+  const setLyricSourceAudioAssignment = useCallback((id: string, fileKey: string, assigned: boolean) => {
+    if (!fileKey) return;
+    setProject(p => ({
+      ...p,
+      lyricSources: p.lyricSources.map(source => {
+        if (source.id !== id) return source;
+        const keys = new Set(source.audioFileKeys ?? []);
+        if (assigned) keys.add(fileKey);
+        else keys.delete(fileKey);
+        return { ...source, audioFileKeys: [...keys], updatedAt: new Date().toISOString() };
+      })
+    }));
   }, []);
 
   const setClips = useCallback((next: ClipUpdate) => {
@@ -635,16 +729,55 @@ export function useLyrixaProject({
       if (m) URL.revokeObjectURL(m);
       return next;
     });
-    setAudioNeedsReload(!!next.audioTracks.master);
-  }, []);
+    setAudioNeedsReload(false);
+
+    const channel = next.audioTracks.master;
+    if (!channel) return;
+    void findStoredAudio(next.id, 'master', channel).then(stored => {
+      if (!stored) {
+        setAudioNeedsReload(true);
+        return;
+      }
+      const objectUrl = URL.createObjectURL(stored.blob);
+      blobsRef.current.master = stored.blob;
+      setProject(p => {
+        if (p.id !== next.id || !p.audioTracks.master) {
+          URL.revokeObjectURL(objectUrl);
+          return p;
+        }
+        return {
+          ...p,
+          audioTracks: {
+            ...p.audioTracks,
+            master: {
+              ...p.audioTracks.master,
+              objectUrl,
+              duration: stored.duration || p.audioTracks.master.duration,
+              fileName: stored.fileName || p.audioTracks.master.fileName,
+              sizeBytes: stored.sizeBytes ?? p.audioTracks.master.sizeBytes,
+              lastModified: stored.lastModified ?? p.audioTracks.master.lastModified,
+              fileKey: stored.fileKey ?? p.audioTracks.master.fileKey,
+              mimeType: stored.mimeType ?? p.audioTracks.master.mimeType
+            }
+          }
+        };
+      });
+      setAudioNeedsReload(false);
+      void refreshAudioLibrary();
+      extractAndApplyPeaks(stored.blob, 'master', stored.duration);
+    });
+  }, [extractAndApplyPeaks, refreshAudioLibrary]);
 
   return {
     project,
     saveStatus,
     audioNeedsReload,
+    audioLibrary,
+    lyricsLibrary,
     setProjectName,
     loadAudioFile,
     removeAudio,
+    activateAudioLibraryAsset,
     getAudioBlob,
     setRawLyricsText,
     applyLyrics,
@@ -653,6 +786,8 @@ export function useLyrixaProject({
     setLyricSourceTitle,
     setLyricSourceStartTime,
     removeLyricSource,
+    attachLyricSourceFromLibrary,
+    setLyricSourceAudioAssignment,
     setClips,
     updateClip,
     setLayers,
@@ -706,6 +841,41 @@ function storedAudioMatchesChannel(stored: StoredAudio, channel: AudioChannel): 
     return false;
   }
   return true;
+}
+
+async function findStoredAudio(
+  projectId: string,
+  role: AudioChannelRole,
+  channel: AudioChannel
+): Promise<StoredAudio | null> {
+  const scoped = await getAudio(projectId, role).catch(() => null);
+  if (scoped && storedAudioMatchesChannel(scoped, channel)) {
+    if (scoped.fileKey) void putLibraryAudio(scoped).catch(() => {});
+    return scoped;
+  }
+  if (channel.fileKey) {
+    const global = await getLibraryAudio(channel.fileKey);
+    if (global && storedAudioMatchesChannel(global, channel)) return global;
+  }
+  return null;
+}
+
+function upsertAudioLibraryAsset(
+  assets: AudioLibraryAsset[],
+  channel: AudioChannel
+): AudioLibraryAsset[] {
+  if (!channel.fileKey) return assets;
+  const next: AudioLibraryAsset = {
+    fileKey: channel.fileKey,
+    fileName: channel.fileName,
+    duration: channel.duration,
+    sizeBytes: channel.sizeBytes,
+    lastModified: channel.lastModified,
+    mimeType: channel.mimeType
+  };
+  const existing = assets.findIndex(asset => asset.fileKey === channel.fileKey);
+  if (existing < 0) return [...assets, next];
+  return assets.map(asset => asset.fileKey === channel.fileKey ? { ...asset, ...next } : asset);
 }
 
 function createLyricSourceId(): string {

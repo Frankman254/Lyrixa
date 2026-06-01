@@ -30,7 +30,7 @@ export function EditorHiddenFileInputs({
       <input
         ref={projectImportInputRef}
         type="file"
-        accept=".lyrixa.json,application/json"
+        accept=".lyrixa-package,.lyrixa.json,application/json,application/x-lyrixa-project"
         style={{ display: 'none' }}
         onChange={onProjectFileSelected}
       />

@@ -218,7 +218,18 @@ export function TapSyncPanel({
             <button className="tapsync-btn icon" onClick={() => sync.nudge(-0.05)} title="Nudge earlier (←)">−</button>
             <button className="tapsync-btn icon" onClick={() => sync.nudge(0.05)} title="Nudge later (→)">+</button>
           </div>
-          <button className="tapsync-btn ghost" onClick={onRestart} title="Clear only the selected layer and tap from the first line">Clear layer</button>
+          <button
+            className="tapsync-btn ghost"
+            onClick={() => {
+              const confirmed = window.confirm(
+                `Clear every clip from "${layerName}"? This cannot be undone unless you exported the project.`
+              );
+              if (confirmed) onRestart();
+            }}
+            title="Clear only the selected layer and tap from the first line"
+          >
+            Clear layer
+          </button>
         </div>
 
         <div className="tapsync-speed" title="Slow the song down so fast lines are easier to time precisely">

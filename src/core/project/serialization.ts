@@ -1,4 +1,4 @@
-import type { AudioChannel, ProjectAudioTracks } from '../types/audio';
+import type { AudioChannel, AudioLibraryAsset, ProjectAudioTracks } from '../types/audio';
 import type { LyricClip } from '../types/clip';
 import { createDefaultLayers, DEFAULT_LAYER_AUDIO_REACTIVE } from '../types/layer';
 import type {
@@ -85,6 +85,7 @@ export function normalizeProject(input: Partial<LyrixaProject>): LyrixaProject {
         ? 'multi'
         : 'single',
     audioTracks,
+    audioLibrary: normalizeAudioLibrary(input.audioLibrary, audioTracks.master),
     rawLyricsText: input.rawLyricsText ?? '',
     normalizedLyrics: Array.isArray(input.normalizedLyrics) ? input.normalizedLyrics : [],
     lyricSources,
@@ -119,6 +120,9 @@ export function normalizeLyricSources(
           rawText,
           normalizedLines,
           startTime: clampNumber(source.startTime, 0, Number.POSITIVE_INFINITY, 0),
+          audioFileKeys: Array.isArray(source.audioFileKeys)
+            ? source.audioFileKeys.filter((key): key is string => typeof key === 'string' && key.length > 0)
+            : [],
           order: Number.isFinite(source.order) ? source.order : index,
           createdAt: typeof source.createdAt === 'string' ? source.createdAt : now,
           updatedAt: typeof source.updatedAt === 'string' ? source.updatedAt : now
@@ -137,6 +141,7 @@ export function normalizeLyricSources(
       ? normalizedLyrics
       : normalizeLyricsText(rawLyricsText).lines,
     startTime: 0,
+    audioFileKeys: [],
     order: 0,
     createdAt: new Date(0).toISOString(),
     updatedAt: new Date(0).toISOString()
@@ -259,6 +264,35 @@ function normalizeAudioTracks(audioTracks: ProjectAudioTracks | undefined): Proj
   return {
     master: stripObjectUrl(audioTracks?.master)
   };
+}
+
+function normalizeAudioLibrary(
+  assets: AudioLibraryAsset[] | undefined,
+  master: AudioChannel | null
+): AudioLibraryAsset[] {
+  const byKey = new Map<string, AudioLibraryAsset>();
+  for (const asset of assets ?? []) {
+    if (!asset || typeof asset.fileKey !== 'string' || !asset.fileKey) continue;
+    byKey.set(asset.fileKey, {
+      fileKey: asset.fileKey,
+      fileName: typeof asset.fileName === 'string' && asset.fileName ? asset.fileName : 'Audio',
+      duration: clampNumber(asset.duration, 0, Number.POSITIVE_INFINITY, 0),
+      sizeBytes: typeof asset.sizeBytes === 'number' ? asset.sizeBytes : undefined,
+      lastModified: typeof asset.lastModified === 'number' ? asset.lastModified : undefined,
+      mimeType: typeof asset.mimeType === 'string' ? asset.mimeType : undefined
+    });
+  }
+  if (master?.fileKey && !byKey.has(master.fileKey)) {
+    byKey.set(master.fileKey, {
+      fileKey: master.fileKey,
+      fileName: master.fileName,
+      duration: master.duration,
+      sizeBytes: master.sizeBytes,
+      lastModified: master.lastModified,
+      mimeType: master.mimeType
+    });
+  }
+  return [...byKey.values()];
 }
 
 function stripObjectUrl(channel: AudioChannel | null | undefined): SerializableAudioChannel | null {

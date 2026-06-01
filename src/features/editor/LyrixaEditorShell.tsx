@@ -47,9 +47,12 @@ export function LyrixaEditorShell() {
     project,
     saveStatus,
     audioNeedsReload,
+    audioLibrary,
+    lyricsLibrary,
     setProjectName,
     loadAudioFile,
     removeAudio,
+    activateAudioLibraryAsset,
     getAudioBlob,
     setRawLyricsText,
     applyLyrics,
@@ -58,6 +61,8 @@ export function LyrixaEditorShell() {
     setLyricSourceTitle,
     setLyricSourceStartTime,
     removeLyricSource,
+    attachLyricSourceFromLibrary,
+    setLyricSourceAudioAssignment,
     setClips,
     setLayers,
     setStyleConfig,
@@ -452,7 +457,7 @@ export function LyrixaEditorShell() {
 
   const handleHardResetProject = useCallback(async () => {
     const confirmed = window.confirm(
-      'Esto borrará el proyecto actual, clips, lyrics, audio guardado, texturas, preferencias y datos locales. ¿Deseas continuar?'
+      'Esto borrará el proyecto actual, clips, lyrics vinculadas, texturas y preferencias del editor. Las bibliotecas globales de audio y lyrics seguirán disponibles en este dispositivo. ¿Deseas continuar?'
     );
     if (!confirmed) return;
     setIsPlaying(false);
@@ -680,12 +685,23 @@ export function LyrixaEditorShell() {
         onImportLyrics={() => setImportOpen(true)}
         onExportProject={handleExportProject}
         onImportProject={openProjectImportPicker}
+        audioLibrary={audioLibrary}
+        lyricsLibrary={lyricsLibrary}
+        onLoadAudio={openMasterPicker}
+        onActivateAudio={(fileKey) => {
+          void activateAudioLibraryAsset(fileKey).catch(err => {
+            console.error('[Lyrixa] Failed to activate audio-library asset:', err);
+            window.alert(err instanceof Error ? err.message : 'Could not activate audio file.');
+          });
+        }}
         onHardResetProject={handleHardResetProject}
         onSelectLyricSource={setActiveLyricSource}
         onRenameLyricSource={setLyricSourceTitle}
         onSetLyricSourceStartTime={setLyricSourceStartTime}
         onJumpToLyricSource={handleJumpToLyricSource}
         onRemoveLyricSource={removeLyricSource}
+        onAttachLyricSource={attachLyricSourceFromLibrary}
+        onSetLyricSourceAudioAssignment={setLyricSourceAudioAssignment}
         editorMode={mode}
       />}
 

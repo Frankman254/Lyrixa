@@ -1,5 +1,5 @@
 const DB_NAME = 'lyrixa';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const STORE_TEXTURES = 'texture-assets';
 
 export interface StoredTextureAsset {
@@ -23,6 +23,9 @@ function openDB(): Promise<IDBDatabase> {
       const db = req.result;
       if (!db.objectStoreNames.contains('audio')) db.createObjectStore('audio');
       if (!db.objectStoreNames.contains(STORE_TEXTURES)) db.createObjectStore(STORE_TEXTURES);
+      if (!db.objectStoreNames.contains('audio-library-metadata')) {
+        db.createObjectStore('audio-library-metadata');
+      }
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error ?? new Error('IndexedDB open failed'));

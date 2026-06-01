@@ -10,6 +10,7 @@ import type {
 import type { TextFillConfig } from '../../core/types/texture';
 import type { LyrixaProject } from '../../core/types/project';
 import type { LyricProjectMode } from '../../core/types/project';
+import type { AudioLibraryAsset } from '../../core/types/audio';
 import {
   resolveLyricAnimationConfig,
   resolveLyricFxConfig,
@@ -48,12 +49,18 @@ interface InspectorPanelProps {
   onImportLyrics: () => void;
   onExportProject: () => void;
   onImportProject: () => void;
+  audioLibrary: AudioLibraryAsset[];
+  lyricsLibrary: LyrixaProject['lyricSources'];
+  onLoadAudio: () => void;
+  onActivateAudio: (fileKey: string) => void;
   onHardResetProject: () => void;
   onSelectLyricSource: (id: string) => void;
   onRenameLyricSource: (id: string, title: string) => void;
   onSetLyricSourceStartTime: (id: string, startTime: number) => void;
   onJumpToLyricSource: (id: string) => void;
   onRemoveLyricSource: (id: string) => void;
+  onAttachLyricSource: (id: string) => void;
+  onSetLyricSourceAudioAssignment: (id: string, fileKey: string, assigned: boolean) => void;
   /** Which editor mode the workspace is in. Filters which tabs are visible. */
   editorMode?: EditorMode;
 }
@@ -82,12 +89,18 @@ export function InspectorPanel({
   onImportLyrics,
   onExportProject,
   onImportProject,
+  audioLibrary,
+  lyricsLibrary,
+  onLoadAudio,
+  onActivateAudio,
   onHardResetProject,
   onSelectLyricSource,
   onRenameLyricSource,
   onSetLyricSourceStartTime,
   onJumpToLyricSource,
   onRemoveLyricSource,
+  onAttachLyricSource,
+  onSetLyricSourceAudioAssignment,
   editorMode = 'edit'
 }: InspectorPanelProps) {
   const selectedClip = useMemo(
@@ -287,12 +300,18 @@ export function InspectorPanel({
             onImportLyrics={onImportLyrics}
             onExportProject={onExportProject}
             onImportProject={onImportProject}
+            audioLibrary={audioLibrary}
+            lyricsLibrary={lyricsLibrary}
+            onLoadAudio={onLoadAudio}
+            onActivateAudio={onActivateAudio}
             onHardResetProject={onHardResetProject}
             onSelectLyricSource={onSelectLyricSource}
             onRenameLyricSource={onRenameLyricSource}
             onSetLyricSourceStartTime={onSetLyricSourceStartTime}
             onJumpToLyricSource={onJumpToLyricSource}
             onRemoveLyricSource={onRemoveLyricSource}
+            onAttachLyricSource={onAttachLyricSource}
+            onSetLyricSourceAudioAssignment={onSetLyricSourceAudioAssignment}
           />
         )}
 

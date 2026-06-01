@@ -2,7 +2,6 @@ import { useCallback, useRef } from 'react';
 import type { ChangeEvent } from 'react';
 import type { LyrixaProject } from '../../core/types/project';
 import {
-  createProjectExportEnvelope,
   parseProjectExportEnvelope
 } from '../../core/project/serialization';
 import {
@@ -10,6 +9,11 @@ import {
   mergeLyricsBundleIntoProject,
   parseLyricsBundleEnvelope
 } from '../../core/project/lyricsBundle';
+import {
+  createLyrixaProjectPackage,
+  importLyrixaProjectPackage,
+  isLyrixaProjectPackage
+} from './projectPackage';
 
 interface UseProjectImportExportArgs {
   project: LyrixaProject;
@@ -28,20 +32,22 @@ export function useProjectImportExport({
   const openProjectImportPicker = () => projectImportInputRef.current?.click();
   const openLyricsBundleImportPicker = () => lyricsBundleImportInputRef.current?.click();
 
-  const handleExportProject = useCallback(() => {
-    const envelope = createProjectExportEnvelope(project, {
-      bandMode: safeGetLocalStorage('lyrixa_band_mode') ?? undefined
-    });
-    const blob = new Blob([JSON.stringify(envelope, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    const safeName = sanitizeFileName(project.name) || 'lyrixa-project';
-    link.href = url;
-    link.download = `${safeName}.lyrixa.json`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
+  const handleExportProject = useCallback(async () => {
+    try {
+      const { blob, includedAudioCount, missingAudioCount } =
+        await createLyrixaProjectPackage(project, {
+          bandMode: safeGetLocalStorage('lyrixa_band_mode') ?? undefined
+        });
+      downloadBlob(blob, `${sanitizeFileName(project.name) || 'lyrixa-project'}.lyrixa-package`);
+      if (missingAudioCount > 0) {
+        window.alert(
+          `Project exported with ${includedAudioCount} audio file(s). ${missingAudioCount} referenced audio file(s) were missing from this device and could not be bundled.`
+        );
+      }
+    } catch (err) {
+      console.error('[Lyrixa] Failed to export project package:', err);
+      window.alert(err instanceof Error ? err.message : 'Could not export Lyrixa project package.');
+    }
   }, [project]);
 
   const handleExportLyricsBundle = useCallback(() => {
@@ -63,8 +69,10 @@ export function useProjectImportExport({
     e.target.value = '';
     if (!file) return;
     try {
-      const envelope = JSON.parse(await file.text());
-      const imported = parseProjectExportEnvelope(envelope);
+      const packageFile = await isLyrixaProjectPackage(file);
+      const packageImport = packageFile ? await importLyrixaProjectPackage(file) : null;
+      const envelope = packageImport?.envelope ?? JSON.parse(await file.text());
+      const imported = packageImport?.project ?? parseProjectExportEnvelope(envelope);
       const bandMode = envelope?.project?.uiPreferences?.bandMode;
       if (typeof bandMode === 'string') {
         try { window.localStorage.setItem('lyrixa_band_mode', bandMode); } catch { /* ignore */ }
@@ -107,6 +115,17 @@ export function useProjectImportExport({
 
 function sanitizeFileName(name: string): string {
   return name.trim().replace(/[^a-z0-9-_]+/gi, '-').replace(/^-+|-+$/g, '');
+}
+
+function downloadBlob(blob: Blob, fileName: string): void {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
 function safeGetLocalStorage(key: string): string | null {

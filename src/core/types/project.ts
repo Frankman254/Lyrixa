@@ -7,7 +7,7 @@ import type {
   LyricVisualStyle,
   RenderMode
 } from './render';
-import type { AudioPeak, ProjectAudioTracks } from './audio';
+import type { AudioLibraryAsset, AudioPeak, ProjectAudioTracks } from './audio';
 
 /**
  * Legacy single-track shape. Older projects persisted this as `track`.
@@ -34,6 +34,8 @@ export interface LyricSource {
   normalizedLines: string[];
   /** Seconds on the master track where this lyric source starts. */
   startTime?: number;
+  /** Audio-library files this lyric source can be reused with. */
+  audioFileKeys?: string[];
   order: number;
   createdAt: string;
   updatedAt: string;
@@ -51,6 +53,8 @@ export interface LyrixaProject {
   lyricMode: LyricProjectMode;
   /** Audio channels bound to this project. `master` is the track that plays. */
   audioTracks: ProjectAudioTracks;
+  /** Device-library audio files referenced by this project and its exports. */
+  audioLibrary: AudioLibraryAsset[];
   /** Raw paste from the user, kept verbatim for re-normalization. */
   rawLyricsText: string;
   /** The normalized lines derived from rawLyricsText. */

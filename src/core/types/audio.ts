@@ -33,6 +33,23 @@ export interface AudioChannel {
   sizeBytes?: number;
   /** Epoch ms — taken from File.lastModified at load time. */
   lastModified?: number;
+  /** Original MIME type, used when a full project package restores the blob. */
+  mimeType?: string;
+}
+
+/**
+ * Lightweight reference to an audio file used by this project.
+ *
+ * The Blob is intentionally absent: bytes live once in the device-wide
+ * IndexedDB audio library and project JSON only keeps stable references.
+ */
+export interface AudioLibraryAsset {
+  fileKey: string;
+  fileName: string;
+  duration: number;
+  sizeBytes?: number;
+  lastModified?: number;
+  mimeType?: string;
 }
 
 /**

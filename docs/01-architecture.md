@@ -82,24 +82,44 @@ Texture config is project data, but texture blobs are browser assets.
 
 The renderer must use real text fill behavior. Image texture fill is implemented with CSS text clipping in `ClipLyricsRenderer.css`, not by pretending the texture is a text color.
 
-## Audio and vocals
+## Audio library
 
-Audio metadata lives in project JSON. Audio blobs live in IndexedDB.
+Audio metadata and audio bytes deliberately have different ownership.
 
-- `audioBlobStorage.ts`: IndexedDB storage for master and vocals blobs.
-- `peakExtraction.ts`: waveform peaks from decoded audio.
-- `vocalIsolation.ts`: local vocal stem isolation workflow.
-- `vocalActivity.ts`: pure vocal activity detection from peaks.
+- `project.audioTracks.master`: the active playable audio channel.
+- `project.audioLibrary`: lightweight references to every audio used by the project.
+- `audioBlobStorage.ts`: device-wide IndexedDB Blob library, deduplicated by stable `fileKey`.
+- `useLyrixaProject`: restores the active audio by project binding first, then by global `fileKey`.
+- `peakExtraction.ts`: optional waveform decoding. It stays disabled in performance mode.
 
-The "vocals stem" is a helper audio channel. It can be uploaded or generated from the master. It helps preview vocals-only playback and generate lyric timing from vocal activity.
+Loading another file changes the active master channel but keeps both references in
+`project.audioLibrary`. This supports long mixes and multi-audio sessions without
+putting large blobs in React state or localStorage.
+
+Lyrics sources may store `audioFileKeys`. These are assignments to reusable audio
+assets, not copies of audio bytes.
+
+## Lyrics library
+
+Project lyrics and device lyrics are separate:
+
+- `project.lyricSources`: ordered sources linked into the current editor session.
+- `lyricsLibraryStorage.ts`: device-wide text library in localStorage.
+- `LyricSource.audioFileKeys`: optional assignments to one or more global audio files.
+
+Lyrics are small enough for localStorage; audio is not.
 
 ## Import/export contracts
 
-- Full project export: `createProjectExportEnvelope` in `serialization.ts`.
+- Lightweight project JSON envelope: `createProjectExportEnvelope` in `serialization.ts`.
+- Full project package: `projectPackage.ts`. It writes a small JSON header followed by
+  raw audio blobs and restores those blobs into the device library on import.
 - Full project import: `parseProjectExportEnvelope` and `normalizeProject`.
 - Cross-app lyrics bundle: `core/project/lyricsBundle.ts`.
 
-Exports should never include browser-only values such as object URLs. Imports should normalize old saved structures into the current model.
+Exports should never include browser-only values such as object URLs. Audio blobs belong
+in the full package only, never localStorage. Imports should normalize old saved
+structures into the current model.
 
 ## Before adding a feature
 

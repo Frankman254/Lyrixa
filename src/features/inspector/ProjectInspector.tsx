@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { ClipProgressIndicatorConfig } from '../../core/types/render';
 import type { LyricProjectMode, LyrixaProject } from '../../core/types/project';
+import type { AudioLibraryAsset } from '../../core/types/audio';
 import { Group } from './InspectorPrimitives';
 
 interface ProjectInspectorProps {
@@ -12,12 +13,18 @@ interface ProjectInspectorProps {
   onImportLyrics: () => void;
   onExportProject: () => void;
   onImportProject: () => void;
+  audioLibrary: AudioLibraryAsset[];
+  lyricsLibrary: LyrixaProject['lyricSources'];
+  onLoadAudio: () => void;
+  onActivateAudio: (fileKey: string) => void;
   onHardResetProject: () => void;
   onSelectLyricSource: (id: string) => void;
   onRenameLyricSource: (id: string, title: string) => void;
   onSetLyricSourceStartTime: (id: string, startTime: number) => void;
   onJumpToLyricSource: (id: string) => void;
   onRemoveLyricSource: (id: string) => void;
+  onAttachLyricSource: (id: string) => void;
+  onSetLyricSourceAudioAssignment: (id: string, fileKey: string, assigned: boolean) => void;
 }
 
 export function ProjectInspector({
@@ -29,12 +36,18 @@ export function ProjectInspector({
   onImportLyrics,
   onExportProject,
   onImportProject,
+  audioLibrary,
+  lyricsLibrary,
+  onLoadAudio,
+  onActivateAudio,
   onHardResetProject,
   onSelectLyricSource,
   onRenameLyricSource,
   onSetLyricSourceStartTime,
   onJumpToLyricSource,
-  onRemoveLyricSource
+  onRemoveLyricSource,
+  onAttachLyricSource,
+  onSetLyricSourceAudioAssignment
 }: ProjectInspectorProps) {
   // Local edit buffer so the user can type without re-rendering the entire list
   // and losing focus on every keystroke.
@@ -89,6 +102,41 @@ export function ProjectInspector({
           {project.lyricMode === 'multi'
             ? 'Multi mode keeps several lyric sources, each with its own start checkpoint.'
             : 'Single mode uses one active lyric source; imports replace that source by default.'}
+        </p>
+      </Group>
+
+      <Group title="Audio library">
+        <div className="insp-button-row">
+          <button className="ls-btn small" onClick={onLoadAudio}>Add audio file</button>
+        </div>
+        {audioLibrary.length === 0 ? (
+          <p className="insp-muted compact">No persisted audio files on this device yet.</p>
+        ) : (
+          <div className="insp-source-list">
+            {audioLibrary.map(asset => {
+              const active = project.audioTracks.master?.fileKey === asset.fileKey;
+              return (
+                <div className={`insp-source-card ${active ? 'active' : ''}`} key={asset.fileKey}>
+                  <div className="insp-source-title-row">
+                    <strong title={asset.fileName}>{asset.fileName}</strong>
+                    <span className="insp-source-count">{formatCheckpoint(asset.duration)}</span>
+                  </div>
+                  <div className="insp-source-actions">
+                    <button
+                      className={`ls-btn small ${active ? 'primary' : ''}`}
+                      disabled={active}
+                      onClick={() => onActivateAudio(asset.fileKey)}
+                    >
+                      {active ? 'Active audio' : 'Use audio'}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        <p className="insp-muted compact">
+          Audio bytes stay in this device library. A project package includes every audio referenced by this project.
         </p>
       </Group>
 
@@ -186,12 +234,50 @@ export function ProjectInspector({
                       ✕
                     </button>
                   </div>
+                  {project.audioTracks.master?.fileKey && (
+                    <label className="tl-inline-check">
+                      <input
+                        type="checkbox"
+                        checked={(source.audioFileKeys ?? []).includes(project.audioTracks.master.fileKey)}
+                        onChange={(e) => onSetLyricSourceAudioAssignment(
+                          source.id,
+                          project.audioTracks.master!.fileKey!,
+                          e.target.checked
+                        )}
+                      />
+                      Assigned to active audio
+                    </label>
+                  )}
                 </div>
               );
             })}
             <p className="insp-muted" style={{ marginTop: 4 }}>
               Deleting a source removes only the lyric text. Clips already placed on layers via Sync stay intact.
             </p>
+          </div>
+        )}
+      </Group>
+
+      <Group title="Global lyrics library">
+        {lyricsLibrary.length === 0 ? (
+          <p className="insp-muted compact">Lyrics imported in any project will appear here.</p>
+        ) : (
+          <div className="insp-source-list">
+            {lyricsLibrary.map(source => {
+              const linked = project.lyricSources.some(item => item.id === source.id);
+              return (
+                <div className="insp-source-row" key={source.id}>
+                  <strong title={source.title}>{source.title}</strong>
+                  <button
+                    className={`ls-btn small ${linked ? 'primary' : ''}`}
+                    disabled={linked}
+                    onClick={() => onAttachLyricSource(source.id)}
+                  >
+                    {linked ? 'Linked' : 'Add'}
+                  </button>
+                </div>
+              );
+            })}
           </div>
         )}
       </Group>
