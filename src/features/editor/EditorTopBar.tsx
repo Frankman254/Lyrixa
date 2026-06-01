@@ -1,4 +1,4 @@
-import type { ChangeEvent, RefObject } from 'react';
+import { useRef, type ChangeEvent, type RefObject } from 'react';
 import type { AudioChannel, AudioChannelRole } from '../../core/types/audio';
 import type { SaveStatus } from './useLyrixaProject';
 import { ACCENT_OPTIONS } from '../../shared/theme/useAccentTheme';
@@ -127,9 +127,14 @@ export function EditorTopBar({
   onAccentChange,
   onOpenShortcuts
 }: EditorTopBarProps) {
+  const moreRef = useRef<HTMLDetailsElement>(null);
   const saveTone = SAVE_TONE[saveStatus];
   const masterLabel = masterChannel?.fileName ?? 'No master loaded';
   const masterDuration = masterChannel ? formatDuration(masterChannel.duration) : '—:—';
+  const runMoreAction = (action: () => void) => {
+    moreRef.current?.removeAttribute('open');
+    action();
+  };
 
   return (
     <header className="transport">
@@ -265,22 +270,22 @@ export function EditorTopBar({
         </select>
       </label>
 
-      <details className="tr-more">
+      <details className="tr-more" ref={moreRef}>
         <summary className="tr-btn small">More ▾</summary>
         <div className="tr-more-menu" role="menu">
-          <button className="tr-more-item" onClick={onOpenProjectImportPicker}>
+          <button className="tr-more-item" onClick={() => runMoreAction(onOpenProjectImportPicker)}>
             Import project (.lyrixa.json)
           </button>
-          <button className="tr-more-item" onClick={onExportLyricsBundle}>
+          <button className="tr-more-item" onClick={() => runMoreAction(onExportLyricsBundle)}>
             Export lyrics bundle
           </button>
-          <button className="tr-more-item" onClick={onOpenLyricsBundleImportPicker}>
+          <button className="tr-more-item" onClick={() => runMoreAction(onOpenLyricsBundleImportPicker)}>
             Import lyrics bundle
           </button>
-          <button className="tr-more-item" onClick={onOpenShortcuts}>
+          <button className="tr-more-item" onClick={() => runMoreAction(onOpenShortcuts)}>
             ⌨ Keyboard shortcuts <span className="tr-more-key">Shift+?</span>
           </button>
-          <button className="tr-more-item danger" onClick={onResetProject}>
+          <button className="tr-more-item danger" onClick={() => runMoreAction(onResetProject)}>
             ⚠ Delete project
           </button>
         </div>

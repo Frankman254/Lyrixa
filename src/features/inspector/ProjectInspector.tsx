@@ -79,6 +79,15 @@ export function ProjectInspector({
         </label>
         <div className="insp-button-row">
           <button className="ls-btn small" onClick={onImportLyrics}>Import lyrics</button>
+          {project.activeLyricSourceId && (
+            <button
+              className="ls-btn small"
+              onClick={() => onEditLyricSource(project.activeLyricSourceId!)}
+              title="Edit the active global lyric source without changing placed timeline clips"
+            >
+              Edit active lyrics
+            </button>
+          )}
           <button className="ls-btn small" onClick={onExportProject}>Export project</button>
           <button className="ls-btn small" onClick={onImportProject}>Import project</button>
         </div>
@@ -153,7 +162,7 @@ export function ProjectInspector({
         </label>
       </Group>
 
-      <Group title="Lyrics sources">
+      <Group title="Lyrics sources" open>
         {project.lyricSources.length === 0 ? (
           <p className="insp-muted">No lyrics sources yet. Use Import lyrics above to add one.</p>
         ) : (

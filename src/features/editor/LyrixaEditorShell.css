@@ -6,9 +6,10 @@
    ================================================================ */
 
 .lyrixa-shell {
+  --inspector-width: 360px;
   position: relative;
   display: grid;
-  grid-template-columns: 224px 1fr 360px;
+  grid-template-columns: 224px 1fr var(--inspector-width);
   grid-template-rows: 48px 1fr;
   grid-template-areas:
     "transport transport transport"
@@ -22,20 +23,26 @@
 }
 
 .lyrixa-shell.sidebar-collapsed {
-  grid-template-columns: 44px 1fr 360px;
+  grid-template-columns: 44px 1fr var(--inspector-width);
 }
 
 /* Narrower laptops — tighten the inspector first. */
 @media (max-width: 1366px) {
-  .lyrixa-shell { grid-template-columns: 208px 1fr 320px; }
-  .lyrixa-shell.sidebar-collapsed { grid-template-columns: 44px 1fr 320px; }
+  .lyrixa-shell {
+    --inspector-width: 320px;
+    grid-template-columns: 208px 1fr var(--inspector-width);
+  }
+  .lyrixa-shell.sidebar-collapsed { grid-template-columns: 44px 1fr var(--inspector-width); }
 }
 
 /* Below ~1180px the inspector becomes the bottleneck. Shrink it more and
    tighten the sidebar so the stage keeps a useful width. */
 @media (max-width: 1180px) {
-  .lyrixa-shell { grid-template-columns: 192px 1fr 280px; }
-  .lyrixa-shell.sidebar-collapsed { grid-template-columns: 44px 1fr 280px; }
+  .lyrixa-shell {
+    --inspector-width: 280px;
+    grid-template-columns: 192px 1fr var(--inspector-width);
+  }
+  .lyrixa-shell.sidebar-collapsed { grid-template-columns: 44px 1fr var(--inspector-width); }
 }
 
 /* Compact / split-screen widths — collapse the sidebar and make the
@@ -43,7 +50,8 @@
 @media (max-width: 980px) {
   .lyrixa-shell,
   .lyrixa-shell.sidebar-collapsed {
-    grid-template-columns: 44px 1fr 260px;
+    --inspector-width: 260px;
+    grid-template-columns: 44px 1fr var(--inspector-width);
   }
 }
 
@@ -772,7 +780,9 @@ select option { background: var(--bg-2); color: var(--fg-0); }
 .tr-more-menu {
   position: fixed;
   top: 52px;
-  right: 12px;
+  /* Keep the flyout inside the timeline workspace instead of covering the
+     right inspector. The shell updates this width at compact breakpoints. */
+  right: calc(var(--inspector-width, 360px) + 12px);
   min-width: 240px;
   display: flex;
   flex-direction: column;
