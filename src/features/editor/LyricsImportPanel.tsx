@@ -59,10 +59,12 @@ export function LyricsImportPanel({
   };
 
   return (
-    <div className="lyrics-import-backdrop" onClick={onClose} role="presentation">
+    // Deliberately NOT closable by clicking the backdrop: the panel holds
+    // unsaved lyric text, and a stray click outside would discard it. Only the
+    // explicit ✕ / Cancel buttons close it.
+    <div className="lyrics-import-backdrop" role="presentation">
       <aside
         className="lyrics-import-panel glass-panel"
-        onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-label="Import lyrics"
       >
