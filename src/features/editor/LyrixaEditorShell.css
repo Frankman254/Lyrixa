@@ -1,58 +1,195 @@
 /* ================================================================
-   Lyrixa editor shell — 3-column grid + top transport
-   Layout:
-     transport (48px row, full width)
-     sidebar | stage | inspector
+   Lyrixa editor shell — adaptive layout in three viewport tiers.
+   The shell root carries a `tier-*` class set from useViewportTier
+   (keep its breakpoints — 768 / 1180 — in sync with this file).
+
+   desktop (≥1180px): transport on top, then sidebar | stage | inspector.
+   compact (768–1179px): stage full-width; sidebar + inspector are
+     overlay drawers toggled from the top bar.
+   mobile (<768px): single column + bottom mode nav; sidebar is a
+     drawer, inspector is a bottom sheet (or the stage in style mode).
    ================================================================ */
 
 .lyrixa-shell {
   --inspector-width: 360px;
+  --sidebar-width: 224px;
+  /* Bottom mode-nav height; 0 outside the mobile tier. */
+  --mobile-nav-h: 0px;
   position: relative;
   display: grid;
-  grid-template-columns: 224px 1fr var(--inspector-width);
+  grid-template-columns: var(--sidebar-width) 1fr var(--inspector-width);
   grid-template-rows: 48px 1fr;
   grid-template-areas:
     "transport transport transport"
     "sidebar   main      inspector";
   width: 100vw;
   height: 100vh;
+  height: 100dvh;
   background: var(--bg-0);
   color: var(--fg-1);
   font-family: var(--font-family);
   overflow: hidden;
 }
 
-.lyrixa-shell.sidebar-collapsed {
-  grid-template-columns: 44px 1fr var(--inspector-width);
-}
+.lyrixa-shell.sidebar-collapsed { --sidebar-width: 44px; }
 
-/* Narrower laptops — tighten the inspector first. */
+/* The inspector keeps no grid column when hidden, on overlay tiers, or while
+   it occupies the stage (mobile style mode). The More menu also reads this
+   var to stay clear of the pinned inspector. */
+.lyrixa-shell.inspector-hidden { --inspector-width: 0px; }
+
+/* Narrower desktops — tighten the pinned columns first. */
 @media (max-width: 1366px) {
   .lyrixa-shell {
     --inspector-width: 320px;
-    grid-template-columns: 208px 1fr var(--inspector-width);
+    --sidebar-width: 208px;
   }
-  .lyrixa-shell.sidebar-collapsed { grid-template-columns: 44px 1fr var(--inspector-width); }
+  .lyrixa-shell.sidebar-collapsed { --sidebar-width: 44px; }
+  .lyrixa-shell.inspector-hidden { --inspector-width: 0px; }
 }
 
-/* Below ~1180px the inspector becomes the bottleneck. Shrink it more and
-   tighten the sidebar so the stage keeps a useful width. */
-@media (max-width: 1180px) {
-  .lyrixa-shell {
-    --inspector-width: 280px;
-    grid-template-columns: 192px 1fr var(--inspector-width);
-  }
-  .lyrixa-shell.sidebar-collapsed { grid-template-columns: 44px 1fr var(--inspector-width); }
+/* ── Compact tier: full-width stage, panels overlay ── */
+.lyrixa-shell.tier-compact,
+.lyrixa-shell.tier-mobile {
+  grid-template-columns: 1fr;
+  grid-template-rows: 48px 1fr;
+  grid-template-areas:
+    "transport"
+    "main";
 }
 
-/* Compact / split-screen widths — collapse the sidebar and make the
-   inspector pop-overlay-ish in width. */
-@media (max-width: 980px) {
-  .lyrixa-shell,
-  .lyrixa-shell.sidebar-collapsed {
-    --inspector-width: 260px;
-    grid-template-columns: 44px 1fr var(--inspector-width);
-  }
+/* ── Mobile tier: extra row for the bottom mode nav ── */
+.lyrixa-shell.tier-mobile {
+  --mobile-nav-h: calc(56px + env(safe-area-inset-bottom, 0px));
+  grid-template-rows: 48px 1fr var(--mobile-nav-h);
+  grid-template-areas:
+    "transport"
+    "main"
+    "nav";
+}
+
+/* Sidebar as overlay drawer (compact + mobile; rendered only when open). */
+.tier-compact .ls-sidebar,
+.tier-mobile .ls-sidebar {
+  position: fixed;
+  top: 48px;
+  bottom: var(--mobile-nav-h);
+  left: 0;
+  width: min(280px, 85vw);
+  z-index: 240;
+  border-right: 1px solid var(--border);
+  box-shadow: var(--shadow-pop);
+  animation: ls-drawer-in-left 180ms var(--easing-out);
+}
+
+/* Inspector as right-hand drawer (compact). */
+.tier-compact .inspector-panel {
+  position: fixed;
+  top: 48px;
+  bottom: 0;
+  right: 0;
+  width: min(360px, 90vw);
+  z-index: 240;
+  box-shadow: var(--shadow-pop);
+  animation: ls-drawer-in-right 180ms var(--easing-out);
+}
+
+/* Inspector as bottom sheet (mobile sync/edit). */
+.tier-mobile .inspector-panel {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: auto;
+  bottom: var(--mobile-nav-h);
+  width: auto;
+  height: auto;
+  max-height: 70dvh;
+  z-index: 240;
+  border-left: 0;
+  border-top: 1px solid var(--border);
+  border-radius: var(--r-4) var(--r-4) 0 0;
+  box-shadow: var(--shadow-pop);
+  animation: ls-sheet-in 200ms var(--easing-out);
+}
+
+/* Mobile style mode: the inspector takes over the stage area. */
+.lyrixa-shell.mobile-style .ls-main { display: none; }
+.lyrixa-shell.mobile-style .inspector-panel {
+  position: static;
+  grid-area: main;
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  animation: none;
+}
+
+.ls-drawer-backdrop {
+  position: fixed;
+  inset: 48px 0 0 0;
+  background: oklch(0 0 0 / 0.45);
+  z-index: 230;
+  animation: ls-backdrop-in 160ms var(--easing-out);
+}
+
+@keyframes ls-drawer-in-left {
+  from { transform: translateX(-24px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+@keyframes ls-drawer-in-right {
+  from { transform: translateX(24px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+@keyframes ls-sheet-in {
+  from { transform: translateY(24px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+@keyframes ls-backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* ── Mobile bottom mode nav ── */
+.editor-mode-nav {
+  grid-area: nav;
+  position: relative;
+  /* Above the preview overlay (z 90) so Preview mode can be exited with a tap. */
+  z-index: 95;
+  display: flex;
+  align-items: stretch;
+  background: var(--bg-1);
+  border-top: 1px solid var(--border);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.mode-nav-tab {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  border: 0;
+  background: transparent;
+  color: var(--fg-2);
+  cursor: pointer;
+  transition: color 0.12s var(--easing), background 0.12s var(--easing);
+}
+
+.mode-nav-tab.active {
+  color: var(--accent);
+  background: oklch(from var(--accent) l c h / 0.08);
+}
+
+.mode-nav-icon { font-size: 16px; line-height: 1; }
+
+.mode-nav-label {
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 /* The InspectorPanel sets its own grid-area; the sidebar component sets its
@@ -116,6 +253,37 @@
 @media (min-width: 1280px) {
   .transport-spacer { flex: 1 1 auto; }
 }
+
+/* Compact/mobile bars carry fewer controls — the spacer can always grow. */
+.tier-compact .transport-spacer,
+.tier-mobile .transport-spacer { flex: 1 1 auto; }
+
+/* Compact: mode switcher shows icons only, and the bar drops everything that
+   has a More-menu or mode-switcher equivalent so it fits ~768–1180px. */
+.tier-compact .tr-mode-label { display: none; }
+.tier-compact .tr-mode-tab { padding: 5px 9px; }
+.tier-compact .tr-mode-icon { opacity: 1; }
+.tier-compact .brand-text { display: none; }
+.tier-compact .save-status-label { display: none; }
+.tier-compact .save-status { padding: 0 var(--s-1); }
+.tier-compact .tr-name,
+.tier-compact .tr-name-input { max-width: 130px; }
+.tier-compact .song-chip { max-width: 150px; }
+.tier-compact .song-chip .duration { display: none; }
+.tier-compact .playback-cluster .tr-btn.icon-only { display: none; }
+.tier-compact .time-readout { min-width: 0; }
+.tier-compact .time-readout .total { display: none; }
+
+/* Mobile: minimal transport — brand mark, drawer + playback + inspector + More. */
+.tier-mobile .transport { padding: 0 var(--s-2); }
+.tier-mobile .brand-text { display: none; }
+.tier-mobile .save-status { padding: 0 var(--s-1); }
+.tier-mobile .save-status-label { display: none; }
+.tier-mobile .time-readout {
+  min-width: 0;
+  padding: 0 var(--s-1);
+}
+.tier-mobile .playback-cluster { padding: 0; }
 
 .brand {
   display: flex;
@@ -788,7 +956,9 @@ select option { background: var(--bg-2); color: var(--fg-0); }
   flex-direction: column;
   gap: 2px;
   padding: 6px;
-  background: var(--glass-bg, rgba(20, 22, 30, 0.96));
+  /* Opaque surface — the old --glass-bg (4% white) left the menu unreadable
+     over busy timeline content. */
+  background: var(--bg-1);
   border: 1px solid var(--border);
   border-radius: 10px;
   box-shadow: var(--shadow-panel, 0 16px 40px rgba(0,0,0,0.45));
@@ -817,3 +987,18 @@ select option { background: var(--bg-2); color: var(--fg-0); }
   font-size: 10px;
   color: var(--fg-3, var(--text-muted));
 }
+
+/* Accent picker row inside the More menu (compact/mobile tiers). */
+.tr-more-accent {
+  cursor: default;
+}
+.tr-more-accent select {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  color: var(--fg-1);
+  border-radius: var(--r-2);
+  padding: 4px 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.tr-more-accent select:focus { outline: none; border-color: var(--accent); }

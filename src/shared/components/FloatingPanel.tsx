@@ -33,8 +33,13 @@ interface FloatingPanelProps {
   storageKey: string;
   /** Fallback position when nothing is stored yet. */
   defaultPosition?: Position;
-  /** Fixed pixel width of the panel. */
+  /** Fixed pixel width of the panel (clamped to the viewport). */
   width?: number;
+  /**
+   * `floating` (default) — draggable panel with a persisted position.
+   * `sheet` — docked full-width bottom sheet for small viewports; no drag.
+   */
+  variant?: 'floating' | 'sheet';
   /** Text shown in the drag-handle header. */
   title: string;
   /** Buttons rendered to the left of minimize/close in the header. */
@@ -47,11 +52,13 @@ export function FloatingPanel({
   storageKey,
   defaultPosition,
   width = 320,
+  variant = 'floating',
   title,
   headerActions,
   onClose,
   children
 }: FloatingPanelProps) {
+  const isSheet = variant === 'sheet';
   const fallback: Position = defaultPosition ?? {
     x: window.innerWidth - width - 16,
     y: 16
@@ -70,11 +77,22 @@ export function FloatingPanel({
     posRef.current = pos;
   }, [pos]);
 
+  // Keep the panel inside the viewport when the window shrinks.
+  useEffect(() => {
+    if (isSheet) return;
+    const onResize = () => {
+      setPos(p => clampPos(p, panelRef.current?.offsetWidth ?? width));
+    };
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [isSheet, width]);
+
   // ── Drag logic ────────────────────────────────────────
   const isDragging  = useRef(false);
   const dragOrigin  = useRef({ cx: 0, cy: 0, px: 0, py: 0 });
 
   const onHeaderPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (isSheet) return;
     if (e.button !== 0) return;
     // Don't intercept clicks that originate on a button inside the header.
     // Calling preventDefault on pointerdown suppresses the subsequent click
@@ -115,8 +133,10 @@ export function FloatingPanel({
   return (
     <div
       ref={panelRef}
-      className="floating-panel"
-      style={{ left: pos.x, top: pos.y, width }}
+      className={`floating-panel ${isSheet ? 'sheet' : ''}`}
+      style={isSheet
+        ? undefined
+        : { left: pos.x, top: pos.y, width: Math.min(width, window.innerWidth - 16) }}
     >
       <div
         className="fp-header"

@@ -29,6 +29,8 @@ import { duplicateClipSelection } from '../../core/timeline/duplicateClips';
 import { normalizeLyricsText } from '../../core/lyrics/normalize';
 import { useLyrixaProject } from './useLyrixaProject';
 import { useAccentTheme } from '../../shared/theme/useAccentTheme';
+import { useViewportTier } from '../../shared/layout/useViewportTier';
+import { EditorModeNav } from './EditorModeNav';
 import type { AudioChannelRole, AudioBandMode } from '../../core/types/audio';
 import {
   extractBandPeaksFromBlob,
@@ -114,6 +116,31 @@ export function LyrixaEditorShell() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() =>
     safeGetLocalStorage('lyrixa_sidebar_collapsed') === '1'
   );
+
+  const tier = useViewportTier();
+  const isMobile = tier === 'mobile';
+  const isDesktop = tier === 'desktop';
+  // Desktop: the inspector is a pinned grid column the user can hide (persisted).
+  // Compact/mobile: it's an overlay drawer/sheet that always starts closed.
+  const [inspectorPinned, setInspectorPinnedState] = useState(() =>
+    readStoredBoolean('lyrixa_inspector_visible', true)
+  );
+  const [inspectorDrawerOpen, setInspectorDrawerOpen] = useState(false);
+  const [sidebarDrawerOpen, setSidebarDrawerOpen] = useState(false);
+
+  const setInspectorPinned = useCallback((visible: boolean) => {
+    setInspectorPinnedState(visible);
+    try {
+      window.localStorage.setItem('lyrixa_inspector_visible', visible ? '1' : '0');
+    } catch { /* ignore */ }
+  }, []);
+
+  // Overlay drawers don't survive a tier change — a drawer left open while
+  // resizing back to desktop would otherwise float over the 3-column grid.
+  useEffect(() => {
+    setInspectorDrawerOpen(false);
+    setSidebarDrawerOpen(false);
+  }, [tier]);
 
   const { accent, setAccent } = useAccentTheme();
   const { matches: matchesShortcut } = useShortcuts();
@@ -554,9 +581,45 @@ export function LyrixaEditorShell() {
     setMiniPreviewVisible(true);
   }, [miniPreviewVisible, previewOpen, setMiniPreviewVisible]);
 
+  // Shared by the top-bar switcher and the mobile bottom nav. Preview mode also
+  // opens the large preview so the user sees their work without other panels
+  // stealing focus.
+  const handleEditorModeChange = useCallback((next: EditorMode) => {
+    setMode(next);
+    if (next === 'preview') setPreviewOpen(true);
+    if (next !== 'preview') setPreviewOpen(false);
+    // Style mode is inspector-centric: on the compact tier open its drawer
+    // right away (mobile renders it on the stage instead).
+    if (next === 'style' && tier === 'compact') setInspectorDrawerOpen(true);
+  }, [setMode, tier]);
+
+  // Mobile style mode promotes the inspector to the stage area — styling on a
+  // phone needs the full width, and the timeline isn't useful mid-styling.
+  const mobileStyleMode = isMobile && mode === 'style';
+  const inspectorShown = isPreview
+    ? false
+    : mobileStyleMode
+      ? true
+      : isDesktop
+        ? inspectorPinned
+        : inspectorDrawerOpen;
+  const inspectorIsOverlay = !isDesktop && !mobileStyleMode;
+  const handleToggleInspector = useCallback(() => {
+    if (isDesktop) setInspectorPinned(!inspectorPinned);
+    else setInspectorDrawerOpen(open => !open);
+  }, [isDesktop, inspectorPinned, setInspectorPinned]);
+
+  const sidebarIsDrawer = !isDesktop;
+  const backdropShown = sidebarIsDrawer
+    ? sidebarDrawerOpen || (inspectorIsOverlay && inspectorShown)
+    : false;
+
   const shellClass = [
     'lyrixa-shell',
-    sidebarCollapsed ? 'sidebar-collapsed' : ''
+    `tier-${tier}`,
+    sidebarCollapsed && isDesktop ? 'sidebar-collapsed' : '',
+    !inspectorShown || inspectorIsOverlay || mobileStyleMode ? 'inspector-hidden' : '',
+    mobileStyleMode ? 'mobile-style' : ''
   ].filter(Boolean).join(' ');
   const importCreatesNewSource = project.lyricMode === 'multi' && project.lyricSources.length > 0;
 
@@ -564,13 +627,7 @@ export function LyrixaEditorShell() {
     <div className={shellClass}>
       <EditorTopBar
         editorMode={mode}
-        onEditorModeChange={(next: EditorMode) => {
-          setMode(next);
-          // Preview mode also opens the large preview so the user sees their
-          // work without other panels stealing focus.
-          if (next === 'preview') setPreviewOpen(true);
-          if (next !== 'preview' && previewOpen) setPreviewOpen(false);
-        }}
+        onEditorModeChange={handleEditorModeChange}
         projectName={project.name}
         nameEditing={nameEditing}
         draftName={nameEditing ? draftName : project.name}
@@ -581,6 +638,11 @@ export function LyrixaEditorShell() {
         saveStatus={saveStatus}
         syncMode={syncMode}
         canSync={canSync}
+        tier={tier}
+        inspectorVisible={inspectorShown}
+        showInspectorToggle={!isPreview && !mobileStyleMode}
+        onToggleInspector={handleToggleInspector}
+        onToggleSidebar={() => setSidebarDrawerOpen(open => !open)}
         previewOpen={previewOpen}
         transparentPreviewOpen={transparentPreviewOpen}
         miniPreviewVisible={miniPreviewVisible}
@@ -635,28 +697,45 @@ export function LyrixaEditorShell() {
         />
       )}
 
-      <LayersSidebar
-        layers={project.layers}
-        clips={project.clips}
-        selectedLayerId={selectedLayerId}
-        collapsed={sidebarCollapsed}
-        waveformEnabled={waveformEnabled}
-        previewVisible={showMini || previewOpen}
-        onSelectLayer={(id) => {
-          setSelectedLayerId(id);
-          setSelectedClipId(null);
-        }}
-        onLayersChange={setLayers}
-        onToggleWaveform={toggleWaveformEnabled}
-        onTogglePreview={togglePreviewWindow}
-        onToggleCollapsed={() => {
-          setSidebarCollapsed(v => {
-            const next = !v;
-            try { window.localStorage.setItem('lyrixa_sidebar_collapsed', next ? '1' : '0'); } catch { /* ignore */ }
-            return next;
-          });
-        }}
-      />
+      {(!sidebarIsDrawer || sidebarDrawerOpen) && (
+        <LayersSidebar
+          layers={project.layers}
+          clips={project.clips}
+          selectedLayerId={selectedLayerId}
+          collapsed={sidebarIsDrawer ? false : sidebarCollapsed}
+          waveformEnabled={waveformEnabled}
+          previewVisible={showMini || previewOpen}
+          onSelectLayer={(id) => {
+            setSelectedLayerId(id);
+            setSelectedClipId(null);
+          }}
+          onLayersChange={setLayers}
+          onToggleWaveform={toggleWaveformEnabled}
+          onTogglePreview={togglePreviewWindow}
+          onToggleCollapsed={() => {
+            if (sidebarIsDrawer) {
+              setSidebarDrawerOpen(false);
+              return;
+            }
+            setSidebarCollapsed(v => {
+              const next = !v;
+              try { window.localStorage.setItem('lyrixa_sidebar_collapsed', next ? '1' : '0'); } catch { /* ignore */ }
+              return next;
+            });
+          }}
+        />
+      )}
+
+      {backdropShown && (
+        <div
+          className="ls-drawer-backdrop"
+          onClick={() => {
+            setSidebarDrawerOpen(false);
+            setInspectorDrawerOpen(false);
+          }}
+          aria-hidden
+        />
+      )}
 
       <main className="ls-main">
         <section className="ls-stage">
@@ -723,7 +802,7 @@ export function LyrixaEditorShell() {
         </section>
       </main>
 
-      {!isPreview && <InspectorPanel
+      {inspectorShown && <InspectorPanel
         project={project}
         selectedClipId={selectedClipId}
         selectedLayerId={selectedLayerId}
@@ -759,7 +838,12 @@ export function LyrixaEditorShell() {
         onAttachLyricSource={attachLyricSourceFromLibrary}
         onSetLyricSourceAudioAssignment={setLyricSourceAudioAssignment}
         editorMode={mode}
+        onClose={inspectorIsOverlay ? () => setInspectorDrawerOpen(false) : undefined}
       />}
+
+      {isMobile && (
+        <EditorModeNav mode={mode} onModeChange={handleEditorModeChange} />
+      )}
 
       {importOpen && (
         <LyricsImportPanel
@@ -799,6 +883,7 @@ export function LyrixaEditorShell() {
           onSourceChange={handleSyncSourceChange}
           onRestart={handleSyncRestart}
           onClose={handleToggleSync}
+          docked={isMobile}
         />
       )}
 

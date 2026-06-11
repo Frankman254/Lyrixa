@@ -157,6 +157,10 @@
   gap: 2px;
 }
 
+/* Docked bottom sheet (mobile): keep the tap button in reach by giving the
+   line list less room. */
+.floating-panel.sheet .tapsync-list { max-height: 26dvh; }
+
 .tapsync-empty {
   padding: 18px 12px;
   font-size: 13px;

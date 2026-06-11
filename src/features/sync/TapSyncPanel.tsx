@@ -36,6 +36,8 @@ interface TapSyncPanelProps {
   onSourceChange: (sourceId: string | null) => void;
   onRestart: () => void;
   onClose: () => void;
+  /** Mobile tier: dock the panel as a full-width bottom sheet. */
+  docked?: boolean;
 }
 
 function formatTime(seconds: number): string {
@@ -79,7 +81,8 @@ export function TapSyncPanel({
   onLayerChange,
   onSourceChange,
   onRestart,
-  onClose
+  onClose,
+  docked = false
 }: TapSyncPanelProps) {
   const publishedBySourceId = useMemo(
     () => new Map(
@@ -130,13 +133,18 @@ export function TapSyncPanel({
     <FloatingPanel
       storageKey={STORAGE_KEY}
       width={width}
+      variant={docked ? 'sheet' : 'floating'}
       defaultPosition={{ x: 24, y: 96 }}
       title={`◉ Sync · ${layerName}`}
       headerActions={
         <>
           <span className="tapsync-progress">{Math.min(cursorIndex, total)} / {total}</span>
-          <button className="fp-btn" onClick={() => setWidthClamped(width - 80)} title="Narrower">-</button>
-          <button className="fp-btn" onClick={() => setWidthClamped(width + 80)} title="Wider">+</button>
+          {!docked && (
+            <>
+              <button className="fp-btn" onClick={() => setWidthClamped(width - 80)} title="Narrower">-</button>
+              <button className="fp-btn" onClick={() => setWidthClamped(width + 80)} title="Wider">+</button>
+            </>
+          )}
         </>
       }
       onClose={onClose}

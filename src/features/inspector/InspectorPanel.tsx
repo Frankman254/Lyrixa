@@ -64,6 +64,8 @@ interface InspectorPanelProps {
   onSetLyricSourceAudioAssignment: (id: string, fileKey: string, assigned: boolean) => void;
   /** Which editor mode the workspace is in. Filters which tabs are visible. */
   editorMode?: EditorMode;
+  /** When set, renders a close button — used when the panel shows as a drawer/sheet. */
+  onClose?: () => void;
 }
 
 /**
@@ -103,7 +105,8 @@ export function InspectorPanel({
   onEditLyricSource,
   onAttachLyricSource,
   onSetLyricSourceAudioAssignment,
-  editorMode = 'edit'
+  editorMode = 'edit',
+  onClose
 }: InspectorPanelProps) {
   const selectedClip = useMemo(
     () => selectedClipId ? project.clips.find(clip => clip.id === selectedClipId) ?? null : null,
@@ -273,8 +276,21 @@ export function InspectorPanel({
   return (
     <aside className="inspector-panel">
       <header className="insp-header">
-        <strong>Inspector</strong>
-        <span>{scope === 'clip' ? 'Clip override' : scope === 'layer' ? selectedLayer?.name : 'Project defaults'}</span>
+        <div className="insp-header-text">
+          <strong>Inspector</strong>
+          <span>{scope === 'clip' ? 'Clip override' : scope === 'layer' ? selectedLayer?.name : 'Project defaults'}</span>
+        </div>
+        {onClose && (
+          <button
+            type="button"
+            className="insp-close"
+            onClick={onClose}
+            title="Close inspector"
+            aria-label="Close inspector"
+          >
+            ✕
+          </button>
+        )}
       </header>
       <nav className="insp-tabs" aria-label="Inspector tabs">
         {visibleTabs.map(value => (

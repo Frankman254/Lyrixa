@@ -139,6 +139,11 @@
   opacity: 1;
 }
 
+/* Touch devices have no hover — keep layer actions always visible. */
+@media (hover: none) {
+  .ls-layer-actions { opacity: 1; }
+}
+
 .ls-layer-actions button {
   width: 22px;
   height: 22px;

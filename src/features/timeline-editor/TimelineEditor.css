@@ -835,3 +835,37 @@
   pointer-events: none;
   box-shadow: 0 0 6px rgba(255, 91, 110, 0.7);
 }
+
+/* ================================================================
+   Mobile (<768px) — keep in sync with useViewportTier breakpoints.
+   Narrower track headers and tighter chrome so the lanes keep a
+   useful width on phones.
+   ================================================================ */
+@media (max-width: 767px) {
+  .tl-topbar {
+    padding: 6px 10px;
+    gap: 8px;
+  }
+
+  .tl-topbar-left h2 { display: none; }
+
+  /* One scrollable row instead of wrapping into a tall stack. */
+  .tl-selection-bar {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    gap: 8px;
+    padding: 6px 10px;
+  }
+  .tl-selection-bar::-webkit-scrollbar { display: none; }
+  .tl-selection-bar .tl-btn { white-space: nowrap; flex-shrink: 0; }
+  .tl-sel-group { flex-shrink: 0; }
+
+  .tl-track-header {
+    width: 116px;
+    min-width: 116px;
+    padding: 8px 8px;
+  }
+
+  .tl-track-header.variant-thin { padding: 4px 8px; }
+}

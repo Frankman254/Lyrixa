@@ -13,7 +13,15 @@
       "Bash(unzip -q -o \"/Users/frankman254/Desktop/Personal-Projects/Lyrixa/Lyrixa \\(1\\).zip\" -d /tmp/lyrixa-design)",
       "Read(//tmp/**)",
       "Read(//private/tmp/lyrixa-design/screenshots/**)",
-      "Read(//private/tmp/lyrixa-design/**)"
+      "Read(//private/tmp/lyrixa-design/**)",
+      "Bash(grep -v -E \"\\\\.\\(ts\\)$\")",
+      "Skill(run)",
+      "Bash(node *)",
+      "Bash(python3 *)",
+      "Bash(pkill -f \"vite\")",
+      "Bash(git -C /Users/frankman254/Desktop/Personal-Projects/Lyrixa worktree remove --force /tmp/lyrixa-head)",
+      "Bash(npm uninstall *)",
+      "Bash(git -C /Users/frankman254/Desktop/Personal-Projects/Lyrixa status --short)"
     ]
   }
 }

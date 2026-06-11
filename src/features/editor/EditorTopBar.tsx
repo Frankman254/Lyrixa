@@ -3,30 +3,11 @@ import type { AudioChannel, AudioChannelRole } from '../../core/types/audio';
 import type { SaveStatus } from './useLyrixaProject';
 import { ACCENT_OPTIONS } from '../../shared/theme/useAccentTheme';
 import type { AccentName } from '../../shared/theme/useAccentTheme';
+import type { ViewportTier } from '../../shared/layout/useViewportTier';
 import { EditorHiddenFileInputs } from './EditorHiddenFileInputs';
 import { EditorPlaybackControls } from './EditorPlaybackControls';
+import { EDITOR_MODES, MODE_ICONS, MODE_LABELS, MODE_TITLES } from './useEditorMode';
 import type { EditorMode } from './useEditorMode';
-
-const MODE_LABELS: Record<EditorMode, string> = {
-  sync: 'Sync',
-  edit: 'Edit',
-  style: 'Style',
-  preview: 'Preview'
-};
-
-const MODE_ICONS: Record<EditorMode, string> = {
-  sync: '◉',
-  edit: '✎',
-  style: '◐',
-  preview: '▶'
-};
-
-const MODE_TITLES: Record<EditorMode, string> = {
-  sync: 'Sync mode — hold Space to time lyric paragraphs',
-  edit: 'Edit mode — drag, resize and nudge clips on the timeline',
-  style: 'Style mode — pick presets and tweak text/animation/FX',
-  preview: 'Preview mode — clean playback view'
-};
 
 const SAVE_LABEL: Record<SaveStatus, string> = {
   idle: 'Saved',
@@ -53,6 +34,14 @@ interface EditorTopBarProps {
   canSync: boolean;
   editorMode: EditorMode;
   onEditorModeChange: (next: EditorMode) => void;
+  /** Viewport tier — drives which clusters render in the bar vs. the More menu. */
+  tier: ViewportTier;
+  inspectorVisible: boolean;
+  /** False while the inspector is already occupying the stage (mobile style mode) or in preview mode. */
+  showInspectorToggle: boolean;
+  onToggleInspector: () => void;
+  /** Opens the layers drawer on compact/mobile tiers. */
+  onToggleSidebar: () => void;
   previewOpen: boolean;
   transparentPreviewOpen: boolean;
   miniPreviewVisible: boolean;
@@ -97,6 +86,11 @@ export function EditorTopBar({
   canSync,
   editorMode,
   onEditorModeChange,
+  tier,
+  inspectorVisible,
+  showInspectorToggle,
+  onToggleInspector,
+  onToggleSidebar,
   previewOpen,
   transparentPreviewOpen,
   miniPreviewVisible,
@@ -131,6 +125,8 @@ export function EditorTopBar({
   const saveTone = SAVE_TONE[saveStatus];
   const masterLabel = masterChannel?.fileName ?? 'No master loaded';
   const masterDuration = masterChannel ? formatDuration(masterChannel.duration) : '—:—';
+  const isMobile = tier === 'mobile';
+  const isDesktop = tier === 'desktop';
   const runMoreAction = (action: () => void) => {
     moreRef.current?.removeAttribute('open');
     action();
@@ -143,136 +139,198 @@ export function EditorTopBar({
         <span className="brand-text">Lyrixa</span>
       </div>
 
-      <div className="tr-divider" />
-
-      {nameEditing ? (
-        <input
-          className="tr-name-input"
-          autoFocus
-          value={draftName}
-          onChange={(e) => onDraftNameChange(e.target.value)}
-          onBlur={onCommitName}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') onCommitName();
-            else if (e.key === 'Escape') onCancelNameEdit();
-          }}
-        />
-      ) : (
-        <button className="tr-name" onClick={onStartNameEdit} title="Rename project">
-          {projectName}
+      {!isDesktop && (
+        <button
+          className="tr-btn icon-only"
+          onClick={onToggleSidebar}
+          title="Layers"
+          aria-label="Toggle layers drawer"
+        >
+          ☰
         </button>
       )}
 
-      <div className="tr-divider" />
+      {!isMobile && (
+        <>
+          <div className="tr-divider" />
 
-      <button
-        className="song-chip"
-        onClick={onOpenMasterPicker}
-        title={masterChannel ? `Master track: ${masterChannel.fileName}` : 'Load the main audio file'}
-      >
-        <span className="song-chip-icon" aria-hidden>♪</span>
-        <span className="title">{masterLabel}</span>
-        <span className="duration mono">{masterDuration}</span>
-      </button>
+          {nameEditing ? (
+            <input
+              className="tr-name-input"
+              autoFocus
+              value={draftName}
+              onChange={(e) => onDraftNameChange(e.target.value)}
+              onBlur={onCommitName}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') onCommitName();
+                else if (e.key === 'Escape') onCancelNameEdit();
+              }}
+            />
+          ) : (
+            <button className="tr-name" onClick={onStartNameEdit} title="Rename project">
+              {projectName}
+            </button>
+          )}
 
-      <div className="tr-divider" />
+          <div className="tr-divider" />
 
-      <div className="tr-mode-switcher" role="tablist" aria-label="Editor mode">
-        {(['sync', 'edit', 'style', 'preview'] as const).map(m => (
           <button
-            key={m}
-            type="button"
-            role="tab"
-            aria-selected={editorMode === m}
-            className={`tr-mode-tab ${editorMode === m ? 'active' : ''}`}
-            onClick={() => onEditorModeChange(m)}
-            title={MODE_TITLES[m]}
+            className="song-chip"
+            onClick={onOpenMasterPicker}
+            title={masterChannel ? `Master track: ${masterChannel.fileName}` : 'Load the main audio file'}
           >
-            <span className="tr-mode-icon" aria-hidden>{MODE_ICONS[m]}</span>
-            <span className="tr-mode-label">{MODE_LABELS[m]}</span>
+            <span className="song-chip-icon" aria-hidden>♪</span>
+            <span className="title">{masterLabel}</span>
+            <span className="duration mono">{masterDuration}</span>
           </button>
-        ))}
-      </div>
 
-      <div className="tr-divider" />
+          <div className="tr-divider" />
+
+          <div className="tr-mode-switcher" role="tablist" aria-label="Editor mode">
+            {EDITOR_MODES.map(m => (
+              <button
+                key={m}
+                type="button"
+                role="tab"
+                aria-selected={editorMode === m}
+                className={`tr-mode-tab ${editorMode === m ? 'active' : ''}`}
+                onClick={() => onEditorModeChange(m)}
+                title={MODE_TITLES[m]}
+              >
+                <span className="tr-mode-icon" aria-hidden>{MODE_ICONS[m]}</span>
+                <span className="tr-mode-label">{MODE_LABELS[m]}</span>
+              </button>
+            ))}
+          </div>
+
+          <div className="tr-divider" />
+        </>
+      )}
 
       <EditorPlaybackControls
         isPlaying={isPlaying}
         currentTime={currentTime}
         duration={duration}
         enabled={!!masterChannel?.objectUrl}
+        compact={isMobile}
         onPlayToggle={onPlayToggle}
         onSeek={onSeek}
       />
 
-      <div className="tr-divider" />
+      {/* Compact/mobile reach these through the mode switcher / More menu. */}
+      {isDesktop && (
+        <>
+          <div className="tr-divider" />
 
-      <button className="tr-btn" onClick={onOpenLyricsImport} title="Paste or import lyrics text">
-        Import lyrics
-      </button>
-      <button
-        className={`tr-btn primary ${syncMode ? 'active' : ''}`}
-        onClick={onToggleSync}
-        disabled={!canSync && !syncMode}
-        title={syncMode
-          ? 'Exit tap-to-sync mode'
-          : canSync
-          ? 'Tap-to-sync: play the song and press Space on each line'
-          : 'Load audio and import lyrics first'}
-      >
-        {syncMode ? '✕ Exit sync' : '⊙ Sync lyrics'}
-      </button>
+          <button className="tr-btn" onClick={onOpenLyricsImport} title="Paste or import lyrics text">
+            Import lyrics
+          </button>
+          <button
+            className={`tr-btn primary ${syncMode ? 'active' : ''}`}
+            onClick={onToggleSync}
+            disabled={!canSync && !syncMode}
+            title={syncMode
+              ? 'Exit tap-to-sync mode'
+              : canSync
+              ? 'Tap-to-sync: play the song and press Space on each line'
+              : 'Load audio and import lyrics first'}
+          >
+            {syncMode ? '✕ Exit sync' : '⊙ Sync lyrics'}
+          </button>
+        </>
+      )}
 
       <div className="transport-spacer" />
 
       <div className={`save-status ${saveTone}`}>
         <span className="dot" />
-        {SAVE_LABEL[saveStatus]}
+        <span className="save-status-label">{SAVE_LABEL[saveStatus]}</span>
       </div>
 
-      <div className="tr-group">
-        <button className="tr-btn small" onClick={onExportProject} title="Export the full Lyrixa project">
-          Export
-        </button>
-      </div>
+      {isDesktop && (
+        <>
+          <div className="tr-group">
+            <button className="tr-btn small" onClick={onExportProject} title="Export the full Lyrixa project">
+              Export
+            </button>
+          </div>
 
-      <div className="tr-group">
+          <div className="tr-group">
+            <button
+              className={`tr-btn small ${previewOpen ? 'active' : ''}`}
+              onClick={onTogglePreview}
+              title="Toggle the large preview overlay"
+            >
+              {previewOpen ? '✕ Preview' : '◉ Preview'}
+            </button>
+            <button
+              className={`tr-btn small ${transparentPreviewOpen ? 'active' : ''}`}
+              onClick={onOpenOverlay}
+              title="Open the transparent overlay preview"
+            >
+              ⧉
+            </button>
+            {!miniPreviewVisible && !previewOpen && (
+              <button className="tr-btn small" onClick={onShowMiniPreview} title="Show the floating preview">
+                ◳
+              </button>
+            )}
+          </div>
+
+          <label className="accent-picker" title="Accent color">
+            <span aria-hidden style={{ background: 'var(--accent)' }} />
+            <select
+              value={accent}
+              onChange={(e) => onAccentChange(e.target.value as AccentName)}
+            >
+              {ACCENT_OPTIONS.map(o => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </label>
+        </>
+      )}
+
+      {showInspectorToggle && (
         <button
-          className={`tr-btn small ${previewOpen ? 'active' : ''}`}
-          onClick={onTogglePreview}
-          title="Toggle the large preview overlay"
+          className={`tr-btn icon-only ${inspectorVisible ? 'active' : ''}`}
+          onClick={onToggleInspector}
+          title={inspectorVisible ? 'Hide inspector' : 'Show inspector'}
+          aria-label={inspectorVisible ? 'Hide inspector' : 'Show inspector'}
+          aria-pressed={inspectorVisible}
         >
-          {previewOpen ? '✕ Preview' : '◉ Preview'}
+          ◨
         </button>
-        <button
-          className={`tr-btn small ${transparentPreviewOpen ? 'active' : ''}`}
-          onClick={onOpenOverlay}
-          title="Open the transparent overlay preview"
-        >
-          ⧉
-        </button>
-        {!miniPreviewVisible && !previewOpen && (
-          <button className="tr-btn small" onClick={onShowMiniPreview} title="Show the floating preview">
-            ◳
-          </button>
-        )}
-      </div>
-
-      <label className="accent-picker" title="Accent color">
-        <span aria-hidden style={{ background: 'var(--accent)' }} />
-        <select
-          value={accent}
-          onChange={(e) => onAccentChange(e.target.value as AccentName)}
-        >
-          {ACCENT_OPTIONS.map(o => (
-            <option key={o.value} value={o.value}>{o.label}</option>
-          ))}
-        </select>
-      </label>
+      )}
 
       <details className="tr-more" ref={moreRef}>
         <summary className="tr-btn small">More ▾</summary>
         <div className="tr-more-menu" role="menu">
+          {isMobile && (
+            <button className="tr-more-item" onClick={() => runMoreAction(onOpenMasterPicker)}>
+              ♪ Load audio <span className="tr-more-key">{masterChannel ? masterDuration : ''}</span>
+            </button>
+          )}
+          {!isDesktop && (
+            <button className="tr-more-item" onClick={() => runMoreAction(onOpenLyricsImport)}>
+              Import lyrics
+            </button>
+          )}
+          {!isDesktop && (
+            <>
+              <button className="tr-more-item" onClick={() => runMoreAction(onExportProject)}>
+                Export project
+              </button>
+              <button className="tr-more-item" onClick={() => runMoreAction(onOpenOverlay)}>
+                ⧉ Transparent overlay
+              </button>
+              {!miniPreviewVisible && !previewOpen && (
+                <button className="tr-more-item" onClick={() => runMoreAction(onShowMiniPreview)}>
+                  ◳ Floating preview
+                </button>
+              )}
+            </>
+          )}
           <button className="tr-more-item" onClick={() => runMoreAction(onOpenProjectImportPicker)}>
             Import project (.lyrixa.json)
           </button>
@@ -282,6 +340,19 @@ export function EditorTopBar({
           <button className="tr-more-item" onClick={() => runMoreAction(onOpenLyricsBundleImportPicker)}>
             Import lyrics bundle
           </button>
+          {!isDesktop && (
+            <label className="tr-more-item tr-more-accent" title="Accent color">
+              <span>Accent color</span>
+              <select
+                value={accent}
+                onChange={(e) => onAccentChange(e.target.value as AccentName)}
+              >
+                {ACCENT_OPTIONS.map(o => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            </label>
+          )}
           <button className="tr-more-item" onClick={() => runMoreAction(onOpenShortcuts)}>
             ⌨ Keyboard shortcuts <span className="tr-more-key">Shift+?</span>
           </button>

@@ -93,8 +93,34 @@ body {
 
 #root {
   width: 100vw;
+  /* dvh tracks the visible viewport on mobile browsers (URL bar collapse);
+     the vh line is the fallback for older engines. */
   height: 100vh;
+  height: 100dvh;
   position: relative;
+}
+
+/* ── Touch ergonomics ─────────────────────────────────────────────
+   On coarse pointers (fingers) the 22–30px desktop targets are too small.
+   Bump interactive controls toward the ~40px recommendation. */
+@media (pointer: coarse) {
+  .tr-btn,
+  .play-btn,
+  .ls-btn,
+  .tapsync-btn,
+  .form-control,
+  .form-select,
+  .form-input {
+    min-height: 38px;
+  }
+  .tr-btn.icon-only { width: 38px; }
+  .insp-tabs button { padding: 10px 12px; }
+  .ls-layer-actions button,
+  .ls-mini-btn,
+  .fp-btn {
+    width: 32px;
+    height: 32px;
+  }
 }
 
 button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }

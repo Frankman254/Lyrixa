@@ -12,9 +12,31 @@
 }
 
 .insp-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s-2);
   padding: var(--s-3) var(--s-3);
   border-bottom: 1px solid var(--border);
   background: var(--bg-1);
+}
+
+.insp-header-text { min-width: 0; }
+
+.insp-close {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-2);
+  color: var(--fg-2);
+  font-size: 12px;
+}
+
+.insp-close:hover {
+  background: var(--bg-3);
+  color: var(--fg-0);
 }
 
 .insp-header strong {
@@ -71,6 +93,7 @@
 
 .insp-body {
   flex: 1;
+  min-height: 0; /* let the body shrink inside max-height sheets */
   overflow: auto;
   padding: var(--s-3);
 }
