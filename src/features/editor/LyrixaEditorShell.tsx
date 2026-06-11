@@ -64,6 +64,7 @@ export function LyrixaEditorShell() {
     setLyricSourceTitle,
     setLyricSourceStartTime,
     removeLyricSource,
+    recoverLyricsFromLayer,
     attachLyricSourceFromLibrary,
     setLyricSourceAudioAssignment,
     setClips,
@@ -581,17 +582,28 @@ export function LyrixaEditorShell() {
     setMiniPreviewVisible(true);
   }, [miniPreviewVisible, previewOpen, setMiniPreviewVisible]);
 
+  const toggleLargePreview = useCallback(() => {
+    setPreviewOpen(open => {
+      const next = !open;
+      if (next) setMiniPreviewVisible(false);
+      return next;
+    });
+  }, [setMiniPreviewVisible]);
+
   // Shared by the top-bar switcher and the mobile bottom nav. Preview mode also
   // opens the large preview so the user sees their work without other panels
   // stealing focus.
   const handleEditorModeChange = useCallback((next: EditorMode) => {
     setMode(next);
-    if (next === 'preview') setPreviewOpen(true);
+    if (next === 'preview') {
+      setMiniPreviewVisible(false);
+      setPreviewOpen(true);
+    }
     if (next !== 'preview') setPreviewOpen(false);
     // Style mode is inspector-centric: on the compact tier open its drawer
     // right away (mobile renders it on the stage instead).
     if (next === 'style' && tier === 'compact') setInspectorDrawerOpen(true);
-  }, [setMode, tier]);
+  }, [setMiniPreviewVisible, setMode, tier]);
 
   // Mobile style mode promotes the inspector to the stage area — styling on a
   // phone needs the full width, and the timeline isn't useful mid-styling.
@@ -666,9 +678,13 @@ export function LyrixaEditorShell() {
         onToggleSync={handleToggleSync}
         onExportProject={handleExportProject}
         onExportLyricsBundle={handleExportLyricsBundle}
-        onTogglePreview={() => setPreviewOpen(p => !p)}
-        onOpenOverlay={() => setTransparentPreviewOpen(true)}
+        onTogglePreview={toggleLargePreview}
+        onOpenOverlay={() => {
+          setMiniPreviewVisible(false);
+          setTransparentPreviewOpen(true);
+        }}
         onShowMiniPreview={() => setMiniPreviewVisible(true)}
+        onHideMiniPreview={() => setMiniPreviewVisible(false)}
         onPlayToggle={handlePlayToggle}
         onSeek={handleSeek}
         onResetProject={handleHardResetProject}
@@ -775,7 +791,10 @@ export function LyrixaEditorShell() {
               progressIndicatorConfig={project.progressIndicatorConfig}
               width={floatingPreviewWidth}
               onSizeChange={handleFloatingPreviewSize}
-              onExpand={() => setPreviewOpen(true)}
+              onExpand={() => {
+                setMiniPreviewVisible(false);
+                setPreviewOpen(true);
+              }}
               onClose={() => setMiniPreviewVisible(false)}
             />
           )}
@@ -834,6 +853,25 @@ export function LyrixaEditorShell() {
         onSetLyricSourceStartTime={setLyricSourceStartTime}
         onJumpToLyricSource={handleJumpToLyricSource}
         onRemoveLyricSource={removeLyricSource}
+        onRecoverLyricsFromLayer={(layerId) => {
+          const layer = project.layers.find(item => item.id === layerId);
+          const layerName = layer?.name ?? 'selected layer';
+          const count = project.clips.filter(clip =>
+            clip.layerId === layerId &&
+            !clip.muted &&
+            clip.text.trim().length > 0
+          ).length;
+          if (count === 0) {
+            window.alert(`No hay clips visibles con texto en ${layerName}.`);
+            return;
+          }
+          const ok = window.confirm(
+            `Esto reconstruirá una nueva fuente global usando ${count} clips visibles de "${layerName}", ordenados por tiempo. No cambiará tus tiempos ni borrará clips. ¿Continuar?`
+          );
+          if (!ok) return;
+          recoverLyricsFromLayer(layerId);
+          window.alert(`Lyrics recuperada desde "${layerName}". Ahora queda como fuente activa.`);
+        }}
         onEditLyricSource={(sourceId) => openLyricsImport(sourceId)}
         onAttachLyricSource={attachLyricSourceFromLibrary}
         onSetLyricSourceAudioAssignment={setLyricSourceAudioAssignment}

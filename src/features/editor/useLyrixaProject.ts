@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { LyricProjectMode, LyrixaProject } from '../../core/types/project';
+import type { LyricProjectMode, LyricSource, LyrixaProject } from '../../core/types/project';
 import type { LyricClip } from '../../core/types/clip';
 import type { LyricLayer } from '../../core/types/layer';
 import type {
@@ -17,6 +17,7 @@ import type {
 import { buildAudioFileKey } from '../../core/types/audio';
 import { normalizeLyricsText } from '../../core/lyrics/normalize';
 import type { NormalizeLyricsOptions } from '../../core/lyrics/normalize';
+import { createTapSyncSourceId, orderedLayerClips } from '../../core/timeline/tapSync';
 import {
   clearLyrixaLocalStorage,
   createEmptyProject,
@@ -97,6 +98,11 @@ export interface UseLyrixaProjectResult {
   /** Delete a lyric source from the library. Existing clips on layers stay
    *  put — they remain independent timing artifacts you may still want. */
   removeLyricSource: (id: string) => void;
+  /**
+   * Rescue action for accidental lyric-source imports: rebuilds a new global
+   * lyric source from the visible clips already timed on one layer.
+   */
+  recoverLyricsFromLayer: (layerId: string) => void;
   attachLyricSourceFromLibrary: (id: string) => void;
   setLyricSourceAudioAssignment: (id: string, fileKey: string, assigned: boolean) => void;
 
@@ -609,6 +615,60 @@ export function useLyrixaProject({
     });
   }, []);
 
+  const recoverLyricsFromLayer = useCallback((layerId: string) => {
+    setProject(p => {
+      const layer = p.layers.find(item => item.id === layerId);
+      if (!layer) return p;
+
+      const sourceClips = orderedLayerClips(p.clips, layerId)
+        .filter(clip => !clip.muted && clip.text.trim().length > 0);
+      if (sourceClips.length === 0) return p;
+
+      const rawText = sourceClips.map(clip => clip.text.trim()).join('\n');
+      const { lines } = normalizeLyricsText(rawText);
+      if (lines.length === 0) return p;
+
+      const now = new Date().toISOString();
+      const sourceId = createLyricSourceId();
+      const order = Math.max(-1, ...p.lyricSources.map(source => source.order)) + 1;
+      const recoveredSource: LyricSource = {
+        id: sourceId,
+        title: `Recovered from ${layer.name}`,
+        rawText,
+        normalizedLines: lines,
+        startTime: Math.max(0, sourceClips[0]?.startTime ?? 0),
+        audioFileKeys: p.audioTracks.master?.fileKey ? [p.audioTracks.master.fileKey] : [],
+        order,
+        createdAt: now,
+        updatedAt: now
+      };
+      const clipPatches = new Map<string, Partial<LyricClip>>();
+      sourceClips.forEach((clip, index) => {
+        const text = lines[index] ?? clip.text.trim();
+        clipPatches.set(clip.id, {
+          sourceIndex: index,
+          sourceId: createTapSyncSourceId(index, text, sourceId),
+          lyricSourceId: sourceId,
+          createdBy: clip.createdBy ?? 'tap-sync'
+        });
+      });
+
+      const lyricSources = [...p.lyricSources, recoveredSource].sort((a, b) => a.order - b.order);
+      return {
+        ...p,
+        lyricMode: lyricSources.length > 1 ? 'multi' : p.lyricMode,
+        lyricSources,
+        activeLyricSourceId: sourceId,
+        rawLyricsText: lyricSources.map(source => source.rawText.trim()).filter(Boolean).join('\n\n'),
+        normalizedLyrics: lyricSources.flatMap(source => source.normalizedLines),
+        clips: p.clips.map(clip => {
+          const patch = clipPatches.get(clip.id);
+          return patch ? { ...clip, ...patch } : clip;
+        })
+      };
+    });
+  }, []);
+
   const attachLyricSourceFromLibrary = useCallback((id: string) => {
     const source = lyricsLibrary.find(item => item.id === id);
     if (!source) return;
@@ -790,6 +850,7 @@ export function useLyrixaProject({
     setLyricSourceTitle,
     setLyricSourceStartTime,
     removeLyricSource,
+    recoverLyricsFromLayer,
     attachLyricSourceFromLibrary,
     setLyricSourceAudioAssignment,
     setClips,

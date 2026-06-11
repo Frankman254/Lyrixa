@@ -59,6 +59,7 @@ interface InspectorPanelProps {
   onSetLyricSourceStartTime: (id: string, startTime: number) => void;
   onJumpToLyricSource: (id: string) => void;
   onRemoveLyricSource: (id: string) => void;
+  onRecoverLyricsFromLayer: (layerId: string) => void;
   onEditLyricSource: (id: string) => void;
   onAttachLyricSource: (id: string) => void;
   onSetLyricSourceAudioAssignment: (id: string, fileKey: string, assigned: boolean) => void;
@@ -102,6 +103,7 @@ export function InspectorPanel({
   onSetLyricSourceStartTime,
   onJumpToLyricSource,
   onRemoveLyricSource,
+  onRecoverLyricsFromLayer,
   onEditLyricSource,
   onAttachLyricSource,
   onSetLyricSourceAudioAssignment,
@@ -119,6 +121,16 @@ export function InspectorPanel({
   const selectedClipLayer = selectedClip
     ? project.layers.find(layer => layer.id === selectedClip.layerId) ?? null
     : selectedLayer;
+  const selectedLayerClipCount = useMemo(
+    () => selectedLayer
+      ? project.clips.filter(clip =>
+        clip.layerId === selectedLayer.id &&
+        !clip.muted &&
+        clip.text.trim().length > 0
+      ).length
+      : 0,
+    [project.clips, selectedLayer]
+  );
   const [tab, setTab] = useState<InspectorTab>('project');
 
   // Each mode reveals a different subset of tabs so the inspector isn't an
@@ -328,6 +340,10 @@ export function InspectorPanel({
             onSetLyricSourceStartTime={onSetLyricSourceStartTime}
             onJumpToLyricSource={onJumpToLyricSource}
             onRemoveLyricSource={onRemoveLyricSource}
+            selectedLayerId={selectedLayer?.id ?? null}
+            selectedLayerName={selectedLayer?.name ?? null}
+            selectedLayerClipCount={selectedLayerClipCount}
+            onRecoverLyricsFromLayer={onRecoverLyricsFromLayer}
             onEditLyricSource={onEditLyricSource}
             onAttachLyricSource={onAttachLyricSource}
             onSetLyricSourceAudioAssignment={onSetLyricSourceAudioAssignment}

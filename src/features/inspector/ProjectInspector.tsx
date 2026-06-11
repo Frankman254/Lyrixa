@@ -23,6 +23,10 @@ interface ProjectInspectorProps {
   onSetLyricSourceStartTime: (id: string, startTime: number) => void;
   onJumpToLyricSource: (id: string) => void;
   onRemoveLyricSource: (id: string) => void;
+  selectedLayerId: string | null;
+  selectedLayerName: string | null;
+  selectedLayerClipCount: number;
+  onRecoverLyricsFromLayer: (layerId: string) => void;
   onEditLyricSource: (id: string) => void;
   onAttachLyricSource: (id: string) => void;
   onSetLyricSourceAudioAssignment: (id: string, fileKey: string, assigned: boolean) => void;
@@ -47,6 +51,10 @@ export function ProjectInspector({
   onSetLyricSourceStartTime,
   onJumpToLyricSource,
   onRemoveLyricSource,
+  selectedLayerId,
+  selectedLayerName,
+  selectedLayerClipCount,
+  onRecoverLyricsFromLayer,
   onEditLyricSource,
   onAttachLyricSource,
   onSetLyricSourceAudioAssignment
@@ -163,6 +171,22 @@ export function ProjectInspector({
       </Group>
 
       <Group title="Lyrics sources" open>
+        <div className="insp-button-row">
+          <button
+            type="button"
+            className="ls-btn small"
+            disabled={!selectedLayerId || selectedLayerClipCount === 0}
+            onClick={() => selectedLayerId && onRecoverLyricsFromLayer(selectedLayerId)}
+            title="Rebuild a new global lyric source from the visible clips already timed on the selected layer"
+          >
+            Recover from selected layer
+          </button>
+        </div>
+        <p className="insp-muted compact">
+          {selectedLayerId
+            ? `Selected layer: ${selectedLayerName ?? selectedLayerId} · ${selectedLayerClipCount} timed text clips`
+            : 'Select a layer to recover lyric text from its timed clips.'}
+        </p>
         {project.lyricSources.length === 0 ? (
           <p className="insp-muted">No lyrics sources yet. Use Import lyrics above to add one.</p>
         ) : (

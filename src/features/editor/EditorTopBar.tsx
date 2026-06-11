@@ -66,6 +66,7 @@ interface EditorTopBarProps {
   onTogglePreview: () => void;
   onOpenOverlay: () => void;
   onShowMiniPreview: () => void;
+  onHideMiniPreview: () => void;
   onPlayToggle: () => void;
   onSeek: (time: number) => void;
   onResetProject: () => void;
@@ -115,6 +116,7 @@ export function EditorTopBar({
   onTogglePreview,
   onOpenOverlay,
   onShowMiniPreview,
+  onHideMiniPreview,
   onPlayToggle,
   onSeek,
   onResetProject,
@@ -270,11 +272,15 @@ export function EditorTopBar({
             >
               ⧉
             </button>
-            {!miniPreviewVisible && !previewOpen && (
+            {miniPreviewVisible && !previewOpen ? (
+              <button className="tr-btn small active" onClick={onHideMiniPreview} title="Hide the floating preview">
+                ✕ ◳
+              </button>
+            ) : !previewOpen ? (
               <button className="tr-btn small" onClick={onShowMiniPreview} title="Show the floating preview">
                 ◳
               </button>
-            )}
+            ) : null}
           </div>
 
           <label className="accent-picker" title="Accent color">
@@ -324,7 +330,11 @@ export function EditorTopBar({
               <button className="tr-more-item" onClick={() => runMoreAction(onOpenOverlay)}>
                 ⧉ Transparent overlay
               </button>
-              {!miniPreviewVisible && !previewOpen && (
+              {miniPreviewVisible && !previewOpen ? (
+                <button className="tr-more-item" onClick={() => runMoreAction(onHideMiniPreview)}>
+                  ✕ Hide floating preview
+                </button>
+              ) : !previewOpen && (
                 <button className="tr-more-item" onClick={() => runMoreAction(onShowMiniPreview)}>
                   ◳ Floating preview
                 </button>
