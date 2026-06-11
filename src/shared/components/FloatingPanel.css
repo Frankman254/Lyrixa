@@ -33,7 +33,7 @@
   /* Sits above the mobile mode nav when the shell provides its height. */
   bottom: var(--mobile-nav-h, 0px);
   width: auto;
-  max-height: min(78dvh, calc(100dvh - var(--transport-h, 48px) - var(--mobile-nav-h, 0px)));
+  max-height: min(58dvh, calc(100dvh - var(--transport-h, 48px) - var(--mobile-nav-h, 0px)));
   border-radius: 12px 12px 0 0;
   border-left: 0;
   border-right: 0;
@@ -177,7 +177,7 @@
 
 @media (max-width: 767px) {
   .floating-panel.sheet {
-    max-height: min(82dvh, calc(100dvh - var(--transport-h, 48px) - var(--mobile-nav-h, 0px)));
+    max-height: min(62dvh, calc(100dvh - var(--transport-h, 48px) - var(--mobile-nav-h, 0px)));
   }
 
   .fp-header {

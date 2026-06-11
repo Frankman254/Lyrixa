@@ -95,6 +95,7 @@ export function TapSyncPanel({
 
   const [width, setWidth] = useState(readStoredWidth);
   const activeRef = useRef<HTMLButtonElement>(null);
+  const activePointerIdRef = useRef<number | null>(null);
 
   const setWidthClamped = (next: number) => {
     const w = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, next));
@@ -117,15 +118,35 @@ export function TapSyncPanel({
     [clips, layerId, lines]
   );
   const pendingCount = Math.max(0, total - doneCount);
+  const seekRelative = (delta: number) => {
+    onSeek(Math.max(0, playbackTime + delta));
+  };
 
   // Pointer-based hold so mouse users get the same press-and-release timing.
   const handlePointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
     if (done || total === 0) return;
+    if (activePointerIdRef.current !== null) return;
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
     e.preventDefault();
+    e.currentTarget.blur();
+    activePointerIdRef.current = e.pointerId;
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch { /* Some browsers can reject capture after cancellation. */ }
     sync.holdStart();
   };
   const handlePointerUp = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (activePointerIdRef.current !== e.pointerId) return;
     e.preventDefault();
+    activePointerIdRef.current = null;
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch { /* ignore */ }
+    sync.holdEnd();
+  };
+  const handlePointerCancel = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (activePointerIdRef.current !== e.pointerId) return;
+    activePointerIdRef.current = null;
     sync.holdEnd();
   };
 
@@ -156,11 +177,12 @@ export function TapSyncPanel({
           className={`tapsync-tap ${done ? 'is-done' : ''} ${isHolding ? 'is-holding' : ''}`}
           onPointerDown={handlePointerDown}
           onPointerUp={handlePointerUp}
-          onPointerLeave={handlePointerUp}
-          onPointerCancel={handlePointerUp}
+          onPointerCancel={handlePointerCancel}
+          onLostPointerCapture={handlePointerCancel}
+          onContextMenu={(e) => e.preventDefault()}
           disabled={done || total === 0}
         >
-          <span className="tapsync-tap-key">{isHolding ? 'Release to end line' : 'Hold Space'}</span>
+          <span className="tapsync-tap-key">{isHolding ? 'Release to end line' : 'Hold touch / Space'}</span>
           <span className="tapsync-tap-line">
             {done ? '✓ All lines timed' : current ? current.text || '— (blank line) —' : 'Import lyrics first'}
           </span>
@@ -240,6 +262,16 @@ export function TapSyncPanel({
           >
             Clear layer
           </button>
+        </div>
+
+        <div className="tapsync-seek-strip" aria-label="Quick seek controls">
+          <button className="tapsync-btn small" onClick={() => seekRelative(-5)} title="Go back 5 seconds">-5s</button>
+          <button className="tapsync-btn small" onClick={() => seekRelative(-3)} title="Go back 3 seconds">-3s</button>
+          <button className="tapsync-btn small" onClick={() => seekRelative(-1)} title="Go back 1 second">-1s</button>
+          <span className="tapsync-seek-time mono">{formatTime(playbackTime)}</span>
+          <button className="tapsync-btn small" onClick={() => seekRelative(1)} title="Go forward 1 second">+1s</button>
+          <button className="tapsync-btn small" onClick={() => seekRelative(3)} title="Go forward 3 seconds">+3s</button>
+          <button className="tapsync-btn small" onClick={() => seekRelative(5)} title="Go forward 5 seconds">+5s</button>
         </div>
 
         <div className="tapsync-speed" title="Slow the song down so fast lines are easier to time precisely">
