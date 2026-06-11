@@ -921,7 +921,7 @@ export function LyrixaEditorShell() {
           onSourceChange={handleSyncSourceChange}
           onRestart={handleSyncRestart}
           onClose={handleToggleSync}
-          docked={isMobile}
+          docked={!isDesktop}
         />
       )}
 

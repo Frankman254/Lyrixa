@@ -136,6 +136,8 @@ export function TapSyncPanel({
       variant={docked ? 'sheet' : 'floating'}
       defaultPosition={{ x: 24, y: 96 }}
       title={`◉ Sync · ${layerName}`}
+      allowFullscreen
+      edgeTabLabel="Sync"
       headerActions={
         <>
           <span className="tapsync-progress">{Math.min(cursorIndex, total)} / {total}</span>

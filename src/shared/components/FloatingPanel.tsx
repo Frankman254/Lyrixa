@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import './FloatingPanel.css';
 
@@ -21,10 +21,17 @@ function readStoredPos(key: string): Position | null {
   return null;
 }
 
-function clampPos(p: Position, panelW: number): Position {
+/**
+ * The editor's transport bar (48px, z-index 300) paints ABOVE floating panels.
+ * A panel that slides under it gets its header — and its close button —
+ * covered by the bar, which then swallows every click. Keep panels below it.
+ */
+const TOP_INSET = 56;
+
+function clampPos(p: Position, panelW: number, panelH = 40): Position {
   return {
     x: Math.max(0, Math.min(window.innerWidth  - panelW, p.x)),
-    y: Math.max(0, Math.min(window.innerHeight - 40,     p.y))
+    y: Math.max(TOP_INSET, Math.min(window.innerHeight - panelH, p.y))
   };
 }
 
@@ -44,6 +51,10 @@ interface FloatingPanelProps {
   title: string;
   /** Buttons rendered to the left of minimize/close in the header. */
   headerActions?: ReactNode;
+  /** Enables a viewport-filling mode for small devices and focused work. */
+  allowFullscreen?: boolean;
+  /** Short label used when the panel is minimized into an edge tab. */
+  edgeTabLabel?: string;
   onClose: () => void;
   children: ReactNode;
 }
@@ -55,13 +66,15 @@ export function FloatingPanel({
   variant = 'floating',
   title,
   headerActions,
+  allowFullscreen = false,
+  edgeTabLabel,
   onClose,
   children
 }: FloatingPanelProps) {
   const isSheet = variant === 'sheet';
   const fallback: Position = defaultPosition ?? {
     x: window.innerWidth - width - 16,
-    y: 16
+    y: TOP_INSET + 8
   };
 
   const [pos, setPos] = useState<Position>(() => {
@@ -70,6 +83,7 @@ export function FloatingPanel({
   });
 
   const [minimized, setMinimized] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
 
   const panelRef    = useRef<HTMLDivElement>(null);
   const posRef      = useRef<Position>(pos);
@@ -77,22 +91,39 @@ export function FloatingPanel({
     posRef.current = pos;
   }, [pos]);
 
-  // Keep the panel inside the viewport when the window shrinks.
+  const clampToCurrentViewport = useCallback(() => {
+    if (isSheet || fullscreen) return;
+    setPos(p => clampPos(
+      p,
+      panelRef.current?.offsetWidth ?? width,
+      panelRef.current?.offsetHeight ?? 40
+    ));
+  }, [fullscreen, isSheet, width]);
+
+  // Keep the panel inside the viewport when the window shrinks or rotates.
   useEffect(() => {
-    if (isSheet) return;
+    if (isSheet || fullscreen) return;
     const onResize = () => {
-      setPos(p => clampPos(p, panelRef.current?.offsetWidth ?? width));
+      clampToCurrentViewport();
     };
     window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
-  }, [isSheet, width]);
+    window.addEventListener('orientationchange', onResize);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      window.removeEventListener('orientationchange', onResize);
+    };
+  }, [clampToCurrentViewport, fullscreen, isSheet, width]);
+
+  useLayoutEffect(() => {
+    clampToCurrentViewport();
+  }, [clampToCurrentViewport]);
 
   // ── Drag logic ────────────────────────────────────────
   const isDragging  = useRef(false);
   const dragOrigin  = useRef({ cx: 0, cy: 0, px: 0, py: 0 });
 
   const onHeaderPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (isSheet) return;
+    if (isSheet || fullscreen) return;
     if (e.button !== 0) return;
     // Don't intercept clicks that originate on a button inside the header.
     // Calling preventDefault on pointerdown suppresses the subsequent click
@@ -115,10 +146,11 @@ export function FloatingPanel({
     const { cx, cy, px, py } = dragOrigin.current;
     const panelW = panelRef.current?.offsetWidth  ?? width;
     const panelH = panelRef.current?.offsetHeight ?? 40;
-    const next: Position = {
-      x: Math.max(0, Math.min(window.innerWidth  - panelW, px + e.clientX - cx)),
-      y: Math.max(0, Math.min(window.innerHeight - panelH, py + e.clientY - cy))
-    };
+    const next = clampPos(
+      { x: px + e.clientX - cx, y: py + e.clientY - cy },
+      panelW,
+      panelH
+    );
     posRef.current = next;
     setPos(next);
   };
@@ -130,11 +162,25 @@ export function FloatingPanel({
     localStorage.setItem(storageKey, JSON.stringify(posRef.current));
   };
 
+  if (minimized) {
+    return (
+      <button
+        type="button"
+        className={`fp-edge-tab ${isSheet ? 'sheet' : ''}`}
+        onClick={() => setMinimized(false)}
+        title={`Restore ${title}`}
+        aria-label={`Restore ${title}`}
+      >
+        <span>{edgeTabLabel ?? title}</span>
+      </button>
+    );
+  }
+
   return (
     <div
       ref={panelRef}
-      className={`floating-panel ${isSheet ? 'sheet' : ''}`}
-      style={isSheet
+      className={`floating-panel ${isSheet ? 'sheet' : ''} ${fullscreen ? 'fullscreen' : ''}`}
+      style={isSheet || fullscreen
         ? undefined
         : { left: pos.x, top: pos.y, width: Math.min(width, window.innerWidth - 16) }}
     >
@@ -148,12 +194,22 @@ export function FloatingPanel({
         <span className="fp-title">{title}</span>
         <div className="fp-header-actions">
           {headerActions}
+          {allowFullscreen && (
+            <button
+              className="fp-btn"
+              onClick={() => setFullscreen(current => !current)}
+              title={fullscreen ? 'Exit full screen' : 'Full screen'}
+              aria-label={fullscreen ? 'Exit full screen' : 'Full screen'}
+            >
+              {fullscreen ? '⤡' : '⤢'}
+            </button>
+          )}
           <button
             className="fp-btn"
             onClick={() => setMinimized(m => !m)}
-            title={minimized ? 'Restore' : 'Minimize'}
+            title="Hide to edge"
           >
-            {minimized ? '▲' : '▼'}
+            ◂
           </button>
           <button className="fp-btn" onClick={onClose} title="Close">
             ✕

@@ -160,6 +160,8 @@
 /* Docked bottom sheet (mobile): keep the tap button in reach by giving the
    line list less room. */
 .floating-panel.sheet .tapsync-list { max-height: 26dvh; }
+.floating-panel.fullscreen .tapsync-list { max-height: none; flex: 1 1 auto; }
+.floating-panel.fullscreen .tapsync-body { min-height: 100%; }
 
 .tapsync-empty {
   padding: 18px 12px;
@@ -228,3 +230,84 @@
 }
 
 .mono { font-family: var(--font-mono, monospace); }
+
+@media (max-width: 1179px) {
+  .tapsync-body {
+    padding: 0;
+    min-height: 0;
+  }
+
+  .tapsync-tap {
+    margin-bottom: 8px;
+    padding: 14px 12px;
+    border-radius: 10px;
+  }
+
+  .tapsync-tap-line {
+    font-size: clamp(15px, 4.2vw, 19px);
+  }
+
+  .tapsync-layer {
+    grid-template-columns: 1fr;
+    gap: 4px;
+    margin-bottom: 8px;
+  }
+
+  .tapsync-layer select {
+    min-height: 38px;
+  }
+
+  .tapsync-status {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    padding: 7px 8px;
+  }
+
+  .tapsync-controls {
+    gap: 5px;
+    padding-bottom: 8px;
+  }
+
+  .tapsync-btn {
+    min-height: 36px;
+  }
+
+  .tapsync-speed {
+    padding: 8px 0;
+  }
+}
+
+@media (max-width: 767px) {
+  .tapsync-status {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tapsync-controls {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tapsync-clock,
+  .tapsync-nudge {
+    justify-content: center;
+  }
+
+  .tapsync-nudge {
+    grid-column: span 2;
+  }
+
+  .tapsync-speed {
+    flex-wrap: wrap;
+  }
+
+  .tapsync-list {
+    max-height: 24dvh;
+  }
+
+  .floating-panel.fullscreen .tapsync-list {
+    max-height: 42dvh;
+  }
+
+  .tapsync-hint {
+    display: none;
+  }
+}

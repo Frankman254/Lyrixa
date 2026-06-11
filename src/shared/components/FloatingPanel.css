@@ -12,6 +12,19 @@
   pointer-events: auto;
 }
 
+.floating-panel.fullscreen {
+  left: 0;
+  right: 0;
+  top: var(--transport-h, 48px);
+  bottom: var(--mobile-nav-h, 0px);
+  width: auto;
+  max-height: none;
+  border-radius: 0;
+  border-left: 0;
+  border-right: 0;
+  z-index: 260;
+}
+
 /* ── Sheet variant — docked to the bottom on small viewports ── */
 .floating-panel.sheet {
   left: 0;
@@ -20,12 +33,19 @@
   /* Sits above the mobile mode nav when the shell provides its height. */
   bottom: var(--mobile-nav-h, 0px);
   width: auto;
-  max-height: 75dvh;
+  max-height: min(78dvh, calc(100dvh - var(--transport-h, 48px) - var(--mobile-nav-h, 0px)));
   border-radius: 12px 12px 0 0;
   border-left: 0;
   border-right: 0;
   border-bottom: 0;
   z-index: 245;
+}
+
+.floating-panel.sheet.fullscreen {
+  top: var(--transport-h, 48px);
+  max-height: none;
+  border-radius: 0;
+  z-index: 260;
 }
 
 .floating-panel.sheet .fp-header {
@@ -39,8 +59,16 @@
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
+.floating-panel.fullscreen .fp-body {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
 /* ── Header / drag handle ──────────────────────────────── */
 .fp-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -63,11 +91,16 @@
   text-transform: uppercase;
   color: #8a91a8;
   pointer-events: none; /* label shouldn't intercept drag */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .fp-header-actions {
   display: flex;
   gap: 4px;
+  flex: none;
 }
 
 .fp-btn {
@@ -104,4 +137,55 @@
   flex: 1;
   position: relative;
   overflow: hidden;
+}
+
+.fp-edge-tab {
+  position: fixed;
+  right: max(0px, env(safe-area-inset-right, 0px));
+  top: 48%;
+  z-index: 270;
+  min-width: 34px;
+  max-width: min(46px, 12vw);
+  padding: 10px 7px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-right: 0;
+  border-radius: 10px 0 0 10px;
+  background: rgba(8, 10, 16, 0.96);
+  color: var(--text-main, #f5f7ff);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.fp-edge-tab span {
+  display: block;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.fp-edge-tab.sheet {
+  top: auto;
+  bottom: calc(var(--mobile-nav-h, 0px) + 16px + env(safe-area-inset-bottom, 0px));
+}
+
+@media (max-width: 767px) {
+  .floating-panel.sheet {
+    max-height: min(82dvh, calc(100dvh - var(--transport-h, 48px) - var(--mobile-nav-h, 0px)));
+  }
+
+  .fp-header {
+    padding: 8px 10px;
+  }
+
+  .fp-btn {
+    width: 30px;
+    height: 28px;
+  }
 }

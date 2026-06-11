@@ -21,7 +21,8 @@
       "Bash(pkill -f \"vite\")",
       "Bash(git -C /Users/frankman254/Desktop/Personal-Projects/Lyrixa worktree remove --force /tmp/lyrixa-head)",
       "Bash(npm uninstall *)",
-      "Bash(git -C /Users/frankman254/Desktop/Personal-Projects/Lyrixa status --short)"
+      "Bash(git -C /Users/frankman254/Desktop/Personal-Projects/Lyrixa status --short)",
+      "Bash(pkill -f vite)"
     ]
   }
 }

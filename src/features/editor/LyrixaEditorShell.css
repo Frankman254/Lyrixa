@@ -13,12 +13,13 @@
 .lyrixa-shell {
   --inspector-width: 360px;
   --sidebar-width: 224px;
+  --transport-h: 48px;
   /* Bottom mode-nav height; 0 outside the mobile tier. */
   --mobile-nav-h: 0px;
   position: relative;
   display: grid;
   grid-template-columns: var(--sidebar-width) 1fr var(--inspector-width);
-  grid-template-rows: 48px 1fr;
+  grid-template-rows: var(--transport-h) 1fr;
   grid-template-areas:
     "transport transport transport"
     "sidebar   main      inspector";
@@ -52,7 +53,7 @@
 .lyrixa-shell.tier-compact,
 .lyrixa-shell.tier-mobile {
   grid-template-columns: 1fr;
-  grid-template-rows: 48px 1fr;
+  grid-template-rows: var(--transport-h) 1fr;
   grid-template-areas:
     "transport"
     "main";
@@ -61,7 +62,7 @@
 /* ── Mobile tier: extra row for the bottom mode nav ── */
 .lyrixa-shell.tier-mobile {
   --mobile-nav-h: calc(56px + env(safe-area-inset-bottom, 0px));
-  grid-template-rows: 48px 1fr var(--mobile-nav-h);
+  grid-template-rows: var(--transport-h) 1fr var(--mobile-nav-h);
   grid-template-areas:
     "transport"
     "main"
@@ -72,7 +73,7 @@
 .tier-compact .ls-sidebar,
 .tier-mobile .ls-sidebar {
   position: fixed;
-  top: 48px;
+  top: var(--transport-h);
   bottom: var(--mobile-nav-h);
   left: 0;
   width: min(280px, 85vw);
@@ -85,7 +86,7 @@
 /* Inspector as right-hand drawer (compact). */
 .tier-compact .inspector-panel {
   position: fixed;
-  top: 48px;
+  top: var(--transport-h);
   bottom: 0;
   right: 0;
   width: min(360px, 90vw);
@@ -676,7 +677,7 @@ select option { background: var(--bg-2); color: var(--fg-0); }
    ================================================================ */
 .ls-reload-banner {
   position: absolute;
-  top: 48px;
+  top: var(--transport-h);
   left: 0;
   right: 0;
   display: flex;
