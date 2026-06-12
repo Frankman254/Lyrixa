@@ -111,6 +111,20 @@ export const SHORTCUT_DEFINITIONS: ShortcutDefinition[] = [
 
   // ── General ───────────────────────────────────────────────────
   {
+    id: 'project.undo',
+    label: 'Undo',
+    description: 'Revert the last project change (clips, lyrics, layers, styles).',
+    group: 'General',
+    default: { key: 'z', ctrlOrMeta: true }
+  },
+  {
+    id: 'project.redo',
+    label: 'Redo',
+    description: 'Re-apply a change reverted with Undo.',
+    group: 'General',
+    default: { key: 'z', ctrlOrMeta: true, shift: true }
+  },
+  {
     id: 'shortcuts.open',
     label: 'Open shortcuts panel',
     group: 'General',

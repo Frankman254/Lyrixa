@@ -42,6 +42,10 @@ interface EditorTopBarProps {
   onToggleInspector: () => void;
   /** Opens the layers drawer on compact/mobile tiers. */
   onToggleSidebar: () => void;
+  onUndo: () => void;
+  onRedo: () => void;
+  canUndo: boolean;
+  canRedo: boolean;
   previewOpen: boolean;
   transparentPreviewOpen: boolean;
   miniPreviewVisible: boolean;
@@ -92,6 +96,10 @@ export function EditorTopBar({
   showInspectorToggle,
   onToggleInspector,
   onToggleSidebar,
+  onUndo,
+  onRedo,
+  canUndo,
+  canRedo,
   previewOpen,
   transparentPreviewOpen,
   miniPreviewVisible,
@@ -218,6 +226,27 @@ export function EditorTopBar({
         onPlayToggle={onPlayToggle}
         onSeek={onSeek}
       />
+
+      <div className="tr-group" role="group" aria-label="History">
+        <button
+          className="tr-btn icon-only"
+          onClick={onUndo}
+          disabled={!canUndo}
+          title="Undo (Ctrl/⌘+Z)"
+          aria-label="Undo"
+        >
+          ↶
+        </button>
+        <button
+          className="tr-btn icon-only"
+          onClick={onRedo}
+          disabled={!canRedo}
+          title="Redo (Ctrl/⌘+Shift+Z)"
+          aria-label="Redo"
+        >
+          ↷
+        </button>
+      </div>
 
       {/* Compact/mobile reach these through the mode switcher / More menu. */}
       {isDesktop && (

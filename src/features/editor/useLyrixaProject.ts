@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { SetStateAction } from 'react';
 import type { LyricProjectMode, LyricSource, LyrixaProject } from '../../core/types/project';
 import type { LyricClip } from '../../core/types/clip';
 import type { LyricLayer } from '../../core/types/layer';
@@ -35,7 +36,7 @@ import {
   shouldPersistAudioBlob,
   type StoredAudio
 } from './audioBlobStorage';
-import { loadLyricsLibrary, upsertLyricsLibrary } from './lyricsLibraryStorage';
+import { archiveLyricsBackup, loadLyricsLibrary, upsertLyricsLibrary } from './lyricsLibraryStorage';
 import {
   extractPeaksFromBlob,
   shouldExtractRealPeaks
@@ -46,6 +47,13 @@ import {
 } from '../assets/textureAssetStorage';
 
 const AUTOSAVE_DEBOUNCE_MS = 400;
+
+/** Max undo steps kept in memory. Snapshots exclude audio bytes (those live in
+ *  IndexedDB and are referenced by key), so entries are cheap. */
+const HISTORY_LIMIT = 50;
+/** Changes arriving within this window collapse into one undo step, so a clip
+ *  drag or slider scrub doesn't flood the history with micro-updates. */
+const HISTORY_COALESCE_MS = 800;
 
 export type SaveStatus = 'idle' | 'pending' | 'saved';
 export type ClipUpdate = LyricClip[] | ((previous: LyricClip[]) => LyricClip[]);
@@ -118,6 +126,13 @@ export interface UseLyrixaProjectResult {
   setMasterDuration: (seconds: number) => void;
   importProject: (next: LyrixaProject) => void;
 
+  /** Revert the last recorded project change. Audio tracks and the playhead
+   *  are preserved so undo never breaks playback. */
+  undo: () => void;
+  redo: () => void;
+  canUndo: boolean;
+  canRedo: boolean;
+
   resetProject: () => Promise<void>;
   hardResetProject: () => Promise<void>;
 }
@@ -132,7 +147,7 @@ export function useLyrixaProject({
   waveformAnalysisEnabled = true
 }: UseLyrixaProjectOptions = {}): UseLyrixaProjectResult {
   const [hydrated] = useState(() => loadProject());
-  const [project, setProject] = useState<LyrixaProject>(hydrated.project);
+  const [project, setProjectState] = useState<LyrixaProject>(hydrated.project);
   const [audioNeedsReload, setAudioNeedsReload] = useState(false);
   const [audioLibrary, setAudioLibrary] = useState<AudioLibraryAsset[]>([]);
   const [lyricsLibrary, setLyricsLibrary] = useState(() => loadLyricsLibrary());
@@ -171,6 +186,84 @@ export function useLyrixaProject({
     projectRef.current = project;
   }, [project]);
 
+  // ── Undo / redo ───────────────────────────────────────────────
+  // History lives OUTSIDE the React state updater: StrictMode double-invokes
+  // updaters in dev, which would push duplicate snapshots. All mutations go
+  // through `setProject` below, which resolves `next` against projectRef
+  // synchronously so same-tick mutations compose correctly.
+  const historyRef = useRef<{
+    past: LyrixaProject[];
+    future: LyrixaProject[];
+    lastPushAt: number;
+  }>({ past: [], future: [], lastPushAt: 0 });
+  // Bumped whenever the stacks change so canUndo/canRedo re-render.
+  const [, setHistoryVersion] = useState(0);
+
+  const setProject = useCallback((
+    action: SetStateAction<LyrixaProject>,
+    options?: {
+      /** Pass false for non-semantic updates (playhead, audio blob wiring)
+       *  that should never become undo steps. */
+      record?: boolean;
+    }
+  ) => {
+    const prev = projectRef.current;
+    const next = typeof action === 'function' ? action(prev) : action;
+    if (next === prev) return;
+    if (options?.record !== false) {
+      const h = historyRef.current;
+      const now = Date.now();
+      if (h.past.length === 0 || now - h.lastPushAt > HISTORY_COALESCE_MS) {
+        h.past.push(prev);
+        if (h.past.length > HISTORY_LIMIT) h.past.shift();
+      }
+      h.lastPushAt = now;
+      h.future = [];
+      setHistoryVersion(v => v + 1);
+    }
+    projectRef.current = next;
+    setProjectState(next);
+  }, []);
+
+  /** Restore a snapshot, keeping live audio wiring and the playhead: undoing a
+   *  lyric mistake must never unload the song or jump playback. */
+  const restoreSnapshot = useCallback((snapshot: LyrixaProject) => {
+    const current = projectRef.current;
+    const restored: LyrixaProject = {
+      ...snapshot,
+      audioTracks: current.audioTracks,
+      currentTime: current.currentTime
+    };
+    projectRef.current = restored;
+    setProjectState(restored);
+  }, []);
+
+  const undo = useCallback(() => {
+    const h = historyRef.current;
+    const snapshot = h.past.pop();
+    if (!snapshot) return;
+    h.future.push(projectRef.current);
+    h.lastPushAt = 0; // the next change starts a fresh undo step
+    restoreSnapshot(snapshot);
+    setHistoryVersion(v => v + 1);
+  }, [restoreSnapshot]);
+
+  const redo = useCallback(() => {
+    const h = historyRef.current;
+    const snapshot = h.future.pop();
+    if (!snapshot) return;
+    h.past.push(projectRef.current);
+    if (h.past.length > HISTORY_LIMIT) h.past.shift();
+    h.lastPushAt = 0;
+    restoreSnapshot(snapshot);
+    setHistoryVersion(v => v + 1);
+  }, [restoreSnapshot]);
+
+  const clearHistory = useCallback(() => {
+    historyRef.current = { past: [], future: [], lastPushAt: 0 };
+    setHistoryVersion(v => v + 1);
+  }, []);
+
   // Track latest objectUrls so we can revoke them on unmount.
   const objectUrlsRef = useRef<{ master: string | null }>({ master: null });
   const textureObjectUrlsRef = useRef<Set<string>>(new Set());
@@ -199,7 +292,7 @@ export function useLyrixaProject({
         if (cancelled) return;
         restored.set(id, asset ? URL.createObjectURL(asset.blob) : null);
       }
-      setProject(p => applyRestoredTextureUrls(p, restored));
+      setProject(p => applyRestoredTextureUrls(p, restored), { record: false });
     };
     void restore();
     return () => { cancelled = true; };
@@ -243,7 +336,7 @@ export function useLyrixaProject({
           ...p,
           audioTracks: { ...p.audioTracks, [role]: updated }
         };
-      });
+      }, { record: false });
       void refreshAudioLibrary();
       // Re-extract peaks if missing, unless performance mode forbids audio decoding.
       if (waveformAnalysisEnabledRef.current && (!channel.waveformPeaks || channel.waveformPeaks.length === 0)) {
@@ -324,7 +417,7 @@ export function useLyrixaProject({
           ...p,
           audioTracks: { ...p.audioTracks, [role]: next }
         };
-      });
+      }, { record: false });
     },
     []
   );
@@ -403,7 +496,7 @@ export function useLyrixaProject({
           asset.fileKey === fileKey ? { ...asset, duration } : asset
         )
       };
-    });
+    }, { record: false });
 
     if ((options.persistAudio ?? true) && shouldPersistAudioBlob(file, duration)) {
       try {
@@ -447,7 +540,7 @@ export function useLyrixaProject({
         audioTracks: { ...p.audioTracks, master: channel },
         audioLibrary: upsertAudioLibraryAsset(p.audioLibrary, channel)
       };
-    });
+    }, { record: false });
     setAudioNeedsReload(false);
     extractAndApplyPeaks(stored.blob, 'master', stored.duration);
   }, [extractAndApplyPeaks]);
@@ -461,7 +554,7 @@ export function useLyrixaProject({
         ...p,
         audioTracks: { ...p.audioTracks, [role]: null }
       };
-    });
+    }, { record: false });
     if (role === 'master') setAudioNeedsReload(false);
     await deleteAudio(projectIdRef.current, role);
   }, []);
@@ -478,7 +571,7 @@ export function useLyrixaProject({
           master: { ...master, duration: seconds }
         }
       };
-    });
+    }, { record: false });
   }, []);
 
   const setRawLyricsText = useCallback((text: string) => {
@@ -495,6 +588,22 @@ export function useLyrixaProject({
     } = options;
 
     const { lines } = normalizeLyricsText(rawText, normalizeOptions);
+
+    // Safety net: when this import overwrites an existing source with different
+    // text, archive the outgoing version in the device lyrics library first.
+    // The library mirror shares the source id, so without this snapshot the
+    // replaced text would be gone everywhere.
+    {
+      const p = projectRef.current;
+      const currentSources = p.lyricSources ?? [];
+      const target = currentSources.find(source => source.id === sourceId)
+        ?? currentSources.find(source => source.id === p.activeLyricSourceId)
+        ?? currentSources[0];
+      const replacing = !!target && !(p.lyricMode === 'multi' && sourceMode === 'add');
+      if (replacing && target.rawText.trim().length > 0 && target.rawText !== rawText) {
+        setLyricsLibrary(archiveLyricsBackup(target));
+      }
+    }
 
     // Lyrics imports are SOURCE-ONLY: they update the lyric source library
     // (rawLyricsText / normalizedLyrics / lyricSources) and never touch clips.
@@ -737,7 +846,7 @@ export function useLyrixaProject({
   }, []);
 
   const setCurrentTime = useCallback((time: number) => {
-    setProject(p => (p.currentTime === time ? p : { ...p, currentTime: time }));
+    setProject(p => (p.currentTime === time ? p : { ...p, currentTime: time }), { record: false });
   }, []);
 
   const setRenderMode = useCallback((mode: RenderMode) => {
@@ -756,10 +865,11 @@ export function useLyrixaProject({
       const m = p.audioTracks.master?.objectUrl;
       if (m) URL.revokeObjectURL(m);
       return createEmptyProject();
-    });
+    }, { record: false });
+    clearHistory();
     setAudioNeedsReload(false);
     await deleteAllProjectAudio(oldId);
-  }, []);
+  }, [clearHistory, setProject]);
 
   const hardResetProject = useCallback(async () => {
     const oldId = projectIdRef.current;
@@ -774,7 +884,8 @@ export function useLyrixaProject({
       if (m) URL.revokeObjectURL(m);
       collectTextureObjectUrls(p).forEach(url => URL.revokeObjectURL(url));
       return createEmptyProject();
-    });
+    }, { record: false });
+    clearHistory();
     textureObjectUrlsRef.current.forEach(url => URL.revokeObjectURL(url));
     textureObjectUrlsRef.current.clear();
     setAudioNeedsReload(false);
@@ -784,7 +895,7 @@ export function useLyrixaProject({
       deleteAllProjectAudio(oldId),
       deleteAllProjectTextures(oldId)
     ]);
-  }, []);
+  }, [clearHistory, setProject]);
 
   const importProject = useCallback((next: LyrixaProject) => {
     blobsRef.current = { master: null };
@@ -825,7 +936,7 @@ export function useLyrixaProject({
             }
           }
         };
-      });
+      }, { record: false });
       setAudioNeedsReload(false);
       void refreshAudioLibrary();
       extractAndApplyPeaks(stored.blob, 'master', stored.duration);
@@ -864,6 +975,10 @@ export function useLyrixaProject({
     setRenderMode,
     setMasterDuration,
     importProject,
+    undo,
+    redo,
+    canUndo: historyRef.current.past.length > 0,
+    canRedo: historyRef.current.future.length > 0,
     resetProject,
     hardResetProject
   };

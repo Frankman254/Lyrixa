@@ -114,6 +114,7 @@ body {
     min-height: 38px;
   }
   .tr-btn.icon-only { width: 38px; }
+  .tr-group { height: auto; }
   .insp-tabs button { padding: 10px 12px; }
   .ls-layer-actions button,
   .ls-mini-btn,

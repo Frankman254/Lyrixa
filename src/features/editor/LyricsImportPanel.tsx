@@ -58,6 +58,16 @@ export function LyricsImportPanel({
     onClose();
   };
 
+  // ✕ / Cancel discard the draft — ask first when the text was actually edited.
+  const handleDismiss = () => {
+    const dirty = text !== initialText && text.trim().length > 0;
+    if (dirty) {
+      const ok = window.confirm('You have unapplied lyric changes. Close and discard them?');
+      if (!ok) return;
+    }
+    onClose();
+  };
+
   return (
     // Deliberately NOT closable by clicking the backdrop: the panel holds
     // unsaved lyric text, and a stray click outside would discard it. Only the
@@ -78,7 +88,7 @@ export function LyricsImportPanel({
               LRC timestamps are stripped automatically.
             </p>
           </div>
-          <button className="lip-close" onClick={onClose} aria-label="Close">✕</button>
+          <button className="lip-close" onClick={handleDismiss} aria-label="Close">✕</button>
         </header>
 
         <div className="lip-body">
@@ -162,7 +172,7 @@ export function LyricsImportPanel({
           </p>
 
           <div className="lip-actions">
-            <button className="lip-btn ghost" onClick={onClose}>Cancel</button>
+            <button className="lip-btn ghost" onClick={handleDismiss}>Cancel</button>
             <button
               className="lip-btn primary"
               onClick={handleApply}

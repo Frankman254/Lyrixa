@@ -76,6 +76,10 @@ export function LyrixaEditorShell() {
     setCurrentTime,
     setMasterDuration,
     importProject,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
     hardResetProject
   } = useLyrixaProject({
     waveformAnalysisEnabled: waveformEnabled
@@ -155,7 +159,9 @@ export function LyrixaEditorShell() {
     }
   }, []);
 
-  // Global shortcut: Shift+? opens (and toggles) the shortcuts reference panel.
+  // Global shortcuts: Shift+? toggles the reference panel; Ctrl/Cmd+Z and
+  // Ctrl/Cmd+Shift+Z drive project undo/redo. Skipped while typing so text
+  // fields keep their native undo.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
@@ -166,11 +172,22 @@ export function LyrixaEditorShell() {
       if (matchesShortcut(e, 'shortcuts.open')) {
         e.preventDefault();
         setShortcutsOpen(prev => !prev);
+        return;
+      }
+      // Redo first: its binding is a superset of undo's (extra Shift).
+      if (matchesShortcut(e, 'project.redo')) {
+        e.preventDefault();
+        redo();
+        return;
+      }
+      if (matchesShortcut(e, 'project.undo')) {
+        e.preventDefault();
+        undo();
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [matchesShortcut]);
+  }, [matchesShortcut, redo, undo]);
 
   const masterChannel = project.audioTracks.master;
 
@@ -651,6 +668,10 @@ export function LyrixaEditorShell() {
         syncMode={syncMode}
         canSync={canSync}
         tier={tier}
+        onUndo={undo}
+        onRedo={redo}
+        canUndo={canUndo}
+        canRedo={canRedo}
         inspectorVisible={inspectorShown}
         showInspectorToggle={!isPreview && !mobileStyleMode}
         onToggleInspector={handleToggleInspector}
