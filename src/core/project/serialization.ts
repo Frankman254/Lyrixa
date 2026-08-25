@@ -1,6 +1,10 @@
 import type { AudioChannel, AudioLibraryAsset, ProjectAudioTracks } from '../types/audio';
 import type { LyricClip } from '../types/clip';
-import { createDefaultLayers, DEFAULT_LAYER_AUDIO_REACTIVE } from '../types/layer';
+import {
+  createDefaultLayers,
+  DEFAULT_LAYER_AUDIO_REACTIVE,
+  isLyricLayerRole
+} from '../types/layer';
 import type {
   LyricLayer,
   LyricLayerAudioReactive,
@@ -170,6 +174,11 @@ export function normalizeLayers(layers: LyricLayer[] | undefined): LyricLayer[] 
       ...fallback,
       ...layer,
       layerType: layer.layerType ?? fallback?.layerType ?? 'lyrics',
+      // Validated instead of passed straight through: an unknown role would
+      // travel into the lyrics bundle and make a renderer branch on garbage.
+      role: isLyricLayerRole(layer.role) ? layer.role : undefined,
+      language:
+        typeof layer.language === 'string' && layer.language ? layer.language : undefined,
       order: layer.order ?? fallback?.order ?? index,
       visible: layer.visible ?? true,
       locked: layer.locked ?? false,

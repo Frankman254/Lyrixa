@@ -9,6 +9,35 @@ import type {
 export type LyricLayerType = 'lyrics' | 'backing' | 'fx' | 'annotation';
 
 /**
+ * What a layer *means*, as opposed to how it looks.
+ *
+ * `layerType` describes the visual channel, but two layers can share a type
+ * and mean different things: a `backing` layer may carry backing vocals or a
+ * translation of the main line. Renderers need to tell those apart — the
+ * translation is the one a viewer should be able to toggle off — so the role
+ * is declared by the producer instead of guessed from the layer's name.
+ *
+ * Optional: older projects have no role, and consumers must keep working
+ * without one.
+ */
+export type LyricLayerRole =
+  | 'primary'
+  | 'translation'
+  | 'transliteration'
+  | 'backing'
+  | 'fx'
+  | 'annotation';
+
+export const LYRIC_LAYER_ROLES: readonly LyricLayerRole[] = [
+  'primary', 'translation', 'transliteration', 'backing', 'fx', 'annotation'
+];
+
+export function isLyricLayerRole(value: unknown): value is LyricLayerRole {
+  return typeof value === 'string'
+    && (LYRIC_LAYER_ROLES as readonly string[]).includes(value);
+}
+
+/**
  * Controls where a layer's clips appear in the preview renderer.
  * Clips can override positionPreset individually; when a clip's position
  * is the default 'center', the layer's positionPreset is used instead.
@@ -112,6 +141,13 @@ export interface LyricLayer {
   name: string;
   /** Semantic role used by renderers and future clip factories. */
   layerType: LyricLayerType;
+  /**
+   * What this layer carries. Set by importers that know (e.g. the transcriptor
+   * bridge marks its translation channel); absent on hand-built projects.
+   */
+  role?: LyricLayerRole;
+  /** BCP-47/ISO code of the text on this layer, when it is known. */
+  language?: string;
   /** CSS color used for the track background, clip accent, and layer chip */
   color: string;
   /** When false, clips on this layer are hidden in the preview renderer */
