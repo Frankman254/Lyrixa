@@ -1,9 +1,10 @@
 import type { AudioChannel, AudioLibraryAsset, ProjectAudioTracks } from '../types/audio';
 import type { LyricClip } from '../types/clip';
 import {
+  coerceLyricLayerRole,
   createDefaultLayers,
   DEFAULT_LAYER_AUDIO_REACTIVE,
-  isLyricLayerRole
+  normalizeLanguageTag
 } from '../types/layer';
 import type {
   LyricLayer,
@@ -176,9 +177,10 @@ export function normalizeLayers(layers: LyricLayer[] | undefined): LyricLayer[] 
       layerType: layer.layerType ?? fallback?.layerType ?? 'lyrics',
       // Validated instead of passed straight through: an unknown role would
       // travel into the lyrics bundle and make a renderer branch on garbage.
-      role: isLyricLayerRole(layer.role) ? layer.role : undefined,
-      language:
-        typeof layer.language === 'string' && layer.language ? layer.language : undefined,
+      // Known aliases (`romanization`) resolve to the canonical name here, so
+      // only one spelling ever leaves Lyrixa.
+      role: coerceLyricLayerRole(layer.role),
+      language: normalizeLanguageTag(layer.language),
       order: layer.order ?? fallback?.order ?? index,
       visible: layer.visible ?? true,
       locked: layer.locked ?? false,
@@ -264,8 +266,16 @@ export function normalizeClips(clips: LyricClip[] | undefined): LyricClip[] {
     styleOverride: normalizePartialLyricVisualStyle(clip.styleOverride),
     transitionIn: clip.transitionIn ?? DEFAULT_LYRIC_ANIMATION.transitionIn,
     transitionOut: clip.transitionOut ?? DEFAULT_LYRIC_ANIMATION.transitionOut,
-    position: clip.position ?? 'center'
+    position: clip.position ?? 'center',
+    // Cross-layer line identity. Coerced to a non-empty string or dropped:
+    // an empty `sourceId` would group every unlinked clip into one bogus line.
+    sourceId: nonEmptyString(clip.sourceId),
+    sourceTextHash: nonEmptyString(clip.sourceTextHash)
   }));
+}
+
+function nonEmptyString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
 function normalizeAudioTracks(audioTracks: ProjectAudioTracks | undefined): ProjectAudioTracks {

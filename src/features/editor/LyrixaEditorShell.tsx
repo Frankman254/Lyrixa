@@ -39,6 +39,12 @@ import {
 } from './peakExtraction';
 import { usePlaybackController } from './usePlaybackController';
 import { useProjectImportExport } from './useProjectImportExport';
+import { createBridgeServices } from '../bridge/bridgeServices';
+import { useTranscriptorJob } from '../bridge/useTranscriptorJob';
+import {
+  resolveLiveWallpaperTarget,
+  sendProjectToLiveWallpaper
+} from '../../core/bridge/liveWallpaperTarget';
 import './LyrixaEditorShell.css';
 
 export function LyrixaEditorShell() {
@@ -295,6 +301,33 @@ export function LyrixaEditorShell() {
       setPlaybackTime(imported.currentTime ?? 0);
     }
   });
+
+  // Built once per session. Constructing the services performs no network
+  // call, so a standalone Lyrixa pays nothing for the bridge existing.
+  const [bridge] = useState(createBridgeServices);
+
+  const transcriptorJob = useTranscriptorJob({
+    client: bridge.transcriptor,
+    importProject,
+    loadAudioFile,
+    onProjectImported: imported => {
+      setIsPlaying(false);
+      setPlaybackTime(imported.currentTime ?? 0);
+    }
+  });
+
+  const handleSendToLiveWallpaper = useCallback(async () => {
+    try {
+      const target = await resolveLiveWallpaperTarget(bridge.liveWallpaperTargets);
+      const result = await sendProjectToLiveWallpaper(project, target);
+      // Only the file destination needs a word: an HTTP hand-off that worked
+      // is visible in LiveWallpaper itself, and a dialog would just be noise.
+      if (result.kind === 'download') window.alert(result.message);
+    } catch (err) {
+      console.error('[Lyrixa] Could not send to LiveWallpaper:', err);
+      window.alert(err instanceof Error ? err.message : 'Could not send to LiveWallpaper.');
+    }
+  }, [bridge.liveWallpaperTargets, project]);
 
   const effectiveDuration = masterChannel?.duration ?? 60;
   const isLongAudio = detectLongAudio(masterChannel?.sizeBytes, masterChannel?.duration);
@@ -699,6 +732,7 @@ export function LyrixaEditorShell() {
         onToggleSync={handleToggleSync}
         onExportProject={handleExportProject}
         onExportLyricsBundle={handleExportLyricsBundle}
+        onSendToLiveWallpaper={handleSendToLiveWallpaper}
         onTogglePreview={toggleLargePreview}
         onOpenOverlay={() => {
           setMiniPreviewVisible(false);
@@ -719,6 +753,10 @@ export function LyrixaEditorShell() {
         masterChannel={masterChannel}
         onReloadMaster={openMasterPicker}
         onClearMaster={() => removeAudio('master')}
+        transcriptorPhase={transcriptorJob.phase}
+        transcriptorError={transcriptorJob.error}
+        transcriptorAudioWarning={transcriptorJob.audioWarning}
+        onDismissTranscriptorNotice={transcriptorJob.dismiss}
       />
 
       {masterChannel?.objectUrl && (
@@ -844,6 +882,7 @@ export function LyrixaEditorShell() {
 
       {inspectorShown && <InspectorPanel
         project={project}
+        translation={bridge.translation}
         selectedClipId={selectedClipId}
         selectedLayerId={selectedLayerId}
         currentTime={playbackTime}

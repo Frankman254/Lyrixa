@@ -131,13 +131,75 @@ Tap-sync progress is stored in `project.clips`, never in the floating window.
 - The list marks previously published paragraphs as done before highlighting
   the current pending row.
 
+## Line identity across layers
+
+A project can hold the same lyric several times: the original, a romanization,
+and one translation per language. `clip.sourceId` is what ties those copies
+together — it names *the line*, not a layer and not a clip, so
+`clip-main-42`, `clip-es-42` and `clip-romaji-42` all carry
+`sourceId = "line-42"`.
+
+`core/timeline/lineIdentity.ts` owns every question asked of that key:
+
+- `getRelatedClips` / `getRelatedClipsForClip` / `getSiblingClips` — the group.
+- `findPrimaryClip`, `getClipsByRole`, `getLayersByRole` — role-driven lookup.
+  Nothing keys off layer ids such as `layer-main`; N layers work.
+- `createDerivedClip` — a translation inherits `startTime`, `endTime` and
+  `sourceId` from its primary once, at creation. Nothing re-syncs afterwards:
+  if the author moves a translation deliberately, it stays moved.
+- `isDerivedClipStale` / `findStaleDerivedClips` / `markDerivedClipFresh` —
+  staleness is **computed**, by comparing `clip.sourceTextHash` against a hash
+  of the current primary text. Nothing is stored as a flag, so undoing an edit
+  clears the badge with no cleanup pass.
+- `reconcileClipLineIdentity` — repairs imports whose `sourceId` is a pointer
+  to another clip's id, or a segment label repeated within a layer. It is a
+  no-op on projects authored in Lyrixa.
+
+Layer semantics live in `role` (`primary | translation | transliteration |
+backing | fx | annotation`) and `language`. Both are optional: a pre-role
+project parses with them absent and nothing is invented. `romanization`,
+`romaji`, `original` and `main` are accepted as input aliases only —
+`transliteration` and `primary` are what Lyrixa writes.
+
+## Bridges to the other apps
+
+Lyrixa is standalone first. Every service below is optional, and with none of
+them running the editor imports, edits and exports exactly as before.
+
+- `core/bridge/bridgeConfig.ts` — where the services live. Priority: explicit
+  override → `?transcriptor=` / `?livewallpaper=` → localStorage →
+  `VITE_*_URL` → the default same-origin path `/transcriptor`. `?job=` is read
+  here too and validated so a job id can never escape the service path.
+- `core/bridge/transcriptorClient.ts` — `?job=<id>` → project + audio. Prefers
+  `GET /api/jobs/{id}/lyrixa` and `/audio`, falling back to today's
+  `GET /api/jobs/{id}` plus `/download/{id}/{name}`. `fetch` is injected, so
+  `core/` stays free of browser globals and a desktop shell can supply its own.
+- `core/translation/translationService.ts` — one line, on demand. Lyrixa never
+  talks to a model; it asks Transcriptor for a single line and nothing more.
+  With no service reachable, `createUnavailableTranslationService` keeps the
+  callers null-check free and the action hidden.
+- `core/bridge/liveWallpaperTarget.ts` — where a bundle goes. The envelope is
+  built once, outside the transport, so an HTTP hand-off and a file download
+  ship byte-identical content.
+- `features/bridge/bridgeServices.ts` — the single place browser globals meet
+  those modules. `features/bridge/useTranscriptorJob.ts` turns `?job=` into an
+  opened project with its audio loaded, at most once per job id; audio failing
+  degrades to a warning rather than failing the import.
+
+No host or port appears anywhere under `src/`. In development the Vite server
+proxies `/transcriptor` (see `vite.config.ts`), which also avoids needing CORS
+on the Python side.
+
 ## Import/export contracts
 
 - Lightweight project JSON envelope: `createProjectExportEnvelope` in `serialization.ts`.
 - Full project package: `projectPackage.ts`. It writes a small JSON header followed by
   raw audio blobs and restores those blobs into the device library on import.
 - Full project import: `parseProjectExportEnvelope` and `normalizeProject`.
-- Cross-app lyrics bundle: `core/project/lyricsBundle.ts`.
+- Cross-app lyrics bundle: `core/project/lyricsBundle.ts`. It carries
+  `layers[].role`, `layers[].language` and `clips[].sourceId` through to
+  LiveWallpaper; layer ids are not part of the contract. Adding a field does
+  not bump `schemaVersion`.
 
 Exports should never include browser-only values such as object URLs. Audio blobs belong
 in the full package only, never localStorage. Imports should normalize old saved
@@ -150,4 +212,7 @@ structures into the current model.
 3. Put React forms in the matching inspector tab.
 4. Put DOM/browser persistence in `src/features`.
 5. Add or update docs when ownership changes.
-6. Run `npm run lint` and `npm run build`.
+6. Run `npm test`, `npm run lint` and `npm run build`.
+
+Tests live beside the code as `*.test.ts` under `src/core` and run in Vitest's
+`node` environment — the domain layer is pure, so no DOM is needed.

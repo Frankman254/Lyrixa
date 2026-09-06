@@ -355,3 +355,51 @@
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
+/* Derived lines (translations, romanizations) in the clip inspector. */
+.insp-derived {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.insp-derived-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.insp-derived-role {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fg-2);
+}
+
+.insp-derived-badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(245, 158, 11, 0.18);
+  color: #f59e0b;
+  white-space: nowrap;
+}
+
+.insp-derived-note {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--fg-2);
+}
+
+.insp-derived-error {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: #ef4444;
+}
+
+.insp-derived textarea[readonly] {
+  opacity: 0.75;
+  cursor: default;
+}

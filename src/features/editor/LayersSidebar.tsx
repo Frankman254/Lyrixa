@@ -1,4 +1,5 @@
 import type { LyricLayer } from '../../core/types/layer';
+import { LYRIC_LAYER_ROLE_LABELS } from '../../core/types/layer';
 import type { LyricClip } from '../../core/types/clip';
 import './LayersSidebar.css';
 
@@ -93,7 +94,22 @@ export function LayersSidebar({
                   }}
                 >
                   <span className="ls-layer-swatch" style={{ background: layer.color }} />
-                  <span className="ls-layer-name">{layer.name}</span>
+                  <span className="ls-layer-label">
+                    <span className="ls-layer-name">{layer.name}</span>
+                    {/* What the layer *carries*, from its declared role — a
+                        layer still called "Backing Vocals" reads as the
+                        translation it actually holds. Absent on projects
+                        authored before roles existed, and the row is
+                        unchanged for them. */}
+                    {(layer.role || layer.language) && (
+                      <span className="ls-layer-role" title={roleTooltip(layer)}>
+                        {layer.role ? LYRIC_LAYER_ROLE_LABELS[layer.role] : 'Layer'}
+                        {layer.language && (
+                          <span className="ls-layer-lang mono">{layer.language}</span>
+                        )}
+                      </span>
+                    )}
+                  </span>
                   <span className="ls-layer-meta mono">{clipCount}</span>
                   <span className="ls-layer-actions">
                     <button
@@ -153,4 +169,9 @@ export function LayersSidebar({
       </div>
     </aside>
   );
+}
+
+function roleTooltip(layer: LyricLayer): string {
+  const role = layer.role ? LYRIC_LAYER_ROLE_LABELS[layer.role] : 'No declared role';
+  return layer.language ? `${role} · ${layer.language}` : role;
 }

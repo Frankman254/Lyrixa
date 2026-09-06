@@ -50,8 +50,29 @@ export interface LyricClip {
 
   /** Original normalized lyric line index, when the clip came from a lyric source. */
   sourceIndex?: number;
-  /** Stable source identity shared by the same lyric line across layers. */
+  /**
+   * Stable identity of the *lyric line* this clip renders, shared by every
+   * layer that carries that same line.
+   *
+   * This is the join key of the multi-layer model: the Japanese clip, its
+   * romanization, and each translation of it all carry one `sourceId`, so the
+   * editor can find a line's siblings without knowing which layers exist.
+   * It is deliberately not a layer id and not a clip id — there are N layers,
+   * and any of them may be missing for any given line.
+   *
+   * Optional: hand-drawn clips and pre-role projects have none, and every
+   * consumer must keep working without it.
+   */
   sourceId?: string;
+  /**
+   * Fingerprint of the primary text this clip's text was derived from.
+   *
+   * Only set on derived clips (translation, romanization). Staleness is then
+   * *computed* — compare this against the current primary line — rather than
+   * stored as a flag, so undoing an edit to the primary line un-stales its
+   * translations on its own and nothing has to be swept clean.
+   */
+  sourceTextHash?: string;
   /** Parent lyrics source, used when a long mix contains several lyric sets. */
   lyricSourceId?: string;
   /** Creation path used by sync/import tooling. */

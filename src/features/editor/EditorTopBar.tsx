@@ -67,6 +67,7 @@ interface EditorTopBarProps {
   onToggleSync: () => void;
   onExportProject: () => void;
   onExportLyricsBundle: () => void;
+  onSendToLiveWallpaper: () => void;
   onTogglePreview: () => void;
   onOpenOverlay: () => void;
   onShowMiniPreview: () => void;
@@ -121,6 +122,7 @@ export function EditorTopBar({
   onToggleSync,
   onExportProject,
   onExportLyricsBundle,
+  onSendToLiveWallpaper,
   onTogglePreview,
   onOpenOverlay,
   onShowMiniPreview,
@@ -375,6 +377,12 @@ export function EditorTopBar({
           </button>
           <button className="tr-more-item" onClick={() => runMoreAction(onExportLyricsBundle)}>
             Export lyrics bundle
+          </button>
+          {/* Same bundle as the export above; this picks the destination
+              instead of always writing a file. With no renderer configured it
+              falls back to that export, so the action is never a dead end. */}
+          <button className="tr-more-item" onClick={() => runMoreAction(onSendToLiveWallpaper)}>
+            Send to LiveWallpaper
           </button>
           <button className="tr-more-item" onClick={() => runMoreAction(onOpenLyricsBundleImportPicker)}>
             Import lyrics bundle

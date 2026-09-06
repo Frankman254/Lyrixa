@@ -27,6 +27,7 @@ import { PresetPicker, type PresetScope } from './PresetPicker';
 import { Group } from './InspectorPrimitives';
 import type { LyricVisualPreset } from '../../core/presets/visualPresets';
 import type { EditorMode } from '../editor/useEditorMode';
+import type { TranslationService } from '../../core/translation/translationService';
 import './InspectorPanel.css';
 
 type InspectorTab = 'project' | 'layer' | 'clip' | 'style' | 'texture' | 'fx' | 'animation';
@@ -46,6 +47,8 @@ interface InspectorPanelProps {
   onLayersChange: (next: LyricLayer[]) => void;
   /** Clone the selected clip on the same layer (for repeated verses). */
   onDuplicateClip?: (clipId: string) => void;
+  /** On-demand line translation. Omitted when no service is configured. */
+  translation?: TranslationService;
   onImportLyrics: () => void;
   onExportProject: () => void;
   onImportProject: () => void;
@@ -90,6 +93,7 @@ export function InspectorPanel({
   onClipsChange,
   onLayersChange,
   onDuplicateClip,
+  translation,
   onImportLyrics,
   onExportProject,
   onImportProject,
@@ -362,6 +366,8 @@ export function InspectorPanel({
           <ClipInspector
             selectedClip={selectedClip}
             layers={project.layers}
+            clips={project.clips}
+            translation={translation}
             onPatchClip={patchClip}
             onDuplicateClip={onDuplicateClip}
             onDeleteClip={deleteClip}

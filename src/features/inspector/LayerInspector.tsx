@@ -1,5 +1,6 @@
 import type { ClipPositionPreset } from '../../core/types/clip';
-import type { LyricLayer } from '../../core/types/layer';
+import type { LyricLayer, LyricLayerRole } from '../../core/types/layer';
+import { LYRIC_LAYER_ROLES, LYRIC_LAYER_ROLE_LABELS } from '../../core/types/layer';
 import { EmptyText, Group } from './InspectorPrimitives';
 import { LayerAudioReactiveEditor } from './LayerAudioReactiveEditor';
 
@@ -27,6 +28,34 @@ export function LayerInspector({
             className="form-control form-input"
             value={selectedLayer.name}
             onChange={(e) => onPatchLayer({ name: e.target.value })}
+          />
+        </label>
+        {/* Role and language are what a renderer reads to tell a translation
+            from a backing vocal. Both stay optional: leaving them unset is a
+            valid project, and an old file must never be forced to declare
+            something its author never chose. */}
+        <label>
+          Role
+          <select
+            className="form-control form-select"
+            value={selectedLayer.role ?? ''}
+            onChange={(e) => onPatchLayer({
+              role: e.target.value ? (e.target.value as LyricLayerRole) : undefined
+            })}
+          >
+            <option value="">Not declared</option>
+            {LYRIC_LAYER_ROLES.map(role => (
+              <option key={role} value={role}>{LYRIC_LAYER_ROLE_LABELS[role]}</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Language
+          <input
+            className="form-control form-input"
+            value={selectedLayer.language ?? ''}
+            placeholder="ja, es, ja-Latn…"
+            onChange={(e) => onPatchLayer({ language: e.target.value.trim() || undefined })}
           />
         </label>
         <label>

@@ -27,13 +27,34 @@ import {
  * envelope: no audio bytes, no UI preferences, no transient runtime state.
  *
  * The bundle exports `sourceTrack` so the consumer can rebind to its own
- * local copy of the audio without sharing a project id with Lyrixa. Layer
- * ids stay stable (`layer-main`, `layer-backing`, `layer-fx`) so the
- * consumer can attach renderer-specific behavior to known channels.
+ * local copy of the audio without sharing a project id with Lyrixa.
  *
- * Versioning: bumps require a code-side migration on the consumer.
- * Unknown fields MUST be ignored, not rejected — that's how new authoring
- * features (e.g. word-sync) ship without breaking older renderers.
+ * ## What the renderer is guaranteed
+ *
+ * - `layers[].role` — what a layer carries (`primary`, `translation`,
+ *   `transliteration`, `backing`, `fx`, `annotation`). This is what lets a
+ *   renderer offer "hide translations" without guessing from a layer name.
+ *   Absent on layers authored before roles existed; a consumer must degrade,
+ *   not reject.
+ * - `layers[].language` — the language of that layer's text, when known.
+ * - `clips[].sourceId` — line identity shared across layers. Two clips with
+ *   the same `sourceId` are the same lyric line in different languages, which
+ *   is what makes stacked or paired rendering possible.
+ *
+ * Layer ids are *not* part of the contract. Older bundles happen to use
+ * `layer-main` / `layer-backing` / `layer-fx`, but a project may have any
+ * number of layers with any ids: read `role`, never the id.
+ *
+ * ## What is deliberately absent
+ *
+ * No audio bytes, no object URLs, no editor UI state (selection, panels,
+ * zoom, playhead), no runtime objects. The bundle is for consumption, and
+ * everything in it is either content or a render instruction.
+ *
+ * Versioning: bumps require a code-side migration on the consumer. Additive
+ * fields do NOT bump — unknown fields MUST be ignored, not rejected, which is
+ * how new authoring features (roles, word-sync) ship without breaking older
+ * renderers.
  */
 
 export const LYRICS_BUNDLE_APP = 'Lyrixa';

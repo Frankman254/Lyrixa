@@ -1,10 +1,16 @@
 import type { LyricClip } from '../../core/types/clip';
 import type { LyricLayer } from '../../core/types/layer';
+import type { TranslationService } from '../../core/translation/translationService';
+import { DerivedLineActions } from './DerivedLineActions';
 import { EmptyText, Group } from './InspectorPrimitives';
 
 interface ClipInspectorProps {
   selectedClip: LyricClip | null;
   layers: LyricLayer[];
+  /** Every clip in the project, so a derived line can find its primary. */
+  clips?: LyricClip[];
+  /** Absent in a standalone session; the block simply does not render. */
+  translation?: TranslationService;
   onPatchClip: (patch: Partial<LyricClip>) => void;
   /** Clone this clip on the same layer (used for repeated verses/choruses). */
   onDuplicateClip?: (clipId: string) => void;
@@ -14,6 +20,8 @@ interface ClipInspectorProps {
 export function ClipInspector({
   selectedClip,
   layers,
+  clips,
+  translation,
   onPatchClip,
   onDuplicateClip,
   onDeleteClip
@@ -69,6 +77,16 @@ export function ClipInspector({
           )}
         </div>
       </Group>
+
+      {clips && translation && (
+        <DerivedLineActions
+          clip={selectedClip}
+          clips={clips}
+          layers={layers}
+          translation={translation}
+          onPatchClip={onPatchClip}
+        />
+      )}
 
       <Group title="Timing" open>
         <div className="inspector-grid">
