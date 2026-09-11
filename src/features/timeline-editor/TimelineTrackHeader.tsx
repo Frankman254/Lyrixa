@@ -1,10 +1,10 @@
 import type { ReactNode } from 'react';
 
-export type TrackHeaderVariant = 'default' | 'audio' | 'thin' | 'spacer';
+export type TrackHeaderVariant = 'default' | 'audio' | 'thin';
 
 interface TimelineTrackHeaderProps {
   title: string;
-  /** Color for the swatch + left border. Omit for spacer/thin variants. */
+  /** Color for the swatch + left border. Omit for thin variant. */
   color?: string;
   /** Optional small label rendered next to the title (e.g. "vocals"). */
   badge?: string;
@@ -32,13 +32,11 @@ export function TimelineTrackHeader({
 
   return (
     <div className={classes} style={style}>
-      {variant !== 'spacer' && (
-        <div className="tl-track-title">
-          {color && <span className="tl-track-swatch" style={{ background: color }} />}
-          <span className="tl-track-name">{title}</span>
-          {badge && <span className="tl-track-badge">{badge}</span>}
-        </div>
-      )}
+      <div className="tl-track-title">
+        {color && <span className="tl-track-swatch" style={{ background: color }} />}
+        <span className="tl-track-name">{title}</span>
+        {badge && <span className="tl-track-badge">{badge}</span>}
+      </div>
       {actions && <div className="tl-track-actions">{actions}</div>}
     </div>
   );

@@ -196,8 +196,9 @@ export function useLyrixaProject({
     future: LyrixaProject[];
     lastPushAt: number;
   }>({ past: [], future: [], lastPushAt: 0 });
-  // Bumped whenever the stacks change so canUndo/canRedo re-render.
-  const [, setHistoryVersion] = useState(0);
+  // Stack depths mirrored into state so canUndo/canRedo are render-safe
+  // (refs must never be read during render) and the buttons stay in sync.
+  const [historyCounts, setHistoryCounts] = useState({ undo: 0, redo: 0 });
 
   const setProject = useCallback((
     action: SetStateAction<LyrixaProject>,
@@ -219,7 +220,7 @@ export function useLyrixaProject({
       }
       h.lastPushAt = now;
       h.future = [];
-      setHistoryVersion(v => v + 1);
+      setHistoryCounts({ undo: h.past.length, redo: 0 });
     }
     projectRef.current = next;
     setProjectState(next);
@@ -245,7 +246,7 @@ export function useLyrixaProject({
     h.future.push(projectRef.current);
     h.lastPushAt = 0; // the next change starts a fresh undo step
     restoreSnapshot(snapshot);
-    setHistoryVersion(v => v + 1);
+    setHistoryCounts({ undo: historyRef.current.past.length, redo: historyRef.current.future.length });
   }, [restoreSnapshot]);
 
   const redo = useCallback(() => {
@@ -256,12 +257,12 @@ export function useLyrixaProject({
     if (h.past.length > HISTORY_LIMIT) h.past.shift();
     h.lastPushAt = 0;
     restoreSnapshot(snapshot);
-    setHistoryVersion(v => v + 1);
+    setHistoryCounts({ undo: historyRef.current.past.length, redo: historyRef.current.future.length });
   }, [restoreSnapshot]);
 
   const clearHistory = useCallback(() => {
     historyRef.current = { past: [], future: [], lastPushAt: 0 };
-    setHistoryVersion(v => v + 1);
+    setHistoryCounts({ undo: 0, redo: 0 });
   }, []);
 
   // Track latest objectUrls so we can revoke them on unmount.
@@ -977,8 +978,8 @@ export function useLyrixaProject({
     importProject,
     undo,
     redo,
-    canUndo: historyRef.current.past.length > 0,
-    canRedo: historyRef.current.future.length > 0,
+    canUndo: historyCounts.undo > 0,
+    canRedo: historyCounts.redo > 0,
     resetProject,
     hardResetProject
   };

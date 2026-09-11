@@ -59,7 +59,6 @@ interface TimelineEditorProps {
   onSeek: (time: number) => void;
   onPlayToggle: () => void;
   onSelectionChange?: (selection: { clipId: string | null; layerId: string | null }) => void;
-  onExit?: () => void;
 }
 
 interface DragState {
@@ -95,7 +94,6 @@ export function TimelineEditor({
   onSeek,
   onPlayToggle,
   onSelectionChange,
-  onExit
 }: TimelineEditorProps) {
   const [pxPerSecond, setPxPerSecond] = useState(60);
   const [selectedClipIds, setSelectedClipIds] = useState<Set<string>>(() => new Set());
@@ -498,6 +496,16 @@ export function TimelineEditor({
     []
   );
 
+  // Keyboard activation of a clip (Enter / Space on the focused clip):
+  // selects it single and makes its layer active — mirrors a plain click.
+  const handleClipKeyboardSelect = useCallback((clipId: string) => {
+    const clip = clipsRef.current.find(c => c.id === clipId);
+    if (!clip) return;
+    setSelectedLayerId(clip.layerId);
+    setSelectedClipIds(new Set([clipId]));
+    lastSelectedClipIdRef.current = clipId;
+  }, []);
+
   const handlePointerMove = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
       const state = dragStateRef.current;
@@ -756,7 +764,6 @@ export function TimelineEditor({
           try { localStorage.setItem('lyrixa_band_mode', next); } catch { /* ignore */ }
         }}
         onSnapSecondsChange={setSnapSeconds}
-        onExit={onExit}
       />
 
       <TimelineSelectionToolbar
@@ -848,6 +855,7 @@ export function TimelineEditor({
               renderEndTime={renderEndTime}
               setLaneRef={setLaneRef}
               onClipPointerDown={handleClipPointerDown}
+              onClipKeyboardSelect={handleClipKeyboardSelect}
               onLayerToggleVisible={toggleLayerVisible}
               onLayerToggleLocked={toggleLayerLocked}
               onLayerPositionChange={handleLayerPositionChange}

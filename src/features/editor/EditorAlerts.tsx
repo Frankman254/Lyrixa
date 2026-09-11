@@ -24,8 +24,10 @@ export function EditorAlerts({
   onDismissTranscriptorNotice
 }: EditorAlertsProps) {
   const loading = transcriptorPhase === 'loading-project' || transcriptorPhase === 'loading-audio';
+  if (!loading && !transcriptorError && !transcriptorAudioWarning && !(audioNeedsReload && masterChannel && !masterChannel.objectUrl))
+    return null;
   return (
-    <>
+    <div className="ls-banner-stack">
       {loading && (
         <div className="ls-reload-banner">
           <span>
@@ -74,6 +76,6 @@ export function EditorAlerts({
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 }

@@ -5,7 +5,6 @@ import type { ApplyLyricsOptions } from './useLyrixaProject';
 import './LyricsImportPanel.css';
 
 interface LyricsImportPanelProps {
-  open: boolean;
   initialText: string;
   /** Title suggested for the lyric source when adding it. */
   initialTitle?: string;
@@ -27,7 +26,6 @@ interface LyricsImportPanelProps {
  * synced. This panel just edits the lyric source library.
  */
 export function LyricsImportPanel({
-  open,
   initialText,
   initialTitle,
   initialStartTime,
@@ -44,8 +42,6 @@ export function LyricsImportPanel({
   const [addAsNewSource, setAddAsNewSource] = useState(lyricMode === 'multi' && defaultAsNewSource);
 
   const preview = useMemo(() => normalizeLyricsText(text), [text]);
-
-  if (!open) return null;
 
   const handleApply = () => {
     const applied = onApply(text, {

@@ -1,5 +1,5 @@
-import { useRef, useCallback } from 'react';
-import type { PointerEvent as ReactPointerEvent } from 'react';
+import { useCallback } from 'react';
+import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react';
 import type { LyricClip as LyricClipModel } from '../../core/types/clip';
 import { clipDuration } from '../../core/types/clip';
 import { timeToPx, formatTimecode } from '../../core/timeline/clips';
@@ -30,6 +30,8 @@ interface LyricClipProps {
     clientX: number,
     modifiers: ClipPointerModifiers
   ) => void;
+  /** Keyboard activation (Enter / Space): selects this clip without dragging. */
+  onKeyboardSelect: (clipId: string) => void;
 }
 
 export function LyricClip({
@@ -38,10 +40,9 @@ export function LyricClip({
   layerColor,
   selected,
   locked,
-  onPointerDown
+  onPointerDown,
+  onKeyboardSelect
 }: LyricClipProps) {
-  const rootRef = useRef<HTMLDivElement>(null);
-
   const left = timeToPx(clip.startTime, pxPerSecond);
   const width = Math.max(4, timeToPx(clipDuration(clip), pxPerSecond));
 
@@ -58,6 +59,16 @@ export function LyricClip({
     [clip.id, clip.locked, locked, onPointerDown]
   );
 
+  const handleKeyDown = useCallback(
+    (e: ReactKeyboardEvent<HTMLDivElement>) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (!locked && !clip.locked) onKeyboardSelect(clip.id);
+    },
+    [clip.id, clip.locked, locked, onKeyboardSelect]
+  );
+
   let classes = 'tl-clip';
   if (selected) classes += ' selected';
   if (clip.muted) classes += ' muted';
@@ -65,7 +76,6 @@ export function LyricClip({
 
   return (
     <div
-      ref={rootRef}
       className={classes}
       style={{
         left: `${left}px`,
@@ -73,6 +83,7 @@ export function LyricClip({
         '--clip-color': layerColor
       } as React.CSSProperties}
       onPointerDown={(e) => handlePointerDown(e, 'move')}
+      onKeyDown={handleKeyDown}
       role="button"
       tabIndex={0}
       aria-label={`Clip ${clip.text || '(blank)'} from ${formatTimecode(clip.startTime, true)} to ${formatTimecode(clip.endTime, true)}`}

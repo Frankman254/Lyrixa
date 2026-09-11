@@ -217,11 +217,9 @@ export function FloatingPanel({
         </div>
       </div>
 
-      {!minimized && (
-        <div className="fp-body">
-          {children}
-        </div>
-      )}
+      <div className="fp-body">
+        {children}
+      </div>
     </div>
   );
 }

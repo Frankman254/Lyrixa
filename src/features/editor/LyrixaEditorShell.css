@@ -257,23 +257,40 @@
 
 /* Compact/mobile bars carry fewer controls — the spacer can always grow. */
 .tier-compact .transport-spacer,
-.tier-mobile .transport-spacer { flex: 1 1 auto; }
+.tier-mobile .transport-spacer,
+.transport-dense .transport-spacer { flex: 1 1 auto; }
 
 /* Compact: mode switcher shows icons only, and the bar drops everything that
    has a More-menu or mode-switcher equivalent so it fits ~768–1180px. */
-.tier-compact .tr-mode-label { display: none; }
-.tier-compact .tr-mode-tab { padding: 5px 9px; }
-.tier-compact .tr-mode-icon { opacity: 1; }
-.tier-compact .brand-text { display: none; }
-.tier-compact .save-status-label { display: none; }
-.tier-compact .save-status { padding: 0 var(--s-1); }
+/* Same rules apply on the dense desktop tier (transport-dense is set on the
+   .transport element itself; tier classes sit on the shell root). */
+.tier-compact .tr-mode-label,
+.transport-dense .tr-mode-label { display: none; }
+.tier-compact .tr-mode-tab,
+.transport-dense .tr-mode-tab { padding: 5px 9px; }
+.tier-compact .tr-mode-icon,
+.transport-dense .tr-mode-icon { opacity: 1; }
+.tier-compact .brand-text,
+.transport-dense .brand-text { display: none; }
+.tier-compact .save-status-label,
+.transport-dense .save-status-label { display: none; }
+.tier-compact .save-status,
+.transport-dense .save-status { padding: 0 var(--s-1); }
 .tier-compact .tr-name,
-.tier-compact .tr-name-input { max-width: 130px; }
-.tier-compact .song-chip { max-width: 150px; }
-.tier-compact .song-chip .duration { display: none; }
-.tier-compact .playback-cluster .tr-btn.icon-only { display: none; }
-.tier-compact .time-readout { min-width: 0; }
-.tier-compact .time-readout .total { display: none; }
+.tier-compact .tr-name-input,
+.transport-dense .tr-name,
+.transport-dense .tr-name-input { max-width: 130px; }
+.tier-compact .song-chip,
+.transport-dense .song-chip { max-width: 150px; }
+.tier-compact .song-chip .duration,
+.transport-dense .song-chip .duration { display: none; }
+.tier-compact .time-readout,
+.transport-dense .time-readout { min-width: 0; }
+.tier-compact .time-readout .total,
+.tier-compact .time-readout .total,
+.transport-dense .time-readout .total { display: none; }
+.tier-compact .playback-cluster .tr-btn.icon-only,
+.transport-dense .playback-cluster .tr-btn.icon-only { display: none; }
 
 /* Mobile: minimal transport — brand mark, drawer + playback + inspector + More. */
 .tier-mobile .transport { padding: 0 var(--s-2); }
@@ -285,6 +302,14 @@
   padding: 0 var(--s-1);
 }
 .tier-mobile .playback-cluster { padding: 0; }
+
+/* Very narrow phones: the minimal transport still overflowed ~27px at 375px.
+   Drop the brand mark and save dot; More + playback stay reachable. */
+@media (max-width: 420px) {
+  .tier-mobile .brand-mark { display: none; }
+  .tier-mobile .brand { display: none; }
+  .tier-mobile .save-status { display: none; }
+}
 
 .brand {
   display: flex;
@@ -675,26 +700,30 @@ select option { background: var(--bg-2); color: var(--fg-0); }
 /* ================================================================
    Reload / alert banners
    ================================================================ */
-.ls-reload-banner {
+.ls-banner-stack {
   position: absolute;
   top: var(--transport-h);
   left: 0;
   right: 0;
   display: flex;
+  flex-direction: column;
+  z-index: 50;
+}
+
+.ls-reload-banner {
+  display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 14px;
   padding: 10px 18px;
-  background: oklch(from var(--warning) l c h / 0.10);
-  border-bottom: 1px solid oklch(from var(--warning) l c h / 0.30);
-  color: var(--warning);
+  background: oklch(from var(--warning) l c h / 0.92);
+  color: var(--bg-0);
   font-size: 12px;
   flex-wrap: wrap;
-  z-index: 50;
 }
 
 .ls-reload-banner + .ls-reload-banner {
-  top: calc(48px + 44px);
+  border-top: 1px solid oklch(from var(--warning) l c h / 0.55);
 }
 .ls-reload-actions {
   display: flex;
@@ -947,12 +976,14 @@ select option { background: var(--bg-2); color: var(--fg-0); }
 .tr-more[open] > summary { background: var(--bg-3, rgba(255,255,255,0.08)); }
 
 .tr-more-menu {
+  /* JS re-anchors this flyout to the More button's viewport rect on open
+     (the transport row scrolls and would clip a static-position menu). */
   position: fixed;
   top: 52px;
-  /* Keep the flyout inside the timeline workspace instead of covering the
-     right inspector. The shell updates this width at compact breakpoints. */
-  right: calc(var(--inspector-width, 360px) + 12px);
+  right: 12px;
   min-width: 240px;
+  max-height: calc(100vh - 64px);
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 2px;

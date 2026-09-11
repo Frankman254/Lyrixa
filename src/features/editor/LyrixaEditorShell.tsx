@@ -945,7 +945,6 @@ export function LyrixaEditorShell() {
 
       {importOpen && (
         <LyricsImportPanel
-          open={importOpen}
           initialText={editingLyricSource ? editingLyricSource.rawText : importCreatesNewSource ? '' : activeLyricSource?.rawText ?? project.rawLyricsText}
           initialTitle={editingLyricSource?.title ?? (importCreatesNewSource ? `Lyrics ${project.lyricSources.length + 1}` : activeLyricSource?.title)}
           initialStartTime={editingLyricSource?.startTime ?? (importCreatesNewSource ? playbackTime : activeLyricSource?.startTime ?? playbackTime)}

@@ -204,6 +204,8 @@
   font-size: 13px;
 }
 .tapsync-row:hover { background: rgba(255, 255, 255, 0.05); }
+.tapsync-row:disabled { cursor: default; opacity: 0.6; }
+.tapsync-row:disabled:hover { background: transparent; }
 .tapsync-row.pending { color: var(--text-muted); }
 .tapsync-row.done .tapsync-row-index { background: var(--live, #3ad29f); color: #07120d; }
 .tapsync-row.active {

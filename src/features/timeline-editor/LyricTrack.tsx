@@ -35,6 +35,8 @@ interface LyricTrackProps {
     clientX: number,
     modifiers: ClipPointerModifiers
   ) => void;
+  /** Keyboard activation of a clip (Enter / Space). */
+  onClipKeyboardSelect: (clipId: string) => void;
   onLayerToggleVisible: (layerId: string) => void;
   onLayerToggleLocked: (layerId: string) => void;
   onLayerPositionChange: (layerId: string, preset: ClipPositionPreset) => void;
@@ -54,6 +56,7 @@ export function LyricTrack({
   renderEndTime,
   laneRef,
   onClipPointerDown,
+  onClipKeyboardSelect,
   onLayerToggleVisible,
   onLayerToggleLocked,
   onLayerPositionChange,
@@ -82,6 +85,12 @@ export function LyricTrack({
         className="tl-track-header"
         style={{ borderLeftColor: layer.color }}
         onClick={() => onLayerSelect(layer.id)}
+        onKeyDown={(e) => {
+          if (e.key !== 'Enter' && e.key !== ' ') return;
+          e.preventDefault();
+          e.stopPropagation();
+          onLayerSelect(layer.id);
+        }}
         role="button"
         tabIndex={0}
       >
@@ -133,6 +142,7 @@ export function LyricTrack({
             selected={selectedClipIds.has(clip.id)}
             locked={layer.locked}
             onPointerDown={onClipPointerDown}
+            onKeyboardSelect={onClipKeyboardSelect}
           />
         ))}
       </div>

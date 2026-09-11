@@ -3,6 +3,7 @@ import type { AudioChannel, AudioChannelRole } from '../../core/types/audio';
 import type { SaveStatus } from './useLyrixaProject';
 import { ACCENT_OPTIONS } from '../../shared/theme/useAccentTheme';
 import type { AccentName } from '../../shared/theme/useAccentTheme';
+import { useIsDenseDesktop } from '../../shared/layout/useViewportTier';
 import type { ViewportTier } from '../../shared/layout/useViewportTier';
 import { EditorHiddenFileInputs } from './EditorHiddenFileInputs';
 import { EditorPlaybackControls } from './EditorPlaybackControls';
@@ -136,16 +137,34 @@ export function EditorTopBar({
   const moreRef = useRef<HTMLDetailsElement>(null);
   const saveTone = SAVE_TONE[saveStatus];
   const masterLabel = masterChannel?.fileName ?? 'No master loaded';
-  const masterDuration = masterChannel ? formatDuration(masterChannel.duration) : '—:—';
+  const masterDuration = masterChannel ? formatDuration(masterChannel.duration) : '-:-';
   const isMobile = tier === 'mobile';
   const isDesktop = tier === 'desktop';
+  // Desktop tier, but too narrow for the full transport (~1180–1779px): the
+  // low-priority clusters collapse into the More menu instead of scrolling
+  // off-screen. The dense media query already requires the desktop tier's
+  // min-width, so no extra tier check is needed here.
+  const isDense = useIsDenseDesktop();
+  const isWide = isDesktop && !isDense;
   const runMoreAction = (action: () => void) => {
     moreRef.current?.removeAttribute('open');
     action();
   };
+  // The bar row scrolls (overflow-x auto), which also clips a static flyout.
+  // Anchor the More menu to the button's viewport rect whenever it opens.
+  const handleMoreToggle = () => {
+    const details = moreRef.current;
+    const menu = details?.querySelector<HTMLElement>('.tr-more-menu');
+    if (!details?.open || !menu) return;
+    const rect = details.getBoundingClientRect();
+    const menuW = menu.offsetWidth;
+    menu.style.top = `${Math.round(rect.bottom + 6)}px`;
+    menu.style.left = `${Math.round(Math.max(8, Math.min(rect.right - menuW, window.innerWidth - menuW - 8)))}px`;
+    menu.style.right = 'auto';
+  };
 
   return (
-    <header className="transport">
+    <header className={`transport${isDense ? ' transport-dense' : ''}`}>
       <div className="brand">
         <span className="brand-mark">L</span>
         <span className="brand-text">Lyrixa</span>
@@ -251,7 +270,7 @@ export function EditorTopBar({
       </div>
 
       {/* Compact/mobile reach these through the mode switcher / More menu. */}
-      {isDesktop && (
+      {isWide && (
         <>
           <div className="tr-divider" />
 
@@ -280,7 +299,7 @@ export function EditorTopBar({
         <span className="save-status-label">{SAVE_LABEL[saveStatus]}</span>
       </div>
 
-      {isDesktop && (
+      {isWide && (
         <>
           <div className="tr-group">
             <button className="tr-btn small" onClick={onExportProject} title="Export the full Lyrixa project">
@@ -340,7 +359,7 @@ export function EditorTopBar({
         </button>
       )}
 
-      <details className="tr-more" ref={moreRef}>
+      <details className="tr-more" ref={moreRef} onToggle={handleMoreToggle}>
         <summary className="tr-btn small">More ▾</summary>
         <div className="tr-more-menu" role="menu">
           {isMobile && (
@@ -348,12 +367,12 @@ export function EditorTopBar({
               ♪ Load audio <span className="tr-more-key">{masterChannel ? masterDuration : ''}</span>
             </button>
           )}
-          {!isDesktop && (
+          {!isWide && (
             <button className="tr-more-item" onClick={() => runMoreAction(onOpenLyricsImport)}>
               Import lyrics
             </button>
           )}
-          {!isDesktop && (
+          {!isWide && (
             <>
               <button className="tr-more-item" onClick={() => runMoreAction(onExportProject)}>
                 Export project
@@ -387,7 +406,7 @@ export function EditorTopBar({
           <button className="tr-more-item" onClick={() => runMoreAction(onOpenLyricsBundleImportPicker)}>
             Import lyrics bundle
           </button>
-          {!isDesktop && (
+          {!isWide && (
             <label className="tr-more-item tr-more-accent" title="Accent color">
               <span>Accent color</span>
               <select

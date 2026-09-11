@@ -21,7 +21,6 @@ interface TimelineToolbarProps {
   fitSelectionEnabled: boolean;
   onBandModeChange: (mode: AudioBandMode) => void;
   onSnapSecondsChange: (seconds: number) => void;
-  onExit?: () => void;
 }
 
 export function TimelineToolbar({
@@ -41,8 +40,7 @@ export function TimelineToolbar({
   onCenterPlayhead,
   fitSelectionEnabled,
   onBandModeChange,
-  onSnapSecondsChange,
-  onExit
+  onSnapSecondsChange
 }: TimelineToolbarProps) {
   // px/s, Fit sel, Band and Snap live inside an Advanced toggle so the basic
   // bar only carries the everyday actions (Play, Fit song, Center).
@@ -136,9 +134,6 @@ export function TimelineToolbar({
               </select>
             </label>
           </>
-        )}
-        {onExit && (
-          <button className="tl-btn danger" onClick={onExit}>✕ Exit</button>
         )}
       </div>
     </header>

@@ -307,11 +307,12 @@ export function TapSyncPanel({
               <button
                 key={line.sourceId}
                 ref={idx === cursorIndex ? activeRef : undefined}
-                className={`tapsync-row ${state}`}
+                className={`tapsync-row ${state}${published ? '' : ' no-timing'}`}
+                disabled={!published}
                 onClick={() => published && onSeek(published.startTime)}
                 title={hasTiming
-                  ? `Jump playback to this line (${formatTime(published.startTime)} - ${formatTime(published.endTime)})`
-                  : 'Jump playback to this line'}
+                  ? `Jump playback to this line (${formatTime(published!.startTime)} - ${formatTime(published!.endTime)})`
+                  : published ? 'Jump playback to this line' : 'Not synced yet — nothing to jump to'}
               >
                 <span className="tapsync-row-index">{idx + 1}</span>
                 <span className="tapsync-row-text">{line.text || '— blank —'}</span>
