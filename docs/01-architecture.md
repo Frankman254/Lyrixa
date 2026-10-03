@@ -11,6 +11,10 @@ Lyrixa is split into two layers:
 
 The central data object is `LyrixaProject`. UI code edits this object, then the preview/timeline render from it.
 
+`LyrixaProject.composition` is the single source of truth for deterministic
+Vibrix cues. `LyrixaProject.vibrixManifest` is a read-only snapshot of the last
+catalog imported from Vibrix. Composition UI must not keep a second cue array.
+
 ## Main editor flow
 
 1. `src/features/editor/LyrixaEditorShell.tsx` composes the editor workspace.
@@ -189,6 +193,32 @@ them running the editor imports, edits and exports exactly as before.
 No host or port appears anywhere under `src/`. In development the Vite server
 proxies `/transcriptor` (see `vite.config.ts`), which also avoids needing CORS
 on the Python side.
+
+### Future Vibrix composition sequencer
+
+The cross-app composition proposal lives in
+[`03-vibrix-composition-sequencer.md`](03-vibrix-composition-sequencer.md).
+It deliberately does not extend the current lyrics bundle: lyrics remain the
+stable v1 contract, while a future `vibrix-score` envelope will carry
+deterministic scene and feature-slot cues. Vibrix remains the owner of slot
+values and rendering; Lyrixa authors references and timing.
+
+The first vertical slice is now implemented:
+
+- `core/composition/types.ts` owns manifest, track, cue and score types.
+- `core/composition/authoringManifest.ts` validates untrusted manifest files.
+- `core/composition/slotStatus.ts` compares cue revisions with the catalog.
+- `core/composition/score.ts` normalizes project composition and builds the
+  `.vibrix-score.json` envelope.
+- `features/composition/CompositionCatalog.tsx` imports the catalog and edits
+  the selected Scene cue.
+- `features/timeline-editor/CompositionTrackLane.tsx` renders and edits the
+  Scene track on the shared audio timeline.
+
+This stage exports reference dependencies (id, family, name and revision), not
+portable slot values. Vibrix remains responsible for resolving those ids. A
+portable package with immutable slot snapshots belongs to the later packaging
+phase because the authoring manifest intentionally contains no slot values.
 
 ## Import/export contracts
 

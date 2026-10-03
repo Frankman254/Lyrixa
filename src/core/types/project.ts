@@ -8,6 +8,7 @@ import type {
   RenderMode
 } from './render';
 import type { AudioLibraryAsset, AudioPeak, ProjectAudioTracks } from './audio';
+import type { CompositionScore, VibrixAuthoringManifest } from '../composition/types';
 
 /**
  * Legacy single-track shape. Older projects persisted this as `track`.
@@ -65,6 +66,10 @@ export interface LyrixaProject {
   activeLyricSourceId?: string;
   layers: LyricLayer[];
   clips: LyricClip[];
+  /** Deterministic audiovisual cues authored against a Vibrix slot catalog. */
+  composition: CompositionScore;
+  /** Last imported read-only Vibrix authoring catalog. */
+  vibrixManifest?: VibrixAuthoringManifest;
   styleConfig: LyricVisualStyle;
   animationConfig: LyricAnimationConfig;
   fxConfig: LyricFxConfig;

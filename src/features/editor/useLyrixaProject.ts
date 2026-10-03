@@ -3,6 +3,7 @@ import type { SetStateAction } from 'react';
 import type { LyricProjectMode, LyricSource, LyrixaProject } from '../../core/types/project';
 import type { LyricClip } from '../../core/types/clip';
 import type { LyricLayer } from '../../core/types/layer';
+import type { CompositionScore, VibrixAuthoringManifest } from '../../core/composition/types';
 import type {
   ClipProgressIndicatorConfig,
   LyricAnimationConfig,
@@ -57,6 +58,7 @@ const HISTORY_COALESCE_MS = 800;
 
 export type SaveStatus = 'idle' | 'pending' | 'saved';
 export type ClipUpdate = LyricClip[] | ((previous: LyricClip[]) => LyricClip[]);
+export type CompositionUpdate = CompositionScore | ((previous: CompositionScore) => CompositionScore);
 
 export interface UseLyrixaProjectOptions {
   /** When false, Lyrixa never decodes audio to extract waveform peaks. */
@@ -117,6 +119,8 @@ export interface UseLyrixaProjectResult {
   setClips: (next: ClipUpdate) => void;
   updateClip: (clipId: string, patch: Partial<LyricClip>) => void;
   setLayers: (next: LyricLayer[]) => void;
+  setComposition: (next: CompositionUpdate) => void;
+  setVibrixManifest: (manifest: VibrixAuthoringManifest) => void;
   setStyleConfig: (next: LyricVisualStyle) => void;
   setAnimationConfig: (next: LyricAnimationConfig) => void;
   setFxConfig: (next: LyricFxConfig) => void;
@@ -830,6 +834,17 @@ export function useLyrixaProject({
     setProject(p => ({ ...p, layers: next }));
   }, []);
 
+  const setComposition = useCallback((next: CompositionUpdate) => {
+    setProject(p => ({
+      ...p,
+      composition: typeof next === 'function' ? next(p.composition) : next
+    }));
+  }, [setProject]);
+
+  const setVibrixManifest = useCallback((manifest: VibrixAuthoringManifest) => {
+    setProject(p => ({ ...p, vibrixManifest: manifest }));
+  }, [setProject]);
+
   const setStyleConfig = useCallback((next: LyricVisualStyle) => {
     setProject(p => ({ ...p, styleConfig: next }));
   }, []);
@@ -968,6 +983,8 @@ export function useLyrixaProject({
     setClips,
     updateClip,
     setLayers,
+    setComposition,
+    setVibrixManifest,
     setStyleConfig,
     setAnimationConfig,
     setFxConfig,

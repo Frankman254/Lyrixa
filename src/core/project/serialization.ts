@@ -14,6 +14,8 @@ import type {
 } from '../types/layer';
 import { normalizeLyricsText } from '../lyrics/normalize';
 import type { LyricSource, LyrixaProject } from '../types/project';
+import { parseAuthoringManifest } from '../composition/authoringManifest';
+import { normalizeCompositionScore } from '../composition/score';
 import { DEFAULT_LYRIC_ANIMATION } from '../types/render';
 import {
   normalizePartialLyricVisualStyle,
@@ -97,6 +99,8 @@ export function normalizeProject(input: Partial<LyrixaProject>): LyrixaProject {
     activeLyricSourceId,
     layers: normalizeLayers(input.layers),
     clips: normalizeClips(input.clips),
+    composition: normalizeCompositionScore(input.composition),
+    vibrixManifest: normalizeManifest(input.vibrixManifest),
     styleConfig: resolveLyricVisualStyle(input.styleConfig),
     animationConfig: resolveLyricAnimationConfig(input.animationConfig),
     fxConfig: resolveLyricFxConfig(input.fxConfig),
@@ -104,6 +108,12 @@ export function normalizeProject(input: Partial<LyrixaProject>): LyrixaProject {
     currentTime: Number.isFinite(input.currentTime) ? input.currentTime! : 0,
     renderMode: input.renderMode ?? 'editor'
   };
+}
+
+function normalizeManifest(input: unknown): LyrixaProject['vibrixManifest'] {
+  if (input === undefined) return undefined;
+  const parsed = parseAuthoringManifest(input);
+  return parsed.ok ? parsed.manifest : undefined;
 }
 
 export function normalizeLyricSources(

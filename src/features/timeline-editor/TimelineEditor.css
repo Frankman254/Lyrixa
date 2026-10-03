@@ -368,6 +368,14 @@
 
 .tl-track.locked .tl-track-lane { cursor: not-allowed; }
 
+.composition-track { border-top: 1px solid color-mix(in srgb, #e4a84d 35%, var(--border)); }
+.composition-track-header { border-left-color: #e4a84d; }
+.composition-swatch { background: #e4a84d; }
+.composition-track-count { font: 9px var(--font-mono); color: var(--fg-3); }
+.composition-track-lane { background-color: color-mix(in srgb, #e4a84d 3%, var(--bg-0)); }
+.composition-cue.updated { --clip-color: #e0a43d !important; }
+.composition-cue.missing { --clip-color: #d85b61 !important; }
+
 .tl-track.hidden .tl-track-lane { opacity: 0.35; }
 
 .tl-track.drop-target .tl-track-lane {

@@ -21,6 +21,7 @@ import {
   resolveLyricVisualStyle,
   resolveProgressIndicatorConfig
 } from '../../core/render/resolveVisualStyle';
+import { cloneDefaultCompositionScore } from '../../core/composition/score';
 
 const STORAGE_KEY = 'lyrixa:project:v1';
 const SCHEMA_VERSION = 4;
@@ -86,6 +87,8 @@ export function createEmptyProject(): LyrixaProject {
     activeLyricSourceId: undefined,
     layers: createDefaultLayers(),
     clips: [],
+    composition: cloneDefaultCompositionScore(),
+    vibrixManifest: undefined,
     styleConfig: { ...DEFAULT_LYRIC_STYLE },
     animationConfig: { ...DEFAULT_LYRIC_ANIMATION },
     fxConfig: { ...DEFAULT_LYRIC_FX },

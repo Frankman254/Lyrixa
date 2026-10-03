@@ -12,6 +12,7 @@ import { EditorAlerts } from './EditorAlerts';
 import { EditorTopBar } from './EditorTopBar';
 import { LayersSidebar } from './LayersSidebar';
 import { InspectorPanel } from '../inspector/InspectorPanel';
+import { CompositionCatalog } from '../composition/CompositionCatalog';
 import { TapSyncPanel } from '../sync/TapSyncPanel';
 import { useTapSync } from '../sync/useTapSync';
 import { useEditorMode } from './useEditorMode';
@@ -45,6 +46,7 @@ import {
   resolveLiveWallpaperTarget,
   sendProjectToLiveWallpaper
 } from '../../core/bridge/liveWallpaperTarget';
+import { createVibrixScoreEnvelope } from '../../core/composition/score';
 import './LyrixaEditorShell.css';
 
 export function LyrixaEditorShell() {
@@ -75,6 +77,8 @@ export function LyrixaEditorShell() {
     setLyricSourceAudioAssignment,
     setClips,
     setLayers,
+    setComposition,
+    setVibrixManifest,
     setStyleConfig,
     setAnimationConfig,
     setFxConfig,
@@ -93,7 +97,7 @@ export function LyrixaEditorShell() {
 
   const masterFileInputRef = useRef<HTMLInputElement>(null);
 
-  const { mode, setMode, isSync: syncMode, isPreview } = useEditorMode();
+  const { mode, setMode, isSync: syncMode, isCompose, isPreview } = useEditorMode();
   // Tracks whether the sync side-effects (cursor, lines, layer wiring) have
   // already run. Lets the mode switcher AND the "Sync lyrics" button share
   // one idempotent entry/exit path.
@@ -123,6 +127,7 @@ export function LyrixaEditorShell() {
   const [draftName, setDraftName] = useState('');
   const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
   const [selectedLayerId, setSelectedLayerId] = useState<string | null>(project.layers[0]?.id ?? null);
+  const [selectedCompositionCueId, setSelectedCompositionCueId] = useState<string | null>(null);
   const [timelineFocusRequest, setTimelineFocusRequest] = useState<{ time: number; nonce: number } | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() =>
     safeGetLocalStorage('lyrixa_sidebar_collapsed') === '1'
@@ -653,12 +658,13 @@ export function LyrixaEditorShell() {
     // Style mode is inspector-centric: on the compact tier open its drawer
     // right away (mobile renders it on the stage instead).
     if (next === 'style' && tier === 'compact') setInspectorDrawerOpen(true);
+    if (next === 'compose' && tier !== 'desktop') setSidebarDrawerOpen(true);
   }, [setMiniPreviewVisible, setMode, tier]);
 
   // Mobile style mode promotes the inspector to the stage area — styling on a
   // phone needs the full width, and the timeline isn't useful mid-styling.
   const mobileStyleMode = isMobile && mode === 'style';
-  const inspectorShown = isPreview
+  const inspectorShown = isPreview || isCompose
     ? false
     : mobileStyleMode
       ? true
@@ -679,7 +685,7 @@ export function LyrixaEditorShell() {
   const shellClass = [
     'lyrixa-shell',
     `tier-${tier}`,
-    sidebarCollapsed && isDesktop ? 'sidebar-collapsed' : '',
+    sidebarCollapsed && isDesktop && !isCompose ? 'sidebar-collapsed' : '',
     !inspectorShown || inspectorIsOverlay || mobileStyleMode ? 'inspector-hidden' : '',
     mobileStyleMode ? 'mobile-style' : ''
   ].filter(Boolean).join(' ');
@@ -706,7 +712,7 @@ export function LyrixaEditorShell() {
         canUndo={canUndo}
         canRedo={canRedo}
         inspectorVisible={inspectorShown}
-        showInspectorToggle={!isPreview && !mobileStyleMode}
+        showInspectorToggle={!isPreview && !isCompose && !mobileStyleMode}
         onToggleInspector={handleToggleInspector}
         onToggleSidebar={() => setSidebarDrawerOpen(open => !open)}
         previewOpen={previewOpen}
@@ -773,32 +779,46 @@ export function LyrixaEditorShell() {
       )}
 
       {(!sidebarIsDrawer || sidebarDrawerOpen) && (
-        <LayersSidebar
-          layers={project.layers}
-          clips={project.clips}
-          selectedLayerId={selectedLayerId}
-          collapsed={sidebarIsDrawer ? false : sidebarCollapsed}
-          waveformEnabled={waveformEnabled}
-          previewVisible={showMini || previewOpen}
-          onSelectLayer={(id) => {
-            setSelectedLayerId(id);
-            setSelectedClipId(null);
-          }}
-          onLayersChange={setLayers}
-          onToggleWaveform={toggleWaveformEnabled}
-          onTogglePreview={togglePreviewWindow}
-          onToggleCollapsed={() => {
-            if (sidebarIsDrawer) {
-              setSidebarDrawerOpen(false);
-              return;
-            }
-            setSidebarCollapsed(v => {
-              const next = !v;
-              try { window.localStorage.setItem('lyrixa_sidebar_collapsed', next ? '1' : '0'); } catch { /* ignore */ }
-              return next;
-            });
-          }}
-        />
+        isCompose ? (
+          <CompositionCatalog
+            manifest={project.vibrixManifest}
+            score={project.composition}
+            selectedCueId={selectedCompositionCueId}
+            currentTime={playbackTime}
+            onManifestChange={setVibrixManifest}
+            onScoreChange={setComposition}
+            onSelectCue={setSelectedCompositionCueId}
+            onExportScore={() => downloadVibrixScore(project)}
+            onClose={sidebarIsDrawer ? () => setSidebarDrawerOpen(false) : undefined}
+          />
+        ) : (
+          <LayersSidebar
+            layers={project.layers}
+            clips={project.clips}
+            selectedLayerId={selectedLayerId}
+            collapsed={sidebarIsDrawer ? false : sidebarCollapsed}
+            waveformEnabled={waveformEnabled}
+            previewVisible={showMini || previewOpen}
+            onSelectLayer={(id) => {
+              setSelectedLayerId(id);
+              setSelectedClipId(null);
+            }}
+            onLayersChange={setLayers}
+            onToggleWaveform={toggleWaveformEnabled}
+            onTogglePreview={togglePreviewWindow}
+            onToggleCollapsed={() => {
+              if (sidebarIsDrawer) {
+                setSidebarDrawerOpen(false);
+                return;
+              }
+              setSidebarCollapsed(v => {
+                const next = !v;
+                try { window.localStorage.setItem('lyrixa_sidebar_collapsed', next ? '1' : '0'); } catch { /* ignore */ }
+                return next;
+              });
+            }}
+          />
+        )
       )}
 
       {backdropShown && (
@@ -836,6 +856,11 @@ export function LyrixaEditorShell() {
               setSelectedClipId(clipId);
               setSelectedLayerId(layerId);
             }}
+            composition={isCompose ? project.composition : undefined}
+            vibrixManifest={project.vibrixManifest}
+            selectedCompositionCueId={selectedCompositionCueId}
+            onCompositionChange={isCompose ? setComposition : undefined}
+            onCompositionSelectionChange={isCompose ? setSelectedCompositionCueId : undefined}
           />
 
           {showMini && !isPreview && (
@@ -868,7 +893,7 @@ export function LyrixaEditorShell() {
             />
           )}
 
-          {!hasImportedLyrics && project.clips.length === 0 && masterChannel && (
+          {!isCompose && !hasImportedLyrics && project.clips.length === 0 && masterChannel && (
             <EmptyLaneHint
               icon="📝"
               title="No lyrics yet"
@@ -1112,6 +1137,24 @@ function formatPreviewTime(seconds: number): string {
     return `${hours}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
   }
   return `${minutes}:${String(secs).padStart(2, '0')}`;
+}
+
+function downloadVibrixScore(project: LyrixaProject): void {
+  try {
+    const envelope = createVibrixScoreEnvelope(project);
+    const blob = new Blob([JSON.stringify(envelope, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const safeName = project.name.trim().replace(/[^a-z0-9-_]+/gi, '-').replace(/^-+|-+$/g, '') || 'lyrixa-score';
+    link.href = url;
+    link.download = `${safeName}.vibrix-score.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  } catch (reason) {
+    window.alert(reason instanceof Error ? reason.message : 'Could not export Vibrix score.');
+  }
 }
 
 function getLyricSourceStartTime(project: LyrixaProject, sourceId: string | null): number {

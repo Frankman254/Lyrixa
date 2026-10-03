@@ -7,17 +7,19 @@ import { useCallback, useState } from 'react';
  *
  * - `sync`     — time lyric paragraphs onto a layer (hold-Space).
  * - `edit`     — drag/resize clips, nudge timings, manage selection.
+ * - `compose`  — place deterministic Vibrix scene cues.
  * - `style`    — pick visual presets, tweak text/animation/FX/textures.
  * - `preview`  — clean playback view, minimal UI.
  */
-export type EditorMode = 'sync' | 'edit' | 'style' | 'preview';
+export type EditorMode = 'sync' | 'edit' | 'compose' | 'style' | 'preview';
 
-export const EDITOR_MODES: readonly EditorMode[] = ['sync', 'edit', 'style', 'preview'];
+export const EDITOR_MODES: readonly EditorMode[] = ['sync', 'edit', 'compose', 'style', 'preview'];
 
 /** Shared mode presentation — used by the top-bar switcher and the mobile bottom nav. */
 export const MODE_LABELS: Record<EditorMode, string> = {
   sync: 'Sync',
   edit: 'Edit',
+  compose: 'Compose',
   style: 'Style',
   preview: 'Preview'
 };
@@ -25,6 +27,7 @@ export const MODE_LABELS: Record<EditorMode, string> = {
 export const MODE_ICONS: Record<EditorMode, string> = {
   sync: '◉',
   edit: '✎',
+  compose: '◆',
   style: '◐',
   preview: '▶'
 };
@@ -32,12 +35,13 @@ export const MODE_ICONS: Record<EditorMode, string> = {
 export const MODE_TITLES: Record<EditorMode, string> = {
   sync: 'Sync mode — hold Space to time lyric paragraphs',
   edit: 'Edit mode — drag, resize and nudge clips on the timeline',
+  compose: 'Compose mode — arrange Vibrix scenes on the song timeline',
   style: 'Style mode — pick presets and tweak text/animation/FX',
   preview: 'Preview mode — clean playback view'
 };
 
 const STORAGE_KEY = 'lyrixa.editorMode.v1';
-const VALID: ReadonlySet<EditorMode> = new Set(['sync', 'edit', 'style', 'preview']);
+const VALID: ReadonlySet<EditorMode> = new Set(['sync', 'edit', 'compose', 'style', 'preview']);
 
 function readStoredMode(): EditorMode {
   try {
@@ -52,6 +56,7 @@ export interface UseEditorModeResult {
   setMode: (next: EditorMode) => void;
   isSync: boolean;
   isEdit: boolean;
+  isCompose: boolean;
   isStyle: boolean;
   isPreview: boolean;
 }
@@ -70,6 +75,7 @@ export function useEditorMode(): UseEditorModeResult {
     setMode,
     isSync: mode === 'sync',
     isEdit: mode === 'edit',
+    isCompose: mode === 'compose',
     isStyle: mode === 'style',
     isPreview: mode === 'preview'
   };

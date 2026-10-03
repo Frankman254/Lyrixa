@@ -26,6 +26,8 @@ import { useTimelineBandPeaks } from './useTimelineBandPeaks';
 import { useShortcuts } from '../shortcuts/useShortcuts';
 import { syncDebug } from '../sync/syncDebug';
 import type { ClipPointerModifiers, DragMode } from './LyricClip';
+import type { CompositionScore, VibrixAuthoringManifest } from '../../core/composition/types';
+import { CompositionTrackLane } from './CompositionTrackLane';
 import {
   clampZoom,
   getTimelinePointerTime,
@@ -59,6 +61,11 @@ interface TimelineEditorProps {
   onSeek: (time: number) => void;
   onPlayToggle: () => void;
   onSelectionChange?: (selection: { clipId: string | null; layerId: string | null }) => void;
+  composition?: CompositionScore;
+  vibrixManifest?: VibrixAuthoringManifest;
+  selectedCompositionCueId?: string | null;
+  onCompositionChange?: (score: CompositionScore) => void;
+  onCompositionSelectionChange?: (cueId: string | null) => void;
 }
 
 interface DragState {
@@ -94,6 +101,11 @@ export function TimelineEditor({
   onSeek,
   onPlayToggle,
   onSelectionChange,
+  composition,
+  vibrixManifest,
+  selectedCompositionCueId = null,
+  onCompositionChange,
+  onCompositionSelectionChange,
 }: TimelineEditorProps) {
   const [pxPerSecond, setPxPerSecond] = useState(60);
   const [selectedClipIds, setSelectedClipIds] = useState<Set<string>>(() => new Set());
@@ -206,7 +218,8 @@ export function TimelineEditor({
   }, [clips, layers, effectiveSelectedLayerId]);
 
   const audioRowHeights = MASTER_WAVEFORM_HEIGHT;
-  const totalTracksHeight = layers.length * TRACK_HEIGHT;
+  const compositionTrackCount = composition && onCompositionChange ? composition.tracks.length : 0;
+  const totalTracksHeight = (layers.length + compositionTrackCount) * TRACK_HEIGHT;
   const playheadHeight = RULER_HEIGHT + audioRowHeights + totalTracksHeight;
 
   const selectionBounds = useMemo(
@@ -861,6 +874,19 @@ export function TimelineEditor({
               onLayerPositionChange={handleLayerPositionChange}
               onLayerSelect={setSelectedLayerId}
             />
+            {composition && onCompositionChange && onCompositionSelectionChange && composition.tracks.map(track => (
+              <CompositionTrackLane
+                key={track.id}
+                track={track}
+                score={composition}
+                manifest={vibrixManifest}
+                pxPerSecond={pxPerSecond}
+                duration={effectiveDuration}
+                selectedCueId={selectedCompositionCueId}
+                onScoreChange={onCompositionChange}
+                onSelectCue={onCompositionSelectionChange}
+              />
+            ))}
           </div>
 
           <TimelinePlayhead
