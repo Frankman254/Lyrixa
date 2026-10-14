@@ -44,6 +44,26 @@ modelo es compatibilidad, no la base de la nueva timeline.
 - La transición de imágenes pertenece a la imagen saliente; Lyrixa sólo fija el
   instante del cambio.
 
+### Decisiones de contrato que no se dejan a la implementación
+
+- `VibrixCueableSlotFamily` excluye `intro-window`.
+- `VibrixGranularFamily` excluye `scene` e `intro-window`; incluye
+  `background-zoom`.
+- `VibrixTimelineKind = VibrixCueableSlotFamily | 'image'`. Por tanto nunca
+  existe un carril `intro-window`.
+- Un target `scene` lleva `family: 'scene'`; uno `image`, `family: 'image'`;
+  `feature-slot` e `inherit` sólo aceptan `VibrixGranularFamily`.
+- El proyecto guarda una unión discriminada interna
+  `StoredCompositionV1 | StoredCompositionV2`, con `schemaVersion` dentro de
+  `project.composition`. La ausencia del campo al abrir un proyecto antiguo se
+  interpreta como v1. No se infiere la versión mirando si existen cues.
+- La fuente importada se guarda una sola vez en `project.vibrixAuthoring` como
+  unión `manifest` / `package`. `project.vibrixManifest` es entrada legacy y se
+  normaliza a esa unión; no se mantienen las dos copias como fuentes de verdad.
+- Un manifiesto suelto permite editar y exportar JSON por referencias. El
+  paquete autocontenido `.vibrix-score` exige haber importado
+  `.vibrix-authoring`, porque sólo éste trae snapshots.
+
 ## L1 · Importar `.vibrix-authoring`
 
 Trabajo puro en `src/core/composition/`:
@@ -51,20 +71,28 @@ Trabajo puro en `src/core/composition/`:
 1. Modelar `VibrixAuthoringManifest` v1/v2 y el contenedor
    `VibrixAuthoringPackage` sin perder discriminación de versión.
 2. Añadir `VibrixManifestImage` y snapshots discriminados `slot` / `image`.
-3. Parsear `.vibrix-authoring`; rechazar ids duplicados, revisiones incoherentes,
-   snapshots huérfanos y previews no transportables.
+3. Parsear `.vibrix-authoring`; exigir exactamente un snapshot por cada clave
+   `(kind, id)` del manifiesto y rechazar duplicados, faltantes, huérfanos o
+   discrepancias de `kind`, `family` y `revision`.
 4. Mantener `parseAuthoringManifest` para `.vibrix-manifest.json` v1/v2.
-5. Probar el fixture literal del contrato y un paquete real exportado por
-   Vibrix.
+5. Aceptar miniaturas sólo como `data:image/...`; rechazar `blob:`, HTTP y rutas
+   locales. El contrato v1 del contenedor no fija todavía un MIME concreto ni
+   un límite de bytes.
+6. Probar por separado el fixture literal del manifiesto —que lleva
+   `images: []`—, un fixture de paquete con imagen/miniatura y un paquete real
+   exportado por Vibrix.
 
 Criterio: abrir el paquete desconectado y construir catálogo, snapshots y
 previews sin `blob:` URLs ni acceso a otro origen.
 
 ## L2 · Score v2 y migración
 
-1. Añadir `VibrixTimelineKind = VibrixSlotFamily | 'image'`.
-2. Tipar targets `scene`, `feature-slot`, `image` e `inherit`.
-3. Guardar proyectos nuevos en schema v2 sin `endTimeMs`.
+1. Añadir `VibrixCueableSlotFamily`, `VibrixGranularFamily` y
+   `VibrixTimelineKind = VibrixCueableSlotFamily | 'image'`.
+2. Tipar targets `scene`, `feature-slot`, `image` e `inherit` con las
+   restricciones de familia cerradas arriba.
+3. Guardar proyectos nuevos con `project.composition.schemaVersion: 2` y sin
+   `endTimeMs`; normalizar la forma actual sin discriminante como schema 1.
 4. Normalizar proyectos v1 de forma aditiva y conservar su duración histórica
    al importarlos; no convertir silenciosamente un intervalo v1 en activación
    infinita.
@@ -99,17 +127,27 @@ siendo la autoridad visual.
 
 ## L5 · Exportar `.vibrix-score`
 
-1. Escribir `score.json` schema 2.
-2. Recopilar únicamente ids realmente referenciados por cues enabled.
-3. Incluir los snapshots y previews de esas dependencias; `inherit` no crea una
-   dependencia.
+1. Escribir el sobre de score schema 2 dentro del contenedor.
+2. Calcular el cierre de dependencias de los cues enabled: targets directos y
+   todo slot/escena que sus snapshots referencien. No basta con recopilar sólo
+   los ids escritos directamente en los cues.
+3. Incluir los snapshots de ese cierre y las miniaturas de las imágenes del
+   cierre. `inherit` no crea una dependencia.
 4. Validar que revisión y clase del snapshot coincidan con el target.
 5. Mantener `.vibrix-score.json` v1 como export legacy durante la transición.
 
-El primer contenedor puede ser JSON autocontenido. ZIP/binario entra cuando se
-necesiten originales portables; los JSON internos no cambian por ese transporte.
+El contenedor v1 es JSON autocontenido con `format`, `packageVersion`,
+`exportedAt`, el sobre `score`, `snapshots` y `previews`. No lleva originales de
+imagen: Vibrix no se los entrega a Lyrixa. ZIP/binario entra en una versión
+portable futura y no cambia los JSON internos.
 
 ## Integración compartida
+
+Antes de intercambiar el primer archivo, Vibrix debe aplicar el mismo
+vocabulario estricto: su parser no puede aceptar `intro-window` como
+`track.kind`, `feature-slot.family` o `inherit.family`. En la revisión del
+2026-10-13 su tipo `VibrixTimelineKind` todavía se construía con todas las
+familias y requería ese ajuste del lado lector.
 
 El score real de salida coloca:
 

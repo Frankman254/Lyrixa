@@ -11,9 +11,16 @@ Lyrixa is split into two layers:
 
 The central data object is `LyrixaProject`. UI code edits this object, then the preview/timeline render from it.
 
-`LyrixaProject.composition` is the single source of truth for deterministic
-Vibrix cues. `LyrixaProject.vibrixManifest` is a read-only snapshot of the last
-catalog imported from Vibrix. Composition UI must not keep a second cue array.
+`LyrixaProject.composition` es la única fuente de verdad para los cues
+deterministas de Vibrix. Durante la migración v2 se convierte en una unión
+discriminada por `schemaVersion`; la forma actual sin discriminante se lee como
+v1.
+
+El catálogo importado se normaliza una sola vez en
+`LyrixaProject.vibrixAuthoring`, como manifiesto legacy o paquete completo. El
+campo actual `vibrixManifest` se sigue leyendo al importar proyectos antiguos,
+pero no convive como otra fuente de verdad. La UI de composición nunca mantiene
+un segundo array de cues.
 
 ## Main editor flow
 
@@ -216,16 +223,16 @@ No host or port appears anywhere under `src/`. In development the Vite server
 proxies `/transcriptor` (see `vite.config.ts`), which also avoids needing CORS
 on the Python side.
 
-### Vibrix composition sequencer
+### Secuenciador de composición de Vibrix
 
-The cross-app composition proposal lives in
+El diseño entre aplicaciones vive en
 [`03-vibrix-composition-sequencer.md`](03-vibrix-composition-sequencer.md).
-It does not extend the lyrics bundle: lyrics remain the stable v1 contract,
-while `.vibrix-authoring` and `.vibrix-score` carry the visual authoring
-catalogue and deterministic timing. Vibrix remains the owner of object values
-and rendering; Lyrixa authors references and activation times.
+No extiende el bundle de letras: las letras conservan su contrato v1 estable,
+mientras `.vibrix-authoring` y `.vibrix-score` transportan el catálogo visual y
+los tiempos deterministas. Vibrix sigue siendo dueño de los valores y del
+render; Lyrixa crea referencias y tiempos de activación.
 
-The first schema-v1 vertical slice is implemented:
+El primer corte vertical schema v1 está implementado:
 
 - `core/composition/types.ts` owns manifest, track, cue and score types.
 - `core/composition/authoringManifest.ts` validates untrusted manifest files.
@@ -237,12 +244,13 @@ The first schema-v1 vertical slice is implemented:
 - `features/timeline-editor/CompositionTrackLane.tsx` renders and edits the
   Scene track on the shared audio timeline.
 
-This slice imports a loose v1 manifest, exposes Scene only, creates eight-second
-intervals and exports reference dependencies. The active migration is schema
-v2: import `.vibrix-authoring`, include Image and granular tracks, store only
-`startTimeMs`, support `inherit` and export `.vibrix-score` with the referenced
-snapshots/previews. The executable order lives in
-`.agents/TAREA_SECUENCIADOR.md`.
+Este corte importa un manifiesto v1 suelto, muestra sólo Scene, crea intervalos
+de ocho segundos y exporta dependencias por referencia. La migración activa es
+schema v2: importar `.vibrix-authoring`, incluir Image y pistas granulares,
+guardar sólo `startTimeMs`, soportar `inherit` y exportar `.vibrix-score` con el
+cierre transitivo de snapshots referenciados y las previews disponibles. Los
+binarios originales permanecen en Vibrix y no forman parte del primer paquete
+JSON. El orden ejecutable vive en `.agents/TAREA_SECUENCIADOR.md`.
 
 ## Import/export contracts
 

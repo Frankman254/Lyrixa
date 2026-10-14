@@ -42,6 +42,23 @@ Carriles cueables:
 `intro-window` se muestra como información, pero no se arrastra. Calibration es
 específica del dispositivo y nunca entra en el contrato.
 
+El vocabulario de tipos refleja esa regla, no sólo la UI:
+
+```ts
+type VibrixCueableSlotFamily = Exclude<
+  VibrixSlotFamily,
+  "intro-window"
+>;
+type VibrixGranularFamily = Exclude<
+  VibrixCueableSlotFamily,
+  "scene"
+>;
+type VibrixTimelineKind = VibrixCueableSlotFamily | "image";
+```
+
+`background-zoom` pertenece a `VibrixGranularFamily`. `intro-window` no puede
+aparecer como `track.kind`, `target.family` ni `inherit.family`.
+
 ### Precedencia
 
 En el mismo milisegundo se aplican Scene, Image y después granulares. Un cue
@@ -64,6 +81,13 @@ El paquete contiene:
 No contiene URLs `blob:`, rutas locales ni dependencias de la IndexedDB de
 Vibrix. El manifiesto JSON v1/v2 suelto sigue siendo entrada legacy.
 
+El paquete se valida por la clave compuesta `(kind, id)`: debe existir
+exactamente un snapshot por cada slot e imagen del manifiesto. Se rechazan
+snapshots duplicados, faltantes, huérfanos o con revisión/familia distinta. Una
+miniatura opcional sólo es transportable si es `data:image/...`; no se acepta
+`blob:`, HTTP ni una ruta local. La versión 1 del contenedor no fija un MIME de
+imagen concreto ni un límite máximo de bytes.
+
 Forma conceptual:
 
 ```ts
@@ -84,13 +108,19 @@ target guarda id + revisión, nunca una referencia por nombre.
 ```ts
 type CompositionTargetV2 =
   | {
-      kind: "scene" | "feature-slot";
-      family: VibrixSlotFamily;
+      kind: "scene";
+      family: "scene";
+      id: string;
+      revision: string;
+    }
+  | {
+      kind: "feature-slot";
+      family: VibrixGranularFamily;
       id: string;
       revision: string;
     }
   | { kind: "image"; family: "image"; id: string; revision: string }
-  | { kind: "inherit"; family: VibrixSlotFamily };
+  | { kind: "inherit"; family: VibrixGranularFamily };
 
 interface CompositionCueV2 {
   id: string;
@@ -105,6 +135,30 @@ interface CompositionCueV2 {
 El JSON v1 con intervalos continúa siendo legible durante la migración. Los
 archivos nuevos se guardan en v2. Un contenedor futuro puede pasar de JSON a ZIP
 para portar originales binarios sin cambiar `manifest.json` ni `score.json`.
+
+La primera forma autocontenida de salida es JSON:
+
+```ts
+interface VibrixScorePackageV1 {
+  format: "vibrix-score";
+  packageVersion: 1;
+  exportedAt: string;
+  score: VibrixScoreEnvelopeV2;
+  snapshots: Array<VibrixSlotSnapshot | VibrixImageSnapshot>;
+  previews: Array<{
+    kind: "image";
+    id: string;
+    thumbnailDataUrl: string;
+  }>;
+}
+```
+
+No incluye originales de imagen: el paquete de autoría no se los entrega a
+Lyrixa. `snapshots` contiene el cierre transitivo necesario para los cues
+enabled, no sólo sus targets directos. Una escena añade los slots ligados que
+no sean `off`; una imagen añade las escenas/slots que sus valores referencien.
+`inherit` no añade dependencia. `previews` sólo copia miniaturas disponibles de
+las imágenes incluidas en ese cierre.
 
 ## Revisiones y seguridad ante cambios
 
@@ -132,9 +186,26 @@ El dominio vive en `src/core/composition/` y permanece puro. Allí pertenecen:
 - serialización del paquete de salida.
 
 La UI lee y escribe únicamente `project.composition`. El catálogo no mantiene
-otro array de cues. Letras y composición comparten viewport, selección, snap,
-playhead y undo, pero conservan modelos distintos; `LyricClip` no se convierte
-en cue genérico.
+otro array de cues. La composición persistida es una unión discriminada
+`StoredCompositionV1 | StoredCompositionV2` con `schemaVersion`; la forma
+histórica sin discriminante se normaliza como v1. Así un score vacío también
+conserva su versión sin inferirla por la presencia de `endTimeMs`.
+
+La fuente de catálogo se persiste una vez en `project.vibrixAuthoring`:
+
+```ts
+type StoredVibrixAuthoring =
+  | { kind: "manifest"; manifest: VibrixAuthoringManifestV1 | VibrixAuthoringManifestV2 }
+  | { kind: "package"; package: VibrixAuthoringPackage };
+```
+
+El campo histórico `project.vibrixManifest` se acepta al importar y se
+normaliza a la rama `manifest`; no convive como segunda fuente de verdad. Un
+manifiesto suelto sirve para editar y exportar por referencias, pero no permite
+crear `.vibrix-score` autocontenido porque no trae snapshots.
+
+Letras y composición comparten viewport, selección, snap, playhead y undo,
+pero conservan modelos distintos; `LyricClip` no se convierte en cue genérico.
 
 ### UI
 
@@ -165,7 +236,7 @@ del store mutado por el frame anterior. Esa regla garantiza que saltar a
 
 | Fase | Lyrixa                          | Vibrix                                        |
 | ---- | ------------------------------- | --------------------------------------------- |
-| 1    | Abrir `.vibrix-authoring` v1/v2 | Completar transición de imagen pura           |
+| 1    | Abrir paquete v2 y manifiestos v1/v2 | Completar transición de imagen pura       |
 | 2    | Score v2 y migración v1         | Persistir score/base/mode Compose             |
 | 3    | Carriles sostenidos             | Conectar preview, Play y seek                 |
 | 4    | Catálogo, previews e `inherit`  | Conectar export offline                       |

@@ -32,15 +32,18 @@ la idea, pero ya quedó detrás del contrato real de Vibrix.
 
 1. **L1 · Abrir el paquete de autoría.** Parser puro para
    `.vibrix-authoring`, manifiestos v1/v2, snapshots y previews. Mantener el
-   JSON v1 como entrada legacy.
+   JSON suelto como entrada legacy. El fixture literal del manifiesto no tiene
+   imágenes; añadir un fixture separado del paquete con imagen y miniatura.
 2. **L2 · Dominio score v2.** Nuevos cues guardan sólo `startTimeMs`; leer y
-   normalizar proyectos/scores v1 sin reinterpretarlos silenciosamente.
+   normalizar proyectos/scores v1 sin reinterpretarlos silenciosamente. La
+   versión se guarda explícitamente en `project.composition`, incluso vacío.
 3. **L3 · Timeline sostenida.** Añadir Image, Scene y carriles granulares. El
    borde derecho se deriva del siguiente cue del carril o del final del audio.
 4. **L4 · Catálogo completo.** Slots e imágenes con preview o placeholder,
    drag, `Add at playhead`, estado de revisión e `inherit` granular.
-5. **L5 · Paquete de score.** Exportar `.vibrix-score` con `score.json` y sólo
-   snapshots, previews y assets referenciados.
+5. **L5 · Paquete de score.** Exportar `.vibrix-score` con el score, el cierre
+   transitivo de snapshots usados y las previews correspondientes. Los
+   originales de imagen no entran: Lyrixa nunca los recibe.
 6. **Integración.** Entregar un paquete real a Vibrix y verificar Play, seek y
    export offline con dos imágenes, dos escenas, Spectrum 2 e `inherit`.
 
