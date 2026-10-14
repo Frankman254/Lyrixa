@@ -129,6 +129,21 @@ el editor de intervalos sólo para v1 hasta L3.
 6. Reutilizar viewport, playhead, snap, selección y undo del proyecto sin
    convertir `LyricClip` en tipo genérico.
 
+**Implementado y verificado el 2026-10-13.** La lógica pura vive en
+`src/core/composition/timeline.ts`; el componente v2 separado es
+`SustainedCompositionTrackLane.tsx`. `CompositionTrackLane.tsx` continúa como
+editor legacy v1. `TimelineEditor` añade el grupo plegable y reutiliza el snap,
+selección, playhead e historial global. El fixture
+`docs/fixtures/l3-sustained-score.lyrixa.json` permite comprobar los cuatro
+carriles sin depender de que el paquete real de Vibrix tenga escenas.
+
+Prueba en navegador real (2026-10-13, fixture importado en Compose): orden de
+carriles Scene → Image → Looks → Rain correcto; plegar oculta las 4 lanes y
+desplegar restaura los 9 cues; arrastrar "Chorus Scene" +2 s movió su corte y
+recalculó los vecinos en vivo; con Snap 0.5 s el corte quedó en 11000 ms
+exactos; Undo/Redo revierten y rehacen el corte; sin handles de resize en
+cues v2.
+
 ## L4 · Catálogo y edición
 
 1. Separar objetos por Images, Scenes y familias granulares.
@@ -185,6 +200,8 @@ espera al runtime de Vibrix; L1→L5 no están bloqueados.
 
 ## Siguiente archivo
 
-Continuar L3 en `src/features/timeline-editor/CompositionTrackLane.tsx` y
-`TimelineEditor.tsx`: añadir carriles sostenidos v2 con ancho derivado, sin
-resize, conservando el componente de intervalos v1 para compatibilidad.
+Tras la confirmación manual del usuario (opcional; L3 ya pasó en navegador
+real), continuar L4 en
+`src/features/composition/CompositionCatalog.tsx`: retirar el aviso temporal de
+score v2, agrupar Images/Scenes/familias granulares, añadir previews o
+placeholder y crear cues/carriles v2 mediante drag y `Add at playhead`.

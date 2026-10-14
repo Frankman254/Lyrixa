@@ -24,8 +24,8 @@ la idea, pero ya quedó detrás del contrato real de Vibrix.
 | Import `.vibrix-authoring`                                         | Hecho (L1)                    |
 | Manifiesto e imágenes schema v2                                    | Hecho en parser/catálogo (L1) |
 | Cues sostenidos sin `endTimeMs`                                    | Hecho en dominio (L2)         |
-| Carriles Image y granulares                                        | Pendiente                     |
-| `inherit`                                                          | Dominio hecho; UI pendiente   |
+| Carriles Image y granulares                                        | Hecho en timeline (L3)        |
+| `inherit`                                                          | Visible; creación en L4       |
 | Export `.vibrix-score` autocontenido                               | Pendiente                     |
 
 ## Orden de implementación
@@ -39,8 +39,13 @@ la idea, pero ya quedó detrás del contrato real de Vibrix.
 2. **L2 · Dominio score v2 — hecho.** Nuevos cues guardan sólo `startTimeMs`; leer y
    normalizar proyectos/scores v1 sin reinterpretarlos silenciosamente. La
    versión se guarda explícitamente en `project.composition`, incluso vacío.
-3. **L3 · Timeline sostenida.** Añadir Image, Scene y carriles granulares. El
-   borde derecho se deriva del siguiente cue del carril o del final del audio.
+3. **L3 · Timeline sostenida — hecho y verificado.** Grupo plegable, Image y
+   Scene primero, carriles granulares, ancho derivado y movimiento con
+   snap/undo sin resize. Fixture manual en
+   `docs/fixtures/l3-sustained-score.lyrixa.json`. Verificación automatizada
+   (171/171, lint sin errores, build) más prueba en navegador real el
+   2026-10-13: orden de carriles, plegado, drag con vecinos recalculados, snap
+   0.5 s y Undo/Redo correctos (pasos en `RELEVO.md`).
 4. **L4 · Catálogo completo.** Slots e imágenes con preview o placeholder,
    drag, `Add at playhead`, estado de revisión e `inherit` granular.
 5. **L5 · Paquete de score.** Exportar `.vibrix-score` con el score, el cierre
@@ -51,10 +56,12 @@ la idea, pero ya quedó detrás del contrato real de Vibrix.
 
 ### Siguiente paso concreto
 
-Empieza por **L3** en
-`src/features/timeline-editor/CompositionTrackLane.tsx` y
-`TimelineEditor.tsx`: renderiza la duración derivada de cues v2 sin resize y
-conserva el carril v1 actual como compatibilidad.
+**L3** ya fue verificada en navegador real el 2026-10-13 (orden, plegado,
+drag+vecinos, snap, undo/redo en `RELEVO.md`). El usuario aún puede repetir la
+pasada manual con el fixture si quiere confirmación propia. Continúa **L4** en
+`src/features/composition/CompositionCatalog.tsx`: renderiza Images, Scenes y
+familias granulares, y permite colocarlas en el carril v2 correcto mediante
+drag o `Add at playhead`, incluido `inherit` granular.
 
 Contrato dueño:
 `/Users/frankman254/Desktop/Personal-Projects/LiveWallpaperAnimeGlitch/docs/features/VIBRIX_AUTHORING_CONTRACT.md`.

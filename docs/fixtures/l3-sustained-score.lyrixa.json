@@ -1,0 +1,234 @@
+{
+  "schemaVersion": 1,
+  "app": "Lyrixa",
+  "exportedAt": "2026-10-13T00:00:00.000Z",
+  "project": {
+    "id": "manual-l3-sustained-score",
+    "name": "L3 sustained score manual test",
+    "audioTracks": {
+      "master": null
+    },
+    "composition": {
+      "schemaVersion": 2,
+      "tracks": [
+        {
+          "id": "composition-looks",
+          "name": "Looks",
+          "kind": "looks",
+          "order": 0,
+          "enabled": true,
+          "locked": false
+        },
+        {
+          "id": "composition-image",
+          "name": "Image",
+          "kind": "image",
+          "order": 20,
+          "enabled": true,
+          "locked": false
+        },
+        {
+          "id": "composition-scene",
+          "name": "Scene",
+          "kind": "scene",
+          "order": 30,
+          "enabled": true,
+          "locked": false
+        },
+        {
+          "id": "composition-rain",
+          "name": "Rain",
+          "kind": "rain",
+          "order": 1,
+          "enabled": true,
+          "locked": false
+        }
+      ],
+      "cues": [
+        {
+          "id": "scene-opening",
+          "trackId": "composition-scene",
+          "startTimeMs": 0,
+          "target": {
+            "kind": "scene",
+            "family": "scene",
+            "id": "scene-opening",
+            "revision": "scene-opening-r1"
+          },
+          "priority": 0,
+          "enabled": true
+        },
+        {
+          "id": "scene-chorus",
+          "trackId": "composition-scene",
+          "startTimeMs": 8000,
+          "target": {
+            "kind": "scene",
+            "family": "scene",
+            "id": "scene-chorus",
+            "revision": "scene-chorus-r1"
+          },
+          "priority": 0,
+          "enabled": true
+        },
+        {
+          "id": "scene-outro",
+          "trackId": "composition-scene",
+          "startTimeMs": 18000,
+          "target": {
+            "kind": "scene",
+            "family": "scene",
+            "id": "scene-outro",
+            "revision": "scene-outro-r1"
+          },
+          "priority": 0,
+          "enabled": true
+        },
+        {
+          "id": "image-cover",
+          "trackId": "composition-image",
+          "startTimeMs": 2000,
+          "target": {
+            "kind": "image",
+            "family": "image",
+            "id": "image-cover",
+            "revision": "image-cover-r1"
+          },
+          "priority": 0,
+          "enabled": true
+        },
+        {
+          "id": "image-backdrop",
+          "trackId": "composition-image",
+          "startTimeMs": 13000,
+          "target": {
+            "kind": "image",
+            "family": "image",
+            "id": "image-backdrop",
+            "revision": "image-backdrop-r1"
+          },
+          "priority": 0,
+          "enabled": true
+        },
+        {
+          "id": "looks-inherit",
+          "trackId": "composition-looks",
+          "startTimeMs": 0,
+          "target": {
+            "kind": "inherit",
+            "family": "looks"
+          },
+          "priority": 0,
+          "enabled": true
+        },
+        {
+          "id": "looks-neon",
+          "trackId": "composition-looks",
+          "startTimeMs": 6000,
+          "target": {
+            "kind": "feature-slot",
+            "family": "looks",
+            "id": "looks-neon",
+            "revision": "looks-neon-r1"
+          },
+          "priority": 0,
+          "enabled": true
+        },
+        {
+          "id": "rain-inherit",
+          "trackId": "composition-rain",
+          "startTimeMs": 0,
+          "target": {
+            "kind": "inherit",
+            "family": "rain"
+          },
+          "priority": 0,
+          "enabled": true
+        },
+        {
+          "id": "rain-heavy",
+          "trackId": "composition-rain",
+          "startTimeMs": 15000,
+          "target": {
+            "kind": "feature-slot",
+            "family": "rain",
+            "id": "rain-heavy",
+            "revision": "rain-heavy-r1"
+          },
+          "priority": 0,
+          "enabled": true
+        }
+      ]
+    },
+    "vibrixManifest": {
+      "schemaVersion": 2,
+      "app": "Vibrix",
+      "exportKind": "vibrix-manifest",
+      "exportedAt": "2026-10-13T00:00:00.000Z",
+      "rendererVersion": "0.7.0-alpha",
+      "storePersistVersion": 1,
+      "projectName": "L3 manual fixture",
+      "revision": "l3-fixture-r1",
+      "slots": [
+        {
+          "id": "scene-opening",
+          "family": "scene",
+          "name": "Opening Scene",
+          "revision": "scene-opening-r1",
+          "sceneBindable": false,
+          "cueable": true
+        },
+        {
+          "id": "scene-chorus",
+          "family": "scene",
+          "name": "Chorus Scene",
+          "revision": "scene-chorus-r1",
+          "sceneBindable": false,
+          "cueable": true
+        },
+        {
+          "id": "scene-outro",
+          "family": "scene",
+          "name": "Outro Scene",
+          "revision": "scene-outro-r1",
+          "sceneBindable": false,
+          "cueable": true
+        },
+        {
+          "id": "looks-neon",
+          "family": "looks",
+          "name": "Neon Look",
+          "revision": "looks-neon-r1",
+          "sceneBindable": true,
+          "cueable": true
+        },
+        {
+          "id": "rain-heavy",
+          "family": "rain",
+          "name": "Heavy Rain",
+          "revision": "rain-heavy-r1",
+          "sceneBindable": true,
+          "cueable": true
+        }
+      ],
+      "images": [
+        {
+          "id": "image-cover",
+          "kind": "image",
+          "name": "Cover Image",
+          "revision": "image-cover-r1",
+          "enabled": true,
+          "sceneSlotId": null
+        },
+        {
+          "id": "image-backdrop",
+          "kind": "image",
+          "name": "Backdrop Image",
+          "revision": "image-backdrop-r1",
+          "enabled": true,
+          "sceneSlotId": null
+        }
+      ]
+    }
+  }
+}

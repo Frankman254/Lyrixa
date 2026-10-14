@@ -1,7 +1,8 @@
 # Lyrixa como secuenciador determinista de Vibrix
 
-> Estado al 2026-10-13: Lyrixa conserva el vertical slice v1 y completó L1/L2:
-> abre el paquete de autoría v2 y persiste scores v1/v2 sin perder su semántica.
+> Estado al 2026-10-13: Lyrixa conserva el vertical slice v1 y completó L1/L2;
+> L3 está implementado y pendiente de la comprobación visual final. Abre el
+> paquete de autoría v2 y persiste scores v1/v2 sin perder su semántica.
 > Vibrix ya publica ese paquete y cerró la persistencia de su sesión Compose;
 > aún faltan los carriles sostenidos y la integración completa de reproducción
 > y export.
@@ -257,7 +258,7 @@ del store mutado por el frame anterior. Esa regla garantiza que saltar a
 | ---- | ------------------------------- | --------------------------------------------- |
 | 1    | **Hecho:** paquete v2 y manifiestos v1/v2 | Completar transición de imagen pura  |
 | 2    | **Hecho:** score v2 y migración v1 | Persistir score/base/mode Compose          |
-| 3    | Carriles sostenidos             | Conectar preview, Play y seek                 |
+| 3    | **Implementado:** carriles sostenidos | Conectar preview, Play y seek            |
 | 4    | Catálogo, previews e `inherit`  | Conectar export offline                       |
 | 5    | Export `.vibrix-score`          | Importar el contenedor y revisar dependencias |
 

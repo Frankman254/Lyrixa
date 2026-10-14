@@ -26,8 +26,14 @@ import { useTimelineBandPeaks } from './useTimelineBandPeaks';
 import { useShortcuts } from '../shortcuts/useShortcuts';
 import { syncDebug } from '../sync/syncDebug';
 import type { ClipPointerModifiers, DragMode } from './LyricClip';
-import type { CompositionScore, VibrixAuthoringManifest } from '../../core/composition/types';
+import type {
+  CompositionScore,
+  CompositionTrackV2,
+  VibrixAuthoringManifest
+} from '../../core/composition/types';
+import { sortCompositionTracksForTimeline } from '../../core/composition/timeline';
 import { CompositionTrackLane } from './CompositionTrackLane';
+import { SustainedCompositionTrackLane } from './SustainedCompositionTrackLane';
 import {
   clampZoom,
   getTimelinePointerTime,
@@ -80,6 +86,7 @@ interface DragState {
 const TRACK_HEIGHT = 64;
 const MASTER_WAVEFORM_HEIGHT = 96;
 const RULER_HEIGHT = 28;
+const COMPOSITION_GROUP_HEIGHT = 34;
 
 export function TimelineEditor({
   clips,
@@ -120,6 +127,7 @@ export function TimelineEditor({
   });
   const [scrollMetrics, setScrollMetrics] = useState({ scrollLeft: 0, clientWidth: 0 });
   const [minimapVisible, setMinimapVisible] = useState(true);
+  const [compositionExpanded, setCompositionExpanded] = useState(true);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const laneContainerRef = useRef<HTMLDivElement>(null);
@@ -218,9 +226,21 @@ export function TimelineEditor({
   }, [clips, layers, effectiveSelectedLayerId]);
 
   const audioRowHeights = MASTER_WAVEFORM_HEIGHT;
-  const compositionTrackCount = composition && onCompositionChange ? composition.tracks.length : 0;
+  const hasCompositionEditor = Boolean(
+    composition && onCompositionChange && onCompositionSelectionChange
+  );
+  const compositionTrackCount = hasCompositionEditor && compositionExpanded
+    ? composition!.tracks.length
+    : 0;
   const totalTracksHeight = (layers.length + compositionTrackCount) * TRACK_HEIGHT;
-  const playheadHeight = RULER_HEIGHT + audioRowHeights + totalTracksHeight;
+  const compositionGroupHeight = hasCompositionEditor ? COMPOSITION_GROUP_HEIGHT : 0;
+  const playheadHeight = RULER_HEIGHT + audioRowHeights + totalTracksHeight + compositionGroupHeight;
+  const orderedCompositionTracks = useMemo<CompositionTrackV2[]>(
+    () => composition?.schemaVersion === 2
+      ? sortCompositionTracksForTimeline(composition.tracks)
+      : [],
+    [composition]
+  );
 
   const selectionBounds = useMemo(
     () => getSelectionBounds(clips, selectedClipIds),
@@ -874,19 +894,56 @@ export function TimelineEditor({
               onLayerPositionChange={handleLayerPositionChange}
               onLayerSelect={setSelectedLayerId}
             />
-            {composition?.schemaVersion === 1 && onCompositionChange && onCompositionSelectionChange && composition.tracks.map(track => (
-              <CompositionTrackLane
-                key={track.id}
-                track={track}
-                score={composition}
-                manifest={vibrixManifest}
-                pxPerSecond={pxPerSecond}
-                duration={effectiveDuration}
-                selectedCueId={selectedCompositionCueId}
-                onScoreChange={onCompositionChange}
-                onSelectCue={onCompositionSelectionChange}
-              />
-            ))}
+            {hasCompositionEditor && composition && onCompositionChange && onCompositionSelectionChange && (
+              <>
+                <div className="composition-group" style={{ height: `${COMPOSITION_GROUP_HEIGHT}px` }}>
+                  <button
+                    type="button"
+                    className="composition-group-toggle"
+                    aria-expanded={compositionExpanded}
+                    onClick={event => {
+                      event.stopPropagation();
+                      setCompositionExpanded(expanded => !expanded);
+                    }}
+                  >
+                    <span className="composition-group-chevron" aria-hidden="true">
+                      {compositionExpanded ? '▾' : '▸'}
+                    </span>
+                    <span>Visual composition</span>
+                    <span className="composition-group-meta">
+                      {composition.tracks.length} tracks · score v{composition.schemaVersion}
+                    </span>
+                  </button>
+                </div>
+                {compositionExpanded && composition.schemaVersion === 1 && composition.tracks.map(track => (
+                  <CompositionTrackLane
+                    key={track.id}
+                    track={track}
+                    score={composition}
+                    manifest={vibrixManifest}
+                    pxPerSecond={pxPerSecond}
+                    duration={effectiveDuration}
+                    selectedCueId={selectedCompositionCueId}
+                    onScoreChange={onCompositionChange}
+                    onSelectCue={onCompositionSelectionChange}
+                  />
+                ))}
+                {compositionExpanded && composition.schemaVersion === 2 && orderedCompositionTracks.map(track => (
+                  <SustainedCompositionTrackLane
+                    key={track.id}
+                    track={track}
+                    score={composition}
+                    manifest={vibrixManifest}
+                    pxPerSecond={pxPerSecond}
+                    duration={effectiveDuration}
+                    snapSeconds={snapSeconds}
+                    selectedCueId={selectedCompositionCueId}
+                    onScoreChange={onCompositionChange}
+                    onSelectCue={onCompositionSelectionChange}
+                  />
+                ))}
+              </>
+            )}
           </div>
 
           <TimelinePlayhead
