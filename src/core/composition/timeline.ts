@@ -10,7 +10,8 @@ export interface SustainedCueSpan {
   endTimeMs: number;
 }
 
-const TRACK_KIND_ORDER: Record<VibrixTimelineKind, number> = {
+/** Scene and Image are the primary visual tracks; granular overrides follow. */
+export const TRACK_KIND_ORDER: Record<VibrixTimelineKind, number> = {
   scene: 0,
   image: 1,
   spectrum: 2,
@@ -25,7 +26,6 @@ const TRACK_KIND_ORDER: Record<VibrixTimelineKind, number> = {
   'background-zoom': 11
 };
 
-/** Scene and Image are the primary visual tracks; granular overrides follow. */
 export function sortCompositionTracksForTimeline(
   tracks: CompositionTrackV2[]
 ): CompositionTrackV2[] {
@@ -63,6 +63,20 @@ export function deriveSustainedCueSpans(
   }));
 }
 
+export function snapAndClampStartTimeMs(
+  requestedStartTimeMs: number,
+  audioDurationMs: number,
+  snapMs = 0
+): number {
+  const snappedStartTimeMs = snapMs > 0
+    ? Math.round(requestedStartTimeMs / snapMs) * snapMs
+    : Math.round(requestedStartTimeMs);
+  return Math.min(
+    Math.max(0, snappedStartTimeMs),
+    Math.max(0, Math.round(audioDurationMs))
+  );
+}
+
 export function moveSustainedCue(
   score: StoredCompositionV2,
   cueId: string,
@@ -70,13 +84,7 @@ export function moveSustainedCue(
   audioDurationMs: number,
   snapMs = 0
 ): StoredCompositionV2 {
-  const snappedStartTimeMs = snapMs > 0
-    ? Math.round(requestedStartTimeMs / snapMs) * snapMs
-    : Math.round(requestedStartTimeMs);
-  const startTimeMs = Math.min(
-    Math.max(0, snappedStartTimeMs),
-    Math.max(0, Math.round(audioDurationMs))
-  );
+  const startTimeMs = snapAndClampStartTimeMs(requestedStartTimeMs, audioDurationMs, snapMs);
 
   return {
     ...score,

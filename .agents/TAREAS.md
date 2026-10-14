@@ -1,7 +1,7 @@
 # Lyrixa — qué hacer ahora
 
-> Actualizado el 2026-10-13 después de contrastar el código de Lyrixa con el
-> productor y runtime actuales de Vibrix. Empieza por
+> Actualizado el 2026-10-14 después de cerrar y verificar L4 en el navegador.
+> Empieza por
 > [RELEVO.md](RELEVO.md) y usa
 > [TAREA_SECUENCIADOR.md](TAREA_SECUENCIADOR.md) como cola ejecutable.
 
@@ -25,7 +25,8 @@ la idea, pero ya quedó detrás del contrato real de Vibrix.
 | Manifiesto e imágenes schema v2                                    | Hecho en parser/catálogo (L1) |
 | Cues sostenidos sin `endTimeMs`                                    | Hecho en dominio (L2)         |
 | Carriles Image y granulares                                        | Hecho en timeline (L3)        |
-| `inherit`                                                          | Visible; creación en L4       |
+| Catálogo v2 (images/scenes/granular + preview + inherit)           | Hecho (L4)                    |
+| `inherit`                                                          | Hecho en catálogo (L4)        |
 | Export `.vibrix-score` autocontenido                               | Pendiente                     |
 
 ## Orden de implementación
@@ -46,8 +47,12 @@ la idea, pero ya quedó detrás del contrato real de Vibrix.
    (171/171, lint sin errores, build) más prueba en navegador real el
    2026-10-13: orden de carriles, plegado, drag con vecinos recalculados, snap
    0.5 s y Undo/Redo correctos (pasos en `RELEVO.md`).
-4. **L4 · Catálogo completo.** Slots e imágenes con preview o placeholder,
-   drag, `Add at playhead`, estado de revisión e `inherit` granular.
+4. **L4 · Catálogo completo — hecho y verificado.** Slots e imágenes con
+   preview o placeholder, secciones por familia, search, drag al carril correcto
+   (creado on-demand), `Add at playhead`, estado de revisión e `inherit`
+   granular. Verificación en navegador real el 2026-10-14 con el fixture L3 y
+   con el paquete Clairvoyance (0 escenas, 230 imágenes, 10 familias granulares);
+   185/185 tests, lint sin errores, build correcto (pasos en `RELEVO.md`).
 5. **L5 · Paquete de score.** Exportar `.vibrix-score` con el score, el cierre
    transitivo de snapshots usados y las previews correspondientes. Los
    originales de imagen no entran: Lyrixa nunca los recibe.
@@ -56,12 +61,14 @@ la idea, pero ya quedó detrás del contrato real de Vibrix.
 
 ### Siguiente paso concreto
 
-**L3** ya fue verificada en navegador real el 2026-10-13 (orden, plegado,
-drag+vecinos, snap, undo/redo en `RELEVO.md`). El usuario aún puede repetir la
-pasada manual con el fixture si quiere confirmación propia. Continúa **L4** en
-`src/features/composition/CompositionCatalog.tsx`: renderiza Images, Scenes y
-familias granulares, y permite colocarlas en el carril v2 correcto mediante
-drag o `Add at playhead`, incluido `inherit` granular.
+**L4** quedó verificada en navegador real el 2026-10-14 (agrupación por
+familias, previews, `Add at playhead`, drag al carril correcto, `inherit`,
+carriles on-demand y undo; pasos en `RELEVO.md`). Continúa **L5** en
+`src/core/composition/` (módulo nuevo de export portátil): armar
+`.vibrix-score` con el score, el cierre transitivo de snapshots usados y sus
+previews, validando revisión/clase contra el target; `inherit` no añade
+dependencia y se conserva `.vibrix-score.json` v1 legado. Luego el botón/flujo
+de descarga en la UI.
 
 Contrato dueño:
 `/Users/frankman254/Desktop/Personal-Projects/LiveWallpaperAnimeGlitch/docs/features/VIBRIX_AUTHORING_CONTRACT.md`.

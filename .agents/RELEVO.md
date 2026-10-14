@@ -19,14 +19,16 @@ editores de slots ni transiciones internas de Vibrix.
 
 ## Estado comprobado
 
-El primer corte del secuenciador existe y **L1, L2 y la implementación de L3
-están completados**:
+El primer corte del secuenciador existe y **L1, L2, L3 y L4 están
+completados y verificados en el navegador**:
 
 - `src/core/composition/` define manifiesto, tracks, cues y scores v1/v2.
 - Se importan `.vibrix-manifest.json` schema 1/2 y `.vibrix-authoring` v1.
 - El paquete completo se valida en `src/core` y se guarda una sola vez en
   IndexedDB; el proyecto conserva `vibrixAuthoringRef`.
-- El catálogo legacy sólo muestra escenas; completarlo para v2 corresponde a L4.
+- El catálogo v2 puebla los carriles: secciones Images (con preview), Scenes y
+  familias granulares, search, `Add at playhead`, drag con sueltos sobre el
+  carril correcto (creado on-demand) y `inherit` en familias granulares.
 - La timeline v2 tiene el grupo plegable `Visual composition`, ordena Scene e
   Image antes de los carriles granulares y muestra activaciones sostenidas.
 - El borde derecho de cada cue v2 se deriva del siguiente corte del mismo
@@ -44,9 +46,11 @@ están completados**:
 
 Vibrix ya avanzó a v2: exporta `.vibrix-authoring` con slots, imágenes,
 snapshots y previews; acepta score v2 con activaciones sostenidas e `inherit`.
-Lyrixa ya abre ese paquete, entiende el score v2 y puede mostrar/mover cues de
-Image, Scene y familias granulares. Aún falta L4 para poblar esos carriles desde
-el catálogo con drag, `Add at playhead`, previews e `inherit`.
+Lyrixa ya abre ese paquete, entiende el score v2, muestra/mueve cues y ahora
+(L4) los puebla desde el catálogo: imágenes, escenas, slots granulares e
+`inherit`, con previews, search, `Add at playhead` y drag al carril correcto.
+Sólo falta L5 (exportar contenedor `.vibrix-score` con snapshots y previews) y
+la integración real con Vibrix.
 
 Revisión cruzada: Vibrix cerró W2 en `338c8e03` (sesión Compose y migración
 153). Su parser de score aún usa una unión
@@ -62,11 +66,18 @@ pero no para probar todavía cues Scene.
 ## Trabajo local que debes preservar
 
 El usuario integró L1/L2 a `main`; `main` y `origin/main` estaban en `58c2382`
-al iniciar L3. L3 permanece como cambios locales sin commit en esa misma rama:
+al iniciar L3. L3 y L4 permanecen como cambios locales sin commit en esa misma
+rama:
 
-- `src/core/composition/timeline.ts` y su test: orden, duración derivada, snap y
-  movimiento puro;
-- `SustainedCompositionTrackLane.tsx`: vista v2 sin handles de resize;
+- `src/core/composition/timeline.ts` y su test: orden, duración derivada, snap
+  y movimiento puro (`snapAndClampStartTimeMs` extraído y reutilizado);
+- `src/core/composition/catalog.ts` + `catalog.test.ts` (L4): placements puros,
+  agrupación del manifiesto, filtros, descriptores de drag y
+  `placeFromCatalog`/`ensureTimelineTrack`;
+- `SustainedCompositionTrackLane.tsx`: vista v2 sin handles de resize y ahora
+  con `onDragOver`/`onDrop` de placements (L4);
+- `CompositionCatalog.tsx`/`.css` (L4): catálogo v2 reescrito con secciones,
+  search, previews, `Add at playhead`, `inherit` e inspector v2;
 - `TimelineEditor.tsx`/`.css`: grupo plegable, altura/playhead y orden visual;
 - `docs/fixtures/l3-sustained-score.lyrixa.json`: proyecto manual de 30 s con
   Scene, Image, Looks y Rain.
@@ -86,22 +97,61 @@ snap 0.5 s el mismo arrastre cayó en 11000 ms exactos; Undo devolvió el corte 
 automáticas ya estaban verdes: 171/171, lint sin errores (13 warnings
 preexistentes de hooks en `useLyrixaProject.ts`), build correcto.
 
-Sólo queda la confirmación manual del usuario (pasos abajo) antes de empezar
-**L4** en `src/features/composition/CompositionCatalog.tsx`: catálogo v2
-completo, previews/placeholder, creación del carril correcto e `inherit`
-granular.
+**L4 está verificada en el navegador (2026-10-14, sesión de relevo).** Con el
+fixture L3 y el paquete real `future-core-techcore-mix-clairvoyance.vibrix-authoring`
+(0 escenas, 330 slots, 230 imágenes) importados en `/#/editor` → Compose se
+comprobó:
 
-### Cómo probar L3 manualmente
+- El catálogo agrupa **Images · Scenes · cada familia granular** con contadores,
+  thumbnails reales en imágenes y placeholder de 2 letras en slots. Con el
+  paquete real aparecen las 10 secciones granulares (Spectrum, Spectrum 2, Looks,
+  Particles, Rain, Lights, Camera FX, Logo, Track Title, Background Zoom) +
+  Images(230); `intro-window` queda excluida. Antes esto devolvía "no scene
+  slots".
+- `Add at playhead` coloca imagen, escena, slot granular e `inherit`; el cue se
+  selecciona y el inspector v2 muestra su estado (`resolveCueDependencyStatus`)
+  con Start (ms) editable y nota "The cut holds until the next one in its lane".
+- `Inherit <Familia>` aparece **sólo** en secciones granulares (nunca en Images
+  ni Scenes); coloca un corte "Inherit from Scene" con estado "Returns this lane
+  to scene inheritance".
+- Colocar un slot cuya familia no tiene carril crea el carril on-demand en el
+  orden de `TRACK_KIND_ORDER` (p.ej. Spectrum quedó entre Image y Looks).
+- Arrastrar un slot al carril correspondiente lo suelta con snap exacto (Chorus
+  Scene → 30000 ms a 60 px/s) y lo selecciona; soltarlo en un carril de otra
+  familia no hace nada.
+- Cmd/Ctrl+Z deshace la colocación revirtiendo **carril nuevo y cue**.
+- Search filtra por nombre/id en vivo y se **auto-resetea al cambiar de
+  manifiesto** (arreglado en esta sesión).
+
+Pruebas automáticas: `npm test` → 185/185 (36 en `src/core/composition/`, 14
+nuevos en `catalog.test.ts`); `npm run lint` → 0 errores (13 warnings
+preexistentes de hooks en `useLyrixaProject.ts`); `npm run build` → correcto.
+
+### Próximo paso: L5
+
+Exportar el contenedor `.vibrix-score` (score + cierre transitivo de snapshots
+utilizados + previews; validar revisión/clase vs target; `inherit` no crea
+dependencia; mantener `.vibrix-score.json` v1 legacy). Empezar en
+`src/core/composition/` (nuevo módulo de export portátil), luego el botón en el
+encabezado del catálogo / exportador actual.
+
+Antes del primer intercambio real, **endurecer el parser de score de Vibrix**
+(excluir `intro-window` de `track.kind`/`feature-slot.family`/`inherit.family`);
+es trabajo del lado Vibrix, ya anotado en la revisión cruzada.
+
+### Cómo probar L4 manualmente
 
 1. `npm run dev`, abre `/#/editor`.
 2. More → Import project → `docs/fixtures/l3-sustained-score.lyrixa.json`.
-3. Pestaña Compose: el grupo `Visual composition` muestra
-   "4 tracks · score v2" en orden Scene → Image → Looks → Rain.
-4. Mueve "Chorus Scene" con drag: sus vecinos cambian de ancho al instante,
-   nunca hay handles de resize; con Snap activo (Toolbar ▸ Snap) el corte cae
-   en múltiplos exactos.
-5. Ctrl/Cmd+Z deshace y Ctrl/Cmd+Shift+Z rehace el corte.
-6. Pliega y despliega el grupo con su cabecera.
+3. Pestaña Compose: en el catálogo pulsa `+` en "Cover Image" (va al carril
+   Image) y en "Inherit Looks" (va al carril Looks, estado "Returns this lane to
+   scene inheritance"). Selecciona un corte y edita Start (ms) en el inspector.
+4. Arrastra "Chorus Scene" desde el catálogo hasta mitad del carril Scene: cae
+   con snap y se selecciona.
+5. Para el caso extremo: Catálogo → Import authoring →
+   `~/Downloads/future-core-techcore-mix-clairvoyance.vibrix-authoring`; aparece
+   el catálogo completo con previews y 10 carriles granulares; coloca un Spectrum
+   (crea su carril) y deshaz con Cmd/Ctrl+Z.
 
 ## Reglas del repo
 

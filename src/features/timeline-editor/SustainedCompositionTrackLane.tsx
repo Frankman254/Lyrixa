@@ -1,10 +1,19 @@
 import { useRef } from 'react';
-import type { KeyboardEvent, PointerEvent as ReactPointerEvent } from 'react';
+import type { DragEvent as ReactDragEvent, KeyboardEvent, PointerEvent as ReactPointerEvent } from 'react';
 import {
   deriveSustainedCueSpans,
-  moveSustainedCue
+  moveSustainedCue,
+  snapAndClampStartTimeMs
 } from '../../core/composition/timeline';
+import {
+  isPlacementDescriptor,
+  placeFromCatalog,
+  resolvePlacementDescriptor,
+  timelineKindForPlacement
+} from '../../core/composition/catalog';
 import { resolveCueDependencyStatus } from '../../core/composition/slotStatus';
+import { VIBRIX_PLACEMENT_DRAG_TYPE } from '../composition/CompositionCatalog';
+import type { PlacementDescriptor } from '../../core/composition/catalog';
 import type {
   CompositionCueV2,
   CompositionTrackV2,
@@ -79,6 +88,43 @@ export function SustainedCompositionTrackLane({
     onSelectCue(cueId);
   };
 
+  const readPlacementDescriptor = (event: ReactDragEvent<HTMLDivElement>): PlacementDescriptor | null => {
+    const raw = event.dataTransfer.getData(VIBRIX_PLACEMENT_DRAG_TYPE);
+    if (!raw) return null;
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      return isPlacementDescriptor(parsed) ? parsed : null;
+    } catch {
+      return null;
+    }
+  };
+
+  const handleDragOver = (event: ReactDragEvent<HTMLDivElement>) => {
+    if (track.locked || !event.dataTransfer.types.includes(VIBRIX_PLACEMENT_DRAG_TYPE)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'copy';
+  };
+
+  const handleDrop = (event: ReactDragEvent<HTMLDivElement>) => {
+    if (track.locked) return;
+    const descriptor = readPlacementDescriptor(event);
+    if (!descriptor) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const placement = resolvePlacementDescriptor(manifest, descriptor);
+    if (!placement || timelineKindForPlacement(placement) !== track.kind) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const startTimeMs = snapAndClampStartTimeMs(
+      ((event.clientX - rect.left) / pxPerSecond) * 1000,
+      durationMs,
+      Math.round(snapSeconds * 1000)
+    );
+    const result = placeFromCatalog(score, placement, startTimeMs);
+    if (!result) return;
+    onScoreChange(result.score);
+    onSelectCue(result.cue.id);
+  };
+
   return (
     <div className={`tl-track composition-track ${track.locked ? 'locked' : ''} ${track.enabled ? '' : 'hidden'}`}>
       <div className="tl-track-header composition-track-header">
@@ -92,6 +138,8 @@ export function SustainedCompositionTrackLane({
         className="tl-track-lane composition-track-lane"
         style={{ width: `${laneWidth}px`, height: '64px' }}
         onClick={() => onSelectCue(null)}
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
       >
         {spans.map(({ cue, endTimeMs }) => {
           const resolution = resolveCueDependencyStatus(cue, manifest);

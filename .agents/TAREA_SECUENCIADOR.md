@@ -156,6 +156,21 @@ cues v2.
 Lyrixa puede mostrar una representación simple del bloque, pero Vibrix sigue
 siendo la autoridad visual.
 
+**Implementado y verificado el 2026-10-14.** La lógica pura vive en
+`src/core/composition/catalog.ts` (agrupación por secciones, filtros,
+descriptores de drag `PlacementDescriptor`, `placeFromCatalog` con
+`ensureTimelineTrack`). El drag transporta **sólo ids**, nunca revisions: el
+drop los resuelve contra el manifiesto vivo, así que Vibrix sigue siendo la
+autoridad visual. La UI reescrita es `CompositionCatalog.tsx` (+`.css`); el drop
+se conecta en `SustainedCompositionTrackLane.tsx` con
+`VIBRIX_PLACEMENT_DRAG_TYPE`. Verificación en navegador real con el fixture L3 y
+el paquete Clairvoyance (0 escenas, 230 imágenes, 10 familias): previews,
+search (con auto-reset al cambiar de manifiesto), `Add at playhead` de los
+cuatro tipos de placement, `inherit` sólo en granulares, carril Spectrum creado
+on-demand en orden correcto, drag con snap exacto y undo del par carril+cue.
+`npm test` 185/185 (14 nuevos en `catalog.test.ts`), lint sin errores, build
+correcto. Los 6 puntos de arriba quedaron cubiertos.
+
 ## L5 · Exportar `.vibrix-score`
 
 1. Escribir el sobre de score schema 2 dentro del contenedor.
@@ -200,8 +215,10 @@ espera al runtime de Vibrix; L1→L5 no están bloqueados.
 
 ## Siguiente archivo
 
-Tras la confirmación manual del usuario (opcional; L3 ya pasó en navegador
-real), continuar L4 en
-`src/features/composition/CompositionCatalog.tsx`: retirar el aviso temporal de
-score v2, agrupar Images/Scenes/familias granulares, añadir previews o
-placeholder y crear cues/carriles v2 mediante drag y `Add at playhead`.
+L4 quedó verificada en navegador real el 2026-10-14 (pasos en `RELEVO.md`).
+Continuar **L5** creando un módulo de export portátil en
+`src/core/composition/` (p. ej. `scorePackage.ts` + test): sobre score schema 2,
+cierre transitivo de snapshots (targets directos + lo que referencien, excluido
+`inherit`), previews del cierre, validación revisión/clase, y mantener el JSON
+`.vibrix-score.json` v1 como export legacy. Conectarlo después al botón
+`Export score` de `CompositionCatalog.tsx`.
