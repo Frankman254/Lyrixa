@@ -5,6 +5,21 @@ export const VIBRIX_SLOT_FAMILIES = [
 
 export type VibrixSlotFamily = (typeof VIBRIX_SLOT_FAMILIES)[number];
 
+export const VIBRIX_CUEABLE_SLOT_FAMILIES = [
+  'scene', 'spectrum', 'spectrum-second', 'looks', 'particles', 'rain',
+  'lights', 'camera-fx', 'logo', 'track-title', 'background-zoom'
+] as const;
+
+export type VibrixCueableSlotFamily = (typeof VIBRIX_CUEABLE_SLOT_FAMILIES)[number];
+
+export const VIBRIX_GRANULAR_FAMILIES = [
+  'spectrum', 'spectrum-second', 'looks', 'particles', 'rain',
+  'lights', 'camera-fx', 'logo', 'track-title', 'background-zoom'
+] as const;
+
+export type VibrixGranularFamily = (typeof VIBRIX_GRANULAR_FAMILIES)[number];
+export type VibrixTimelineKind = VibrixCueableSlotFamily | 'image';
+
 export interface VibrixManifestSlot {
   id: string;
   family: VibrixSlotFamily;
@@ -82,19 +97,28 @@ export type VibrixAuthoringSource =
   | { kind: 'manifest'; manifest: VibrixAuthoringManifest }
   | { kind: 'package'; package: VibrixAuthoringPackage };
 
-export interface CompositionTrack {
+interface CompositionTrackBase {
   id: string;
   name: string;
-  kind: VibrixSlotFamily;
   order: number;
   enabled: boolean;
   locked: boolean;
 }
 
+export interface CompositionTrackV1 extends CompositionTrackBase {
+  kind: VibrixSlotFamily;
+}
+
+export interface CompositionTrackV2 extends CompositionTrackBase {
+  kind: VibrixTimelineKind;
+}
+
+export type CompositionTrack = CompositionTrackV1 | CompositionTrackV2;
+
 export type CompositionTransitionType = 'cut' | 'crossfade' | 'morph';
 export type CompositionEasing = 'linear' | 'ease-in' | 'ease-out' | 'ease-in-out';
 
-export interface CompositionCue {
+export interface CompositionCueV1 {
   id: string;
   trackId: string;
   startTimeMs: number;
@@ -114,12 +138,52 @@ export interface CompositionCue {
   enabled: boolean;
 }
 
-export interface CompositionScore {
-  tracks: CompositionTrack[];
-  cues: CompositionCue[];
+export type CompositionTargetV2 =
+  | { kind: 'scene'; family: 'scene'; id: string; revision: string }
+  | { kind: 'feature-slot'; family: VibrixGranularFamily; id: string; revision: string }
+  | { kind: 'image'; family: 'image'; id: string; revision: string }
+  | { kind: 'inherit'; family: VibrixGranularFamily };
+
+export interface CompositionCueV2 {
+  id: string;
+  trackId: string;
+  startTimeMs: number;
+  target: CompositionTargetV2;
+  priority: number;
+  enabled: boolean;
 }
 
-export const DEFAULT_COMPOSITION_SCORE: CompositionScore = {
+export type CompositionCue = CompositionCueV1 | CompositionCueV2;
+
+export interface StoredCompositionV1 {
+  schemaVersion: 1;
+  tracks: CompositionTrackV1[];
+  cues: CompositionCueV1[];
+}
+
+export interface StoredCompositionV2 {
+  schemaVersion: 2;
+  tracks: CompositionTrackV2[];
+  cues: CompositionCueV2[];
+}
+
+export type CompositionScore = StoredCompositionV1 | StoredCompositionV2;
+
+export const DEFAULT_COMPOSITION_SCORE: StoredCompositionV2 = {
+  schemaVersion: 2,
+  tracks: [{
+    id: 'composition-scene',
+    name: 'Scene',
+    kind: 'scene',
+    order: 0,
+    enabled: true,
+    locked: false
+  }],
+  cues: []
+};
+
+export const DEFAULT_COMPOSITION_SCORE_V1: StoredCompositionV1 = {
+  schemaVersion: 1,
   tracks: [{
     id: 'composition-scene',
     name: 'Scene',

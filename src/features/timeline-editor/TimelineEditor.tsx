@@ -874,7 +874,7 @@ export function TimelineEditor({
               onLayerPositionChange={handleLayerPositionChange}
               onLayerSelect={setSelectedLayerId}
             />
-            {composition && onCompositionChange && onCompositionSelectionChange && composition.tracks.map(track => (
+            {composition?.schemaVersion === 1 && onCompositionChange && onCompositionSelectionChange && composition.tracks.map(track => (
               <CompositionTrackLane
                 key={track.id}
                 track={track}

@@ -15,7 +15,7 @@ la idea, pero ya quedó detrás del contrato real de Vibrix.
 
 | Pieza                                                              | Estado                        |
 | ------------------------------------------------------------------ | ----------------------------- |
-| Dominio `CompositionTrack` / `CompositionCue` / `CompositionScore` | Hecho en v1                   |
+| Dominio `CompositionTrack` / `CompositionCue` / `CompositionScore` | Hecho v1/v2 (L2)              |
 | Import `.vibrix-manifest.json`                                     | Hecho, schema v1/v2           |
 | Revisión Current / Updated / Missing                               | Hecho para slots v1           |
 | Catálogo y pista Scene                                             | Hecho                         |
@@ -23,9 +23,9 @@ la idea, pero ya quedó detrás del contrato real de Vibrix.
 | Export `.vibrix-score.json`                                        | Hecho en v1, sólo referencias |
 | Import `.vibrix-authoring`                                         | Hecho (L1)                    |
 | Manifiesto e imágenes schema v2                                    | Hecho en parser/catálogo (L1) |
-| Cues sostenidos sin `endTimeMs`                                    | Pendiente                     |
+| Cues sostenidos sin `endTimeMs`                                    | Hecho en dominio (L2)         |
 | Carriles Image y granulares                                        | Pendiente                     |
-| `inherit`                                                          | Pendiente                     |
+| `inherit`                                                          | Dominio hecho; UI pendiente   |
 | Export `.vibrix-score` autocontenido                               | Pendiente                     |
 
 ## Orden de implementación
@@ -36,7 +36,7 @@ la idea, pero ya quedó detrás del contrato real de Vibrix.
    imágenes; añadir un fixture separado del paquete con imagen y miniatura. El
    paquete validado se guarda en IndexedDB y el proyecto conserva sólo una
    referencia ligera; no se embebe en `localStorage`.
-2. **L2 · Dominio score v2.** Nuevos cues guardan sólo `startTimeMs`; leer y
+2. **L2 · Dominio score v2 — hecho.** Nuevos cues guardan sólo `startTimeMs`; leer y
    normalizar proyectos/scores v1 sin reinterpretarlos silenciosamente. La
    versión se guarda explícitamente en `project.composition`, incluso vacío.
 3. **L3 · Timeline sostenida.** Añadir Image, Scene y carriles granulares. El
@@ -51,10 +51,10 @@ la idea, pero ya quedó detrás del contrato real de Vibrix.
 
 ### Siguiente paso concreto
 
-Empieza por **L2** en `src/core/composition/types.ts` y
-`src/core/composition/score.ts`: modela `StoredCompositionV1 |
-StoredCompositionV2`, agrega el discriminante y prueba round-trip/migración sin
-tocar aún la timeline.
+Empieza por **L3** en
+`src/features/timeline-editor/CompositionTrackLane.tsx` y
+`TimelineEditor.tsx`: renderiza la duración derivada de cues v2 sin resize y
+conserva el carril v1 actual como compatibilidad.
 
 Contrato dueño:
 `/Users/frankman254/Desktop/Personal-Projects/LiveWallpaperAnimeGlitch/docs/features/VIBRIX_AUTHORING_CONTRACT.md`.

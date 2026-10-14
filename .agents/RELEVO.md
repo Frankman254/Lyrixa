@@ -19,10 +19,10 @@ editores de slots ni transiciones internas de Vibrix.
 
 ## Estado comprobado
 
-El primer corte del secuenciador existe y **L1 de la migración v2 está
-completado**:
+El primer corte del secuenciador existe y **L1 y L2 de la migración v2 están
+completados**:
 
-- `src/core/composition/` define manifiesto, tracks, cues y score v1.
+- `src/core/composition/` define manifiesto, tracks, cues y scores v1/v2.
 - Se importan `.vibrix-manifest.json` schema 1/2 y `.vibrix-authoring` v1.
 - El paquete completo se valida en `src/core` y se guarda una sola vez en
   IndexedDB; el proyecto conserva `vibrixAuthoringRef`.
@@ -31,11 +31,16 @@ completado**:
   ocho segundos con `startTimeMs` y `endTimeMs`.
 - Se exporta `.vibrix-score.json` con referencias, no snapshots portables.
 - El proyecto persiste `composition` y la referencia ligera al catálogo.
+- `project.composition` es una unión discriminada v1/v2. Los proyectos nuevos
+  nacen en v2; la forma histórica sin `schemaVersion` se conserva como v1 con
+  su `endTimeMs`.
+- El dominio v2 admite Scene, Image, familias granulares e `inherit`, sólo con
+  `startTimeMs`; el sobre JSON conserva la versión del proyecto.
 
 Vibrix ya avanzó a v2: exporta `.vibrix-authoring` con slots, imágenes,
 snapshots y previews; acepta score v2 con activaciones sostenidas e `inherit`.
-Lyrixa ya abre ese paquete, pero aún no ofrece imágenes, pistas granulares ni
-duración derivada en la timeline.
+Lyrixa ya abre ese paquete y entiende el score v2, pero aún no ofrece imágenes,
+pistas granulares ni duración derivada en la timeline.
 
 Revisión cruzada: Vibrix cerró W2 en `338c8e03` (sesión Compose y migración
 153). Su parser de score aún usa una unión
@@ -51,15 +56,16 @@ pero no para probar todavía cues Scene.
 ## Trabajo local que debes preservar
 
 El usuario cerró en un commit el trabajo previo de exports de letra, cola de
-sync, hooks del editor y documentación antes de iniciar L1. Los cambios actuales
-corresponden a L1; no los mezcles con L2 hasta cerrar este corte.
+sync, hooks del editor y documentación antes de iniciar L1. L1 quedó cerrado en
+`6774a90`. Los cambios actuales corresponden a L2; no los mezcles con L3 hasta
+cerrar este corte.
 
 ## Próximo movimiento
 
-Empieza por **L2** en `src/core/composition/types.ts` y
-`src/core/composition/score.ts`: añade la unión discriminada del score, crea
-cues v2 con sólo `startTimeMs` y conserva lectura/serialización histórica v1.
-No cambies todavía la timeline; los carriles sostenidos pertenecen a L3.
+Empieza por **L3** en
+`src/features/timeline-editor/CompositionTrackLane.tsx`: separa la vista legacy
+v1 de los carriles sostenidos v2, deriva cada borde derecho desde el siguiente
+cue del mismo carril o el final del audio y elimina resize sólo para v2.
 
 ## Reglas del repo
 
@@ -80,4 +86,4 @@ No cambies todavía la timeline; los carriles sostenidos pertenecen a L3.
 
 Actualiza `TAREAS.md`, `TAREA_SECUENCIADOR.md` y este relevo. Indica el último
 paso L completado, las comprobaciones ejecutadas y el siguiente archivo
-concreto. No marques v2 completo hasta cerrar L2→L5 y la integración real.
+concreto. No marques v2 completo hasta cerrar L3→L5 y la integración real.

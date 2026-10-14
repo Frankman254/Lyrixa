@@ -1,9 +1,9 @@
 import { useRef } from 'react';
 import type { DragEvent, PointerEvent as ReactPointerEvent } from 'react';
 import type {
-  CompositionCue,
-  CompositionScore,
-  CompositionTrack,
+  CompositionCueV1,
+  CompositionTrackV1,
+  StoredCompositionV1,
   VibrixAuthoringManifest
 } from '../../core/composition/types';
 import { isManifestSlotDraggable } from '../../core/composition/authoringManifest';
@@ -12,13 +12,13 @@ import { createCompositionCueId } from '../../core/composition/score';
 import { VIBRIX_SLOT_DRAG_TYPE } from '../composition/CompositionCatalog';
 
 interface CompositionTrackLaneProps {
-  track: CompositionTrack;
-  score: CompositionScore;
+  track: CompositionTrackV1;
+  score: StoredCompositionV1;
   manifest?: VibrixAuthoringManifest;
   pxPerSecond: number;
   duration: number;
   selectedCueId: string | null;
-  onScoreChange: (score: CompositionScore) => void;
+  onScoreChange: (score: StoredCompositionV1) => void;
   onSelectCue: (cueId: string | null) => void;
 }
 
@@ -27,7 +27,7 @@ type CueDragMode = 'move' | 'resize-start' | 'resize-end';
 interface CueDragState {
   pointerId: number;
   clientX: number;
-  cue: CompositionCue;
+  cue: CompositionCueV1;
   mode: CueDragMode;
 }
 
@@ -45,14 +45,14 @@ export function CompositionTrackLane({
   const laneWidth = Math.max(duration, 1) * pxPerSecond;
   const cues = score.cues.filter(cue => cue.trackId === track.id);
 
-  const patchCue = (cueId: string, patch: Partial<CompositionCue>) => {
+  const patchCue = (cueId: string, patch: Partial<CompositionCueV1>) => {
     onScoreChange({
       ...score,
       cues: score.cues.map(cue => cue.id === cueId ? { ...cue, ...patch } : cue)
     });
   };
 
-  const beginDrag = (event: ReactPointerEvent<HTMLDivElement>, cue: CompositionCue, mode: CueDragMode) => {
+  const beginDrag = (event: ReactPointerEvent<HTMLDivElement>, cue: CompositionCueV1, mode: CueDragMode) => {
     if (track.locked) return;
     event.stopPropagation();
     onSelectCue(cue.id);
@@ -92,7 +92,7 @@ export function CompositionTrackLane({
     if (!slot || slot.family !== track.kind || !isManifestSlotDraggable(slot)) return;
     const rect = event.currentTarget.getBoundingClientRect();
     const startTimeMs = Math.max(0, Math.round(((event.clientX - rect.left) / pxPerSecond) * 1000));
-    const cue: CompositionCue = {
+    const cue: CompositionCueV1 = {
       id: createCompositionCueId(score, slot.id, startTimeMs),
       trackId: track.id,
       startTimeMs,

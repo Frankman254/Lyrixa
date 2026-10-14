@@ -7,7 +7,7 @@ import {
 import { resolveCueSlotStatus } from '../../core/composition/slotStatus';
 import { createCompositionCueId } from '../../core/composition/score';
 import type {
-  CompositionCue,
+  CompositionCueV1,
   CompositionScore,
   VibrixAuthoringManifest,
   VibrixAuthoringSource,
@@ -49,7 +49,8 @@ export function CompositionCatalog({
   const [notice, setNotice] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const scenes = manifest?.slots.filter(slot => slot.family === 'scene') ?? [];
-  const selectedCue = score.cues.find(cue => cue.id === selectedCueId) ?? null;
+  const legacyScore = score.schemaVersion === 1 ? score : null;
+  const selectedCue = legacyScore?.cues.find(cue => cue.id === selectedCueId) ?? null;
 
   const handleFile = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -73,12 +74,12 @@ export function CompositionCatalog({
   };
 
   const addAtPlayhead = (slot: VibrixManifestSlot) => {
-    if (!isManifestSlotDraggable(slot)) return;
-    const track = score.tracks.find(candidate => candidate.kind === 'scene');
+    if (!legacyScore || !isManifestSlotDraggable(slot)) return;
+    const track = legacyScore.tracks.find(candidate => candidate.kind === 'scene');
     if (!track) return;
     const startTimeMs = Math.max(0, Math.round(currentTime * 1000));
-    const cue: CompositionCue = {
-      id: createCompositionCueId(score, slot.id, startTimeMs),
+    const cue: CompositionCueV1 = {
+      id: createCompositionCueId(legacyScore, slot.id, startTimeMs),
       trackId: track.id,
       startTimeMs,
       endTimeMs: startTimeMs + 8000,
@@ -92,21 +93,21 @@ export function CompositionCatalog({
       priority: 0,
       enabled: true
     };
-    onScoreChange({ ...score, cues: [...score.cues, cue] });
+    onScoreChange({ ...legacyScore, cues: [...legacyScore.cues, cue] });
     onSelectCue(cue.id);
   };
 
-  const updateSelected = (patch: Partial<CompositionCue>) => {
-    if (!selectedCue) return;
+  const updateSelected = (patch: Partial<CompositionCueV1>) => {
+    if (!selectedCue || !legacyScore) return;
     onScoreChange({
-      ...score,
-      cues: score.cues.map(cue => cue.id === selectedCue.id ? { ...cue, ...patch } : cue)
+      ...legacyScore,
+      cues: legacyScore.cues.map(cue => cue.id === selectedCue.id ? { ...cue, ...patch } : cue)
     });
   };
 
   const deleteSelected = () => {
-    if (!selectedCue) return;
-    onScoreChange({ ...score, cues: score.cues.filter(cue => cue.id !== selectedCue.id) });
+    if (!selectedCue || !legacyScore) return;
+    onScoreChange({ ...legacyScore, cues: legacyScore.cues.filter(cue => cue.id !== selectedCue.id) });
     onSelectCue(null);
   };
 
@@ -157,6 +158,11 @@ export function CompositionCatalog({
       )}
       {error && <div className="composition-catalog-error" role="alert">{error}</div>}
       {notice && <div className="composition-catalog-notice" role="status">{notice}</div>}
+      {score.schemaVersion === 2 && (
+        <div className="composition-catalog-notice" role="status">
+          Sustained score v2 is active. Timeline placement becomes available in L3.
+        </div>
+      )}
 
       <div className="composition-slot-list">
         {manifest && scenes.length === 0 && (
@@ -165,7 +171,7 @@ export function CompositionCatalog({
           </div>
         )}
         {scenes.map(slot => {
-          const draggable = isManifestSlotDraggable(slot);
+          const draggable = legacyScore !== null && isManifestSlotDraggable(slot);
           return (
             <article
               key={slot.id}
@@ -219,7 +225,7 @@ export function CompositionCatalog({
               value={selectedCue.transition?.type ?? 'cut'}
               onChange={event => updateSelected({
                 transition: {
-                  type: event.target.value as NonNullable<CompositionCue['transition']>['type'],
+                  type: event.target.value as NonNullable<CompositionCueV1['transition']>['type'],
                   durationMs: selectedCue.transition?.durationMs ?? 0,
                   easing: selectedCue.transition?.easing ?? 'linear'
                 }
@@ -257,7 +263,7 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function CueStatus({ cue, manifest }: { cue: CompositionCue; manifest?: VibrixAuthoringManifest }) {
+function CueStatus({ cue, manifest }: { cue: CompositionCueV1; manifest?: VibrixAuthoringManifest }) {
   const result = resolveCueSlotStatus(cue, manifest);
   const label = result.status === 'current'
     ? result.slot?.name ?? cue.target.slotId

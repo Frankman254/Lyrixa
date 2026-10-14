@@ -95,7 +95,7 @@ y 560 snapshots válidos. La UI lo importó, mostró el resumen y lo recuperó d
 IndexedDB tras recargar. El paquete contiene 0 escenas; no cubre aún la prueba
 de colocación de cues, que corresponde a un fixture/proyecto posterior.
 
-## L2 · Score v2 y migración
+## L2 · Score v2 y migración — completado
 
 1. Añadir `VibrixCueableSlotFamily`, `VibrixGranularFamily` y
    `VibrixTimelineKind = VibrixCueableSlotFamily | 'image'`.
@@ -111,6 +111,12 @@ de colocación de cues, que corresponde a un fixture/proyecto posterior.
 
 Criterio: serializar → importar → serializar conserva ids, revisiones, orden y
 tiempos; los fixtures v1 siguen verdes.
+
+Comprobado el 2026-10-13: los proyectos nuevos nacen con `schemaVersion: 2`;
+la forma sin discriminante abre como v1 y conserva `endTimeMs`; el round-trip
+v2 conserva targets, revisiones, orden y tiempos. El sobre JSON sale en la
+misma versión del score y discrimina dependencias slot/image. La UI mantiene
+el editor de intervalos sólo para v1 hasta L3.
 
 ## L3 · Carriles sostenidos
 
@@ -175,11 +181,10 @@ espera al runtime de Vibrix; L1→L5 no están bloqueados.
 - No añadir endpoints antes de que el archivo funcione; HTTP reutilizará los
   mismos bytes.
 - No meter parámetros visuales editables de Vibrix en el inspector.
-- No mezclar los cambios locales de exports de letra/refactor con L1.
+- No mezclar las validaciones pendientes de exports de letra con Compose.
 
 ## Siguiente archivo
 
-Continuar L2 en `src/core/composition/types.ts` y
-`src/core/composition/score.ts`: introducir la unión discriminada v1/v2 y sus
-tests de round-trip/migración. La timeline actual queda intacta durante este
-paso.
+Continuar L3 en `src/features/timeline-editor/CompositionTrackLane.tsx` y
+`TimelineEditor.tsx`: añadir carriles sostenidos v2 con ancho derivado, sin
+resize, conservando el componente de intervalos v1 para compatibilidad.

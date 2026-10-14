@@ -12,9 +12,9 @@ Lyrixa is split into two layers:
 The central data object is `LyrixaProject`. UI code edits this object, then the preview/timeline render from it.
 
 `LyrixaProject.composition` es la única fuente de verdad para los cues
-deterministas de Vibrix. Durante la migración v2 se convierte en una unión
-discriminada por `schemaVersion`; la forma actual sin discriminante se lee como
-v1.
+deterministas de Vibrix. Es una unión discriminada por `schemaVersion`; la forma
+histórica sin discriminante se lee como v1 y los proyectos nuevos nacen como
+v2.
 
 El catálogo importado se normaliza una sola vez y se guarda en IndexedDB como
 manifiesto legacy o paquete completo. `LyrixaProject.vibrixAuthoringRef` sólo
@@ -233,7 +233,7 @@ mientras `.vibrix-authoring` y `.vibrix-score` transportan el catálogo visual y
 los tiempos deterministas. Vibrix sigue siendo dueño de los valores y del
 render; Lyrixa crea referencias y tiempos de activación.
 
-El corte vertical schema v1 y la entrada L1 de schema v2 están implementados:
+El corte vertical schema v1 y el dominio L1/L2 de schema v2 están implementados:
 
 - `core/composition/types.ts` owns manifest, track, cue and score types.
 - `core/composition/authoringManifest.ts` valida manifiestos v1/v2 y paquetes
@@ -250,9 +250,10 @@ El corte vertical schema v1 y la entrada L1 de schema v2 están implementados:
 
 Este corte abre manifiestos v1/v2 y paquetes v1, pero todavía muestra sólo
 Scene, crea intervalos de ocho segundos y exporta dependencias por referencia.
-La migración activa continúa en L2: incluir Image y pistas granulares, guardar
-sólo `startTimeMs`, soportar `inherit` y exportar `.vibrix-score` con el
-cierre transitivo de snapshots referenciados y las previews disponibles. Los
+L2 ya modela Image, pistas granulares, `inherit` y cues con sólo `startTimeMs`.
+La migración activa continúa en L3: representarlos como carriles sostenidos y,
+después, exportar `.vibrix-score` con el cierre transitivo de snapshots
+referenciados y las previews disponibles. Los
 binarios originales permanecen en Vibrix y no forman parte del primer paquete
 JSON. El orden ejecutable vive en `.agents/TAREA_SECUENCIADOR.md`.
 
