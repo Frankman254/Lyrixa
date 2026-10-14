@@ -15,6 +15,10 @@ This roadmap keeps the cleanup work separate from feature work. Use it before ad
 - The right inspector is the single editing surface for project, layer, clip, style, texture, FX, and animation.
 - Inspector tab code is split into focused components.
 - Visual style, animation, FX, and progress merge logic is centralized in `resolveVisualStyle.ts`.
+- Lyric source changes live in `core/lyrics/lyricSourceLibrary.ts`; `rawLyricsText`/`normalizedLyrics` are derived in one place.
+- Tap-sync orchestration moved out of the shell into `core/timeline/syncQueue.ts` + `features/sync/useSyncSession.ts`.
+- `useLyrixaProject` lost its dead setters (`setRenderMode`, `resetProject`); the four project-default setters became `setProjectDefaults`.
+- `EditorTopBar` takes grouped props instead of ~58 flat ones.
 
 ## Current architecture target
 

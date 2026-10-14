@@ -3,8 +3,6 @@ import type { ChangeEvent } from 'react';
 import { AudioEngine } from '../player/AudioEngine';
 import { TimelineEditor } from '../timeline-editor/TimelineEditor';
 import { ClipLyricsRenderer } from '../lyrics-view/ClipLyricsRenderer';
-import type { LyricClip } from '../../core/types/clip';
-import type { LyricLayer } from '../../core/types/layer';
 import type { LyrixaProject } from '../../core/types/project';
 import { LyricsImportPanel } from './LyricsImportPanel';
 import { FloatingPreview } from './FloatingPreview';
@@ -14,20 +12,13 @@ import { LayersSidebar } from './LayersSidebar';
 import { InspectorPanel } from '../inspector/InspectorPanel';
 import { CompositionCatalog } from '../composition/CompositionCatalog';
 import { TapSyncPanel } from '../sync/TapSyncPanel';
-import { useTapSync } from '../sync/useTapSync';
+import { useSyncSession } from '../sync/useSyncSession';
 import { useEditorMode } from './useEditorMode';
 import type { EditorMode } from './useEditorMode';
 import { ShortcutsPanel } from '../shortcuts/ShortcutsPanel';
 import { useShortcuts } from '../shortcuts/useShortcuts';
-import type { TapSyncLine } from '../../core/timeline/tapSync';
-import {
-  createTapSyncSourceId,
-  findNextUnpublishedLineIndex,
-  findTapSyncResumeTime,
-  orderedLayerClips
-} from '../../core/timeline/tapSync';
+import { findActiveLyricSource, getLyricSourceStartTime } from '../../core/lyrics/lyricSourceLibrary';
 import { duplicateClipSelection } from '../../core/timeline/duplicateClips';
-import { normalizeLyricsText } from '../../core/lyrics/normalize';
 import { useLyrixaProject } from './useLyrixaProject';
 import { useAccentTheme } from '../../shared/theme/useAccentTheme';
 import { useViewportTier } from '../../shared/layout/useViewportTier';
@@ -79,10 +70,7 @@ export function LyrixaEditorShell() {
     setLayers,
     setComposition,
     setVibrixManifest,
-    setStyleConfig,
-    setAnimationConfig,
-    setFxConfig,
-    setProgressIndicatorConfig,
+    setProjectDefaults,
     setCurrentTime,
     setMasterDuration,
     importProject,
@@ -98,20 +86,10 @@ export function LyrixaEditorShell() {
   const masterFileInputRef = useRef<HTMLInputElement>(null);
 
   const { mode, setMode, isSync: syncMode, isCompose, isPreview } = useEditorMode();
-  // Tracks whether the sync side-effects (cursor, lines, layer wiring) have
-  // already run. Lets the mode switcher AND the "Sync lyrics" button share
-  // one idempotent entry/exit path.
-  const syncEnteredRef = useRef(false);
   const setSyncMode = useCallback((next: boolean) => {
     if (next) setMode('sync');
     else if (mode === 'sync') setMode('edit');
   }, [mode, setMode]);
-  const [syncSpeed, setSyncSpeed] = useState(1);
-  const [syncLines, setSyncLines] = useState<TapSyncLine[]>([]);
-  const [syncInitialCursor, setSyncInitialCursor] = useState(0);
-  const [syncTargetLayerId, setSyncTargetLayerId] = useState<string | null>(null);
-  /** When null, sync streams every project lyric source in order. */
-  const [syncSourceId, setSyncSourceId] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [editingLyricSourceId, setEditingLyricSourceId] = useState<string | null>(null);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
@@ -296,6 +274,7 @@ export function LyrixaEditorShell() {
     openLyricsBundleImportPicker,
     handleExportProject,
     handleExportLyricsBundle,
+    handleExportLyrics,
     handleProjectFileSelected,
     handleLyricsBundleFileSelected
   } = useProjectImportExport({
@@ -338,193 +317,32 @@ export function LyrixaEditorShell() {
   const isLongAudio = detectLongAudio(masterChannel?.sizeBytes, masterChannel?.duration);
   const showMini = miniPreviewVisible && !previewOpen;
 
-  const activeLyricSource = useMemo(
-    () => project.lyricSources.find(source => source.id === project.activeLyricSourceId)
-      ?? project.lyricSources[0]
-      ?? null,
-    [project.lyricSources, project.activeLyricSourceId]
-  );
+  const activeLyricSource = findActiveLyricSource(project);
   const editingLyricSource = useMemo(
     () => editingLyricSourceId
       ? project.lyricSources.find(source => source.id === editingLyricSourceId) ?? null
       : null,
     [editingLyricSourceId, project.lyricSources]
   );
-  const effectiveSyncSourceId = project.lyricMode === 'single'
-    ? activeLyricSource?.id ?? null
-    : syncSourceId;
 
-  const activeLayerId = selectedLayerId ?? project.layers[0]?.id ?? null;
-  const syncLayerId = syncMode
-    ? syncTargetLayerId ?? activeLayerId
-    : activeLayerId;
-  const syncLayerName =
-    project.layers.find(l => l.id === syncLayerId)?.name ?? 'Lyrics';
-  const fallbackLyricSourceClips = useMemo(
-    () => findBestLyricSourceClips(project.clips, project.layers, syncLayerId),
-    [project.clips, project.layers, syncLayerId]
-  );
-  const allProjectLyricLines = useMemo(
-    () => getOrderedProjectLyricLines(project, null),
-    [project]
-  );
-  const orderedProjectLyricLines = useMemo(
-    () => getOrderedProjectLyricLines(project, effectiveSyncSourceId),
-    [project, effectiveSyncSourceId]
-  );
-  const hasImportedLyrics = allProjectLyricLines.length > 0;
-  const canSync =
-    !!masterChannel?.objectUrl &&
-    !!syncLayerId &&
-    (hasImportedLyrics || orderedProjectLyricLines.length > 0 || fallbackLyricSourceClips.length > 0);
-
-  const tapSync = useTapSync({
-    enabled: syncMode,
-    clips: project.clips,
-    lines: syncLines,
-    layerId: syncLayerId,
-    initialCursorIndex: syncInitialCursor,
+  const pausePlayback = useCallback(() => setIsPlaying(false), [setIsPlaying]);
+  const sync = useSyncSession({
+    active: syncMode,
+    onActiveChange: setSyncMode,
+    project,
+    selectedLayerId,
+    onSelectLayer: setSelectedLayerId,
+    setClips,
+    setRawLyricsText,
+    setActiveLyricSource,
+    audioReady: !!masterChannel?.objectUrl,
     trackDuration: masterChannel?.duration,
     playbackTime,
-    onClipsChange: setClips,
     onPlayToggle: handlePlayToggle,
-    onSeek: handleSeek
+    onPause: pausePlayback,
+    onSeek: handleSeek,
+    onFocusTime: focusTimelineAt
   });
-
-  const buildSyncLines = useCallback((
-    layerId: string,
-    sourceFilterId: string | null = effectiveSyncSourceId
-  ): TapSyncLine[] => {
-    const layerClips = orderedLayerClips(project.clips, layerId);
-    const fallbackSourceClips = findBestLyricSourceClips(project.clips, project.layers, layerId);
-    const filteredProjectLines = getOrderedProjectLyricLines(project, sourceFilterId);
-    const sourceLines = filteredProjectLines.length > 0
-      ? filteredProjectLines
-      : sourceFilterId
-        ? []
-        : fallbackSourceClips.map((clip, index) => ({
-            text: clip.text,
-            sourceIndex: index,
-            sourceId: clip.sourceId ?? createTapSyncSourceId(index, clip.text),
-            lyricSourceId: clip.lyricSourceId
-          }));
-
-    return sourceLines.map((line, index) => {
-      const sameTextAtIndex = layerClips[index]?.text.trim() === line.text.trim()
-        ? layerClips[index]
-        : undefined;
-      const existing = layerClips.find(clip => clip.sourceId === line.sourceId) ?? sameTextAtIndex;
-      const template = existing ?? fallbackSourceClips[index];
-      return {
-        sourceIndex: line.sourceIndex,
-        sourceId: line.sourceId,
-        lyricSourceId: line.lyricSourceId,
-        text: line.text,
-        template
-      };
-    });
-  }, [effectiveSyncSourceId, project]);
-
-  const clearSyncLayer = useCallback((layerId = syncLayerId) => {
-    if (!layerId) return;
-    setClips(previous => previous.filter(clip => clip.layerId !== layerId));
-  }, [syncLayerId, setClips]);
-
-  const startSyncForLayer = useCallback((
-    layerId: string,
-    sourceFilterId: string | null = effectiveSyncSourceId
-  ): number => {
-    if (!layerId) return 0;
-    const lines = buildSyncLines(layerId, sourceFilterId);
-    const hydratedClips = attachSourceIdentityToLayerClips(project.clips, layerId, lines);
-    const nextCursor = findNextUnpublishedLineIndex(lines, hydratedClips, layerId);
-    const resumeTime = findTapSyncResumeTime(
-      lines,
-      hydratedClips,
-      layerId,
-      getLyricSourceStartTime(project, sourceFilterId)
-    );
-    if (project.rawLyricsText.trim().length === 0 && project.lyricSources.length === 0 && lines.length > 0) {
-      setRawLyricsText(lines.map(line => line.text).join('\n'));
-    }
-    if (hydratedClips !== project.clips) {
-      setClips(hydratedClips);
-    }
-    setSyncLines(lines);
-    setSyncInitialCursor(nextCursor);
-    setSyncTargetLayerId(layerId);
-    setSelectedLayerId(layerId);
-    tapSync.reset(nextCursor);
-    return resumeTime;
-  }, [buildSyncLines, effectiveSyncSourceId, project, setClips, setRawLyricsText, tapSync]);
-
-  const exitSyncMode = useCallback(() => {
-    if (!syncEnteredRef.current) return;
-    syncEnteredRef.current = false;
-    setSyncSpeed(1);
-    setSyncLines([]);
-    setSyncInitialCursor(0);
-    setSyncTargetLayerId(null);
-    if (mode === 'sync') setMode('edit');
-  }, [mode, setMode]);
-
-  const enterSyncMode = useCallback(() => {
-    if (syncEnteredRef.current) return;
-    syncEnteredRef.current = true;
-    // Default the sync source to the project's active source so the user
-    // doesn't have to pick when there's exactly one set of lyrics.
-    const syncSourceExists = effectiveSyncSourceId == null ||
-      project.lyricSources.some(source => source.id === effectiveSyncSourceId);
-    const initialSourceId = project.lyricMode === 'single'
-      ? activeLyricSource?.id ?? null
-      : syncSourceExists
-      ? effectiveSyncSourceId ?? activeLyricSource?.id ?? null
-      : activeLyricSource?.id ?? null;
-    setSyncSourceId(initialSourceId);
-    const initialLayerId = syncTargetLayerId ?? activeLayerId;
-    const resumeTime = initialLayerId
-      ? startSyncForLayer(initialLayerId, initialSourceId)
-      : getLyricSourceStartTime(project, initialSourceId);
-    setIsPlaying(false);
-    handleSeek(resumeTime);
-    focusTimelineAt(resumeTime);
-    if (mode !== 'sync') setMode('sync');
-  }, [activeLayerId, activeLyricSource?.id, effectiveSyncSourceId, focusTimelineAt, handleSeek, mode, project, setIsPlaying, setMode, startSyncForLayer, syncTargetLayerId]);
-
-  const handleToggleSync = useCallback(() => {
-    if (syncMode) exitSyncMode();
-    else enterSyncMode();
-  }, [syncMode, enterSyncMode, exitSyncMode]);
-
-  // Bridge the editor-mode setting to the sync wiring so both the "Sync lyrics"
-  // button and the Sync tab on the mode switcher share one idempotent path.
-  useEffect(() => {
-    if (mode === 'sync') enterSyncMode();
-    else exitSyncMode();
-  }, [mode, enterSyncMode, exitSyncMode]);
-
-  const handleSyncLayerChange = useCallback((layerId: string) => {
-    const resumeTime = startSyncForLayer(layerId);
-    handleSeek(resumeTime);
-    focusTimelineAt(resumeTime);
-  }, [focusTimelineAt, handleSeek, startSyncForLayer]);
-
-  const handleSyncSourceChange = useCallback((nextSourceId: string | null) => {
-    setSyncSourceId(nextSourceId);
-    if (nextSourceId) setActiveLyricSource(nextSourceId);
-    // Rebuild the sync queue against the new source so the cursor jumps to that
-    // source's first un-timed line on the active layer. Existing synced clips
-    // for other sources stay put — they're keyed by their own sourceId.
-    if (syncTargetLayerId) {
-      const resumeTime = startSyncForLayer(syncTargetLayerId, nextSourceId);
-      handleSeek(resumeTime);
-      focusTimelineAt(resumeTime);
-      return;
-    }
-    const startTime = getLyricSourceStartTime(project, nextSourceId);
-    handleSeek(startTime);
-    focusTimelineAt(startTime);
-  }, [focusTimelineAt, handleSeek, project, setActiveLyricSource, startSyncForLayer, syncTargetLayerId]);
 
   const openLyricsImport = useCallback((sourceId: string | null = null) => {
     if (sourceId) setActiveLyricSource(sourceId);
@@ -559,15 +377,6 @@ export function LyrixaEditorShell() {
     return true;
   }, [applyLyrics, project.clips, project.lyricSources]);
 
-  const handleSyncRestart = useCallback(() => {
-    clearSyncLayer();
-    setSyncInitialCursor(0);
-    tapSync.reset();
-    const startTime = getLyricSourceStartTime(project, effectiveSyncSourceId);
-    handleSeek(startTime);
-    focusTimelineAt(startTime);
-  }, [clearSyncLayer, effectiveSyncSourceId, focusTimelineAt, project, tapSync, handleSeek]);
-
   const handleJumpToLyricSource = useCallback((sourceId: string) => {
     setActiveLyricSource(sourceId);
     const startTime = getLyricSourceStartTime(project, sourceId);
@@ -601,9 +410,6 @@ export function LyrixaEditorShell() {
     setIsPlaying(false);
     setPlaybackTime(0);
     setSyncMode(false);
-    setSyncLines([]);
-    setSyncInitialCursor(0);
-    setSyncTargetLayerId(null);
     setPreviewOpen(false);
     setTransparentPreviewOpen(false);
     setMiniPreviewVisible(false);
@@ -694,64 +500,75 @@ export function LyrixaEditorShell() {
   return (
     <div className={shellClass}>
       <EditorTopBar
-        editorMode={mode}
-        onEditorModeChange={handleEditorModeChange}
-        projectName={project.name}
-        nameEditing={nameEditing}
-        draftName={nameEditing ? draftName : project.name}
+        project={project}
         masterChannel={masterChannel ?? null}
-        isPlaying={isPlaying}
-        currentTime={playbackTime}
-        duration={effectiveDuration}
         saveStatus={saveStatus}
-        syncMode={syncMode}
-        canSync={canSync}
         tier={tier}
-        onUndo={undo}
-        onRedo={redo}
-        canUndo={canUndo}
-        canRedo={canRedo}
-        inspectorVisible={inspectorShown}
-        showInspectorToggle={!isPreview && !isCompose && !mobileStyleMode}
-        onToggleInspector={handleToggleInspector}
-        onToggleSidebar={() => setSidebarDrawerOpen(open => !open)}
-        previewOpen={previewOpen}
-        transparentPreviewOpen={transparentPreviewOpen}
-        miniPreviewVisible={miniPreviewVisible}
-        masterFileInputRef={masterFileInputRef}
-        projectImportInputRef={projectImportInputRef}
-        lyricsBundleImportInputRef={lyricsBundleImportInputRef}
-        onDraftNameChange={setDraftName}
-        onStartNameEdit={() => {
-          setDraftName(project.name);
-          setNameEditing(true);
+        nameEdit={{
+          editing: nameEditing,
+          draft: nameEditing ? draftName : project.name,
+          onDraftChange: setDraftName,
+          onStart: () => {
+            setDraftName(project.name);
+            setNameEditing(true);
+          },
+          onCommit: commitName,
+          onCancel: cancelNameEdit
         }}
-        onCommitName={commitName}
-        onCancelNameEdit={cancelNameEdit}
-        onOpenMasterPicker={openMasterPicker}
-        onOpenProjectImportPicker={openProjectImportPicker}
-        onOpenLyricsBundleImportPicker={openLyricsBundleImportPicker}
-        onAudioFileSelected={handleAudioFileSelected}
-        onProjectFileSelected={handleProjectFileSelected}
-        onLyricsBundleFileSelected={handleLyricsBundleFileSelected}
-        onOpenLyricsImport={() => openLyricsImport()}
-        onToggleSync={handleToggleSync}
-        onExportProject={handleExportProject}
-        onExportLyricsBundle={handleExportLyricsBundle}
-        onSendToLiveWallpaper={handleSendToLiveWallpaper}
-        onTogglePreview={toggleLargePreview}
-        onOpenOverlay={() => {
-          setMiniPreviewVisible(false);
-          setTransparentPreviewOpen(true);
+        playback={{
+          isPlaying,
+          currentTime: playbackTime,
+          duration: effectiveDuration,
+          onPlayToggle: handlePlayToggle,
+          onSeek: handleSeek
         }}
-        onShowMiniPreview={() => setMiniPreviewVisible(true)}
-        onHideMiniPreview={() => setMiniPreviewVisible(false)}
-        onPlayToggle={handlePlayToggle}
-        onSeek={handleSeek}
-        onResetProject={handleHardResetProject}
-        accent={accent}
-        onAccentChange={setAccent}
-        onOpenShortcuts={() => setShortcutsOpen(true)}
+        history={{ canUndo, canRedo, onUndo: undo, onRedo: redo }}
+        mode={{
+          current: mode,
+          onChange: handleEditorModeChange,
+          syncMode,
+          canSync: sync.canSync,
+          onToggleSync: sync.toggle
+        }}
+        panels={{
+          inspectorVisible: inspectorShown,
+          showInspectorToggle: !isPreview && !isCompose && !mobileStyleMode,
+          onToggleInspector: handleToggleInspector,
+          onToggleSidebar: () => setSidebarDrawerOpen(open => !open)
+        }}
+        preview={{
+          open: previewOpen,
+          transparentOpen: transparentPreviewOpen,
+          miniVisible: miniPreviewVisible,
+          onToggle: toggleLargePreview,
+          onOpenOverlay: () => {
+            setMiniPreviewVisible(false);
+            setTransparentPreviewOpen(true);
+          },
+          onShowMini: () => setMiniPreviewVisible(true),
+          onHideMini: () => setMiniPreviewVisible(false)
+        }}
+        files={{
+          masterFileInputRef,
+          projectImportInputRef,
+          lyricsBundleImportInputRef,
+          onAudioFileSelected: handleAudioFileSelected,
+          onProjectFileSelected: handleProjectFileSelected,
+          onLyricsBundleFileSelected: handleLyricsBundleFileSelected,
+          onOpenMasterPicker: openMasterPicker,
+          onOpenProjectImportPicker: openProjectImportPicker,
+          onOpenLyricsBundleImportPicker: openLyricsBundleImportPicker
+        }}
+        actions={{
+          onOpenLyricsImport: () => openLyricsImport(),
+          onExportProject: handleExportProject,
+          onExportLyricsBundle: handleExportLyricsBundle,
+          onExportLyrics: handleExportLyrics,
+          onSendToLiveWallpaper: handleSendToLiveWallpaper,
+          onResetProject: handleHardResetProject,
+          onOpenShortcuts: () => setShortcutsOpen(true)
+        }}
+        accent={{ value: accent, onChange: setAccent }}
       />
 
       <EditorAlerts
@@ -770,7 +587,7 @@ export function LyrixaEditorShell() {
           ref={audioEngineRef}
           audioUrl={masterChannel.objectUrl}
           isPlaying={isPlaying}
-          playbackRate={syncMode ? syncSpeed : 1}
+          playbackRate={syncMode ? sync.speed : 1}
           analysisEnabled={waveformEnabled}
           sourceSyncTime={playbackTime}
           onDurationChange={setMasterDuration}
@@ -893,7 +710,7 @@ export function LyrixaEditorShell() {
             />
           )}
 
-          {!isCompose && !hasImportedLyrics && project.clips.length === 0 && masterChannel && (
+          {!isCompose && !sync.hasLyrics && project.clips.length === 0 && masterChannel && (
             <EmptyLaneHint
               icon="📝"
               title="No lyrics yet"
@@ -913,10 +730,7 @@ export function LyrixaEditorShell() {
         currentTime={playbackTime}
         onProjectNameChange={setProjectName}
         onLyricModeChange={setLyricMode}
-        onStyleChange={setStyleConfig}
-        onAnimationChange={setAnimationConfig}
-        onFxChange={setFxConfig}
-        onProgressChange={setProgressIndicatorConfig}
+        onProjectDefaultsChange={setProjectDefaults}
         onClipsChange={setClips}
         onLayersChange={setLayers}
         onDuplicateClip={handleDuplicateClip}
@@ -986,25 +800,15 @@ export function LyrixaEditorShell() {
 
       {syncMode && (
         <TapSyncPanel
+          session={sync}
           clips={project.clips}
-          lines={syncLines}
           layers={project.layers}
-          layerId={syncLayerId}
-          layerName={syncLayerName}
           sources={project.lyricSources}
-          sourceId={effectiveSyncSourceId}
           lyricMode={project.lyricMode}
           isPlaying={isPlaying}
           playbackTime={playbackTime}
-          speed={syncSpeed}
-          sync={tapSync}
           onPlayToggle={handlePlayToggle}
           onSeek={handleSeek}
-          onSpeedChange={setSyncSpeed}
-          onLayerChange={handleSyncLayerChange}
-          onSourceChange={handleSyncSourceChange}
-          onRestart={handleSyncRestart}
-          onClose={handleToggleSync}
           docked={!isDesktop}
         />
       )}
@@ -1155,105 +959,4 @@ function downloadVibrixScore(project: LyrixaProject): void {
   } catch (reason) {
     window.alert(reason instanceof Error ? reason.message : 'Could not export Vibrix score.');
   }
-}
-
-function getLyricSourceStartTime(project: LyrixaProject, sourceId: string | null): number {
-  const source = sourceId
-    ? project.lyricSources.find(item => item.id === sourceId)
-    : project.lyricSources.find(item => item.id === project.activeLyricSourceId)
-      ?? project.lyricSources[0];
-  const startTime = source?.startTime ?? 0;
-  return Number.isFinite(startTime) ? Math.max(0, startTime) : 0;
-}
-
-function findBestLyricSourceClips(
-  clips: LyricClip[],
-  layers: LyricLayer[],
-  preferredLayerId: string | null
-): LyricClip[] {
-  const nonEmpty = (list: LyricClip[]) => list.filter(clip => clip.text.trim().length > 0);
-  if (preferredLayerId) {
-    const preferred = nonEmpty(orderedLayerClips(clips, preferredLayerId));
-    if (preferred.length > 0) return preferred;
-  }
-
-  let best: LyricClip[] = [];
-  for (const layer of layers) {
-    const candidate = nonEmpty(orderedLayerClips(clips, layer.id));
-    if (candidate.length > best.length) best = candidate;
-  }
-  return best;
-}
-
-function getOrderedProjectLyricLines(
-  project: LyrixaProject,
-  sourceFilterId: string | null = null
-): TapSyncLine[] {
-  const allSources = [...(project.lyricSources ?? [])]
-    .filter(source => source.normalizedLines.length > 0 || source.rawText.trim().length > 0)
-    .sort((a, b) => a.order - b.order);
-  const sources = sourceFilterId
-    ? allSources.filter(source => source.id === sourceFilterId)
-    : allSources;
-
-  if (sources.length === 0) {
-    // Falling back to the project's combined rawLyricsText only makes sense
-    // when no specific source is requested.
-    if (sourceFilterId) return [];
-    return normalizeLyricsText(project.rawLyricsText).lines.map((text, index) => ({
-      sourceIndex: index,
-      sourceId: createTapSyncSourceId(index, text),
-      text
-    }));
-  }
-
-  return sources.flatMap(source => {
-    const lines = source.normalizedLines.length > 0
-      ? source.normalizedLines
-      : normalizeLyricsText(source.rawText).lines;
-    return lines.map((text, index) => ({
-      sourceIndex: index,
-      sourceId: createTapSyncSourceId(index, text, source.id),
-      lyricSourceId: source.id,
-      text
-    }));
-  });
-}
-
-function attachSourceIdentityToLayerClips(
-  clips: LyricClip[],
-  layerId: string,
-  lines: TapSyncLine[]
-): LyricClip[] {
-  const layerClips = orderedLayerClips(clips, layerId);
-  const patches = new Map<string, Partial<LyricClip>>();
-
-  for (const line of lines) {
-    const sameSource = layerClips.find(clip => clip.sourceId === line.sourceId);
-    const sameTextAtIndex = layerClips[line.sourceIndex]?.text.trim() === line.text.trim()
-      ? layerClips[line.sourceIndex]
-      : undefined;
-    const clip = sameSource ?? sameTextAtIndex;
-    if (!clip) continue;
-    if (
-      clip.sourceId === line.sourceId &&
-      clip.sourceIndex === line.sourceIndex &&
-      clip.lyricSourceId === line.lyricSourceId &&
-      clip.createdBy
-    ) {
-      continue;
-    }
-    patches.set(clip.id, {
-      sourceId: line.sourceId,
-      sourceIndex: line.sourceIndex,
-      lyricSourceId: line.lyricSourceId,
-      createdBy: clip.createdBy ?? 'import'
-    });
-  }
-
-  if (patches.size === 0) return clips;
-  return clips.map(clip => {
-    const patch = patches.get(clip.id);
-    return patch ? { ...clip, ...patch } : clip;
-  });
 }

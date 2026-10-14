@@ -2,10 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { LyricClip } from '../../core/types/clip';
 import type { LyricLayer } from '../../core/types/layer';
 import type { LyricProjectMode, LyricSource } from '../../core/types/project';
-import type { TapSyncLine } from '../../core/timeline/tapSync';
 import { isTapSyncLinePublished } from '../../core/timeline/tapSync';
 import { FloatingPanel } from '../../shared/components/FloatingPanel';
-import type { UseTapSyncResult } from './useTapSync';
+import type { SyncSession } from './useSyncSession';
 import './TapSyncPanel.css';
 
 const SPEED_OPTIONS = [0.5, 0.75, 1] as const;
@@ -15,27 +14,16 @@ const MIN_WIDTH = 360;
 const MAX_WIDTH = 860;
 
 interface TapSyncPanelProps {
+  session: SyncSession;
   clips: LyricClip[];
-  lines: TapSyncLine[];
   layers: LyricLayer[];
-  layerId: string | null;
-  layerName: string;
   /** All lyric sources stored in the project. */
   sources: LyricSource[];
-  /** Currently selected source; null = stream every source in order. */
-  sourceId: string | null;
   lyricMode: LyricProjectMode;
   isPlaying: boolean;
   playbackTime: number;
-  speed: number;
-  sync: UseTapSyncResult;
   onPlayToggle: () => void;
   onSeek: (time: number) => void;
-  onSpeedChange: (speed: number) => void;
-  onLayerChange: (layerId: string) => void;
-  onSourceChange: (sourceId: string | null) => void;
-  onRestart: () => void;
-  onClose: () => void;
   /** Mobile tier: dock the panel as a full-width bottom sheet. */
   docked?: boolean;
 }
@@ -63,27 +51,30 @@ function readStoredWidth(): number {
 }
 
 export function TapSyncPanel({
+  session,
   clips,
-  lines,
   layers,
-  layerId,
-  layerName,
   sources,
-  sourceId,
   lyricMode,
   isPlaying,
   playbackTime,
-  speed,
-  sync,
   onPlayToggle,
   onSeek,
-  onSpeedChange,
-  onLayerChange,
-  onSourceChange,
-  onRestart,
-  onClose,
   docked = false
 }: TapSyncPanelProps) {
+  const {
+    lines,
+    layerId,
+    layerName,
+    sourceId,
+    speed,
+    tap: sync,
+    setSpeed: onSpeedChange,
+    setLayer: onLayerChange,
+    setSource: onSourceChange,
+    restart: onRestart,
+    toggle: onClose
+  } = session;
   const publishedBySourceId = useMemo(
     () => new Map(
       clips

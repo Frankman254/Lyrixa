@@ -1034,3 +1034,35 @@ select option { background: var(--bg-2); color: var(--fg-0); }
   cursor: pointer;
 }
 .tr-more-accent select:focus { outline: none; border-color: var(--accent); }
+
+/* Lyric export picker inside the More menu: format + layer + download. */
+.tr-more-export {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 7px 10px;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  margin: 2px 0;
+}
+.tr-more-export-title {
+  font-size: 12px;
+  color: var(--fg-1, var(--text-main));
+}
+.tr-more-export-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.tr-more-export-row select {
+  flex: 1 1 0;
+  min-width: 0;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  color: var(--fg-1);
+  border-radius: var(--r-2);
+  padding: 4px 6px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.tr-more-export-row select:focus { outline: none; border-color: var(--accent); }

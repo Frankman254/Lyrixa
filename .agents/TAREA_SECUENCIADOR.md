@@ -1,141 +1,136 @@
-# Tarea — el secuenciador de composición (lado Lyrixa)
+# Tarea — secuenciador Compose v2 (lado Lyrixa)
 
-> **Diseño:** [../docs/03-vibrix-composition-sequencer.md](../docs/03-vibrix-composition-sequencer.md)
-> — sigue siendo válido salvo donde el contrato lo corrige.
->
-> **Contrato, y manda sobre el diseño:**
+> Actualizado el 2026-10-13. Diseño:
+> [../docs/03-vibrix-composition-sequencer.md](../docs/03-vibrix-composition-sequencer.md).
+> Contrato dueño:
 > `/Users/frankman254/Desktop/Personal-Projects/LiveWallpaperAnimeGlitch/docs/features/VIBRIX_AUTHORING_CONTRACT.md`.
-> Lo escribe y lo mantiene Vibrix, porque el catálogo es su estado — igual que
-> Lyrixa manda en el bundle de letras.
->
-> **El otro lado:**
-> `LiveWallpaperAnimeGlitch/.agents/TAREA_MANIFIESTO.md`.
 
-## No estás bloqueada. Esto es lo que cambió
+## Responsabilidad
 
-La versión anterior del plan decía que Lyrixa no podía arrancar hasta que Vibrix
-publicara el manifiesto. **Ya no:** el contrato trae un **fixture literal** —un
-manifiesto JSON completo, con sus casos de borde— y la regla es que los dos repos
-lo validen cada uno en su suite. Construye contra ese fixture. Cuando llegue el
-manifiesto real, si no encaja, el que avisa es un test.
+Vibrix crea y renderiza objetos visuales. Lyrixa recibe un paquete de autoría,
+los coloca en el tiempo y devuelve un score. Lyrixa no evalúa shaders ni guarda
+una copia editable de los parámetros de Vibrix.
 
-Lo único que de verdad espera a Vibrix es la **última** comprobación: que un
-score exportado cambie lo que se ve en Vibrix. Todo lo anterior se hace hoy.
+```text
+Vibrix ── .vibrix-authoring ──▶ Lyrixa ── .vibrix-score ──▶ Vibrix
+```
 
-## Tres correcciones al diseño, verificadas en el código de Vibrix
+## Corte existente: v1
 
-No son matices; cambian tipos y UI, y es más barato ahora que después.
+Ya existe y debe seguir abriendo mientras se construye v2:
 
-**1. `kind: 'motion'` no existe. Bórralo.** No es que falte en Vibrix: se
-**eliminó**. `wallpaperStoreMigrations.ts:2974` hace
-`delete migratedState.motionProfileSlots`. «Motion» era partículas+lluvia juntas
-y hoy se componen por separado. Un cue `'motion'` no se podría resolver nunca.
+- `core/composition/types.ts`: familias, manifiesto, tracks y cues v1.
+- `authoringManifest.ts`: parser de manifiesto JSON schema 1.
+- `slotStatus.ts`: Current / Updated / Missing por id + revisión.
+- `score.ts`: normalización y sobre `.vibrix-score.json` schema 1.
+- `CompositionCatalog.tsx`: escenas, drag y `Add at playhead`.
+- `CompositionTrackLane.tsx`: una pista Scene con mover y resize.
+- `project.composition` y `project.vibrixManifest`: persistencia aditiva.
 
-**2. `'background'` pasa a `'background-zoom'`, y no es lo que parece.**
-`backgroundProfileSlots` son perfiles del **envelope de zoom por graves** (los
-consume `BgZoomAudioSection.tsx`), no «qué imagen se ve». Ninguna escena los
-referencia. Si la pista se llama `background`, la UI promete cambiar la imagen de
-fondo desde la línea temporal — y eso no es un slot, es el pool y los setlists de
-Vibrix. Llega con `sceneBindable: false` y sólo debe aparecer en `Advanced`.
+Cada cue v1 tiene `startTimeMs` y `endTimeMs`; la UI crea ocho segundos. Ese
+modelo es compatibilidad, no la base de la nueva timeline.
 
-**3. `'spectrum-second'` es una familia propia.** Spectrum 2 tiene su **propio
-banco** de slots en Vibrix (`spectrumSecondProfileSlots`) y las escenas lo ligan
-aparte de Spectrum 1. Dos pistas, no una con un parámetro.
+## Modelo v2 cerrado
 
-Y una familia nueva, informativa: **`intro-window`**, con `cueable: false`. Una
-ventana de intro **cubre** la cabeza del tema por diseño, no se coloca en un
-instante; se muestra para que el usuario sepa con qué abre el tema, y no se
-arrastra. `calibration` no se publica nunca: es del dispositivo de quien edita.
+- Un cue nuevo guarda `startTimeMs`, target, prioridad y enabled.
+- La activación dura hasta el siguiente cue del carril o el final del audio.
+- Carriles: Image, Scene, Spectrum 1, Spectrum 2, Looks, Particles, Rain,
+  Lights, Camera FX, Logo, Track Title y Background Zoom avanzado.
+- `intro-window` es informativo; calibration nunca se publica.
+- Scene e Image son agregados. Un cue granular sólo afecta su familia.
+- `inherit` retira un override granular sostenido y devuelve el control a
+  Scene/Image.
+- En el mismo milisegundo el orden semántico es Scene, Image y granulares.
+- La transición de imágenes pertenece a la imagen saliente; Lyrixa sólo fija el
+  instante del cambio.
 
-## S1 · El dominio de composición — ahora, sin esperar nada
+## L1 · Importar `.vibrix-authoring`
 
-`src/core/composition/` (puro: nada de React, DOM ni `localStorage`, como manda
-AGENTS.md).
+Trabajo puro en `src/core/composition/`:
 
-1. **Tipos** `CompositionTrack` / `CompositionCue` / `CompositionScore` del
-   diseño, con `VibrixSlotFamily` del contrato (las tres correcciones de arriba
-   aplicadas). Milisegundos **enteros**.
-2. **Parser del manifiesto** — `parseAuthoringManifest(unknown)`, que devuelve
-   errores legibles en vez de reventar. El fixture del contrato es su test
-   principal, copiado **literal**.
-3. **Serializador del score** — `createVibrixScoreEnvelope(project)`, con la
-   misma disciplina que `createLyricsBundleEnvelope`: los mismos bytes para
-   archivo y para HTTP.
+1. Modelar `VibrixAuthoringManifest` v1/v2 y el contenedor
+   `VibrixAuthoringPackage` sin perder discriminación de versión.
+2. Añadir `VibrixManifestImage` y snapshots discriminados `slot` / `image`.
+3. Parsear `.vibrix-authoring`; rechazar ids duplicados, revisiones incoherentes,
+   snapshots huérfanos y previews no transportables.
+4. Mantener `parseAuthoringManifest` para `.vibrix-manifest.json` v1/v2.
+5. Probar el fixture literal del contrato y un paquete real exportado por
+   Vibrix.
 
-**Tests que importan más que el resto** (los casos de borde del fixture):
-`revision: 'empty'` ⇒ slot listado pero no arrastrable; una clave de `bindings`
-**ausente** ≠ `"off"` (ausente es «no toques ese subsistema»; `"off"` es
-«apágalo») — aplanarlos es el bug caro; `sceneBindable: false` ⇒ ninguna escena
-le apunta; `cueable: false` ⇒ no se arrastra.
+Criterio: abrir el paquete desconectado y construir catálogo, snapshots y
+previews sin `blob:` URLs ni acceso a otro origen.
 
-## S2 · Detectar que un slot cambió bajo tus pies
+## L2 · Score v2 y migración
 
-Para esto existe `slotRevision`, y conviene tenerlo **antes** de la UI, porque
-decide qué estados pinta una card.
+1. Añadir `VibrixTimelineKind = VibrixSlotFamily | 'image'`.
+2. Tipar targets `scene`, `feature-slot`, `image` e `inherit`.
+3. Guardar proyectos nuevos en schema v2 sin `endTimeMs`.
+4. Normalizar proyectos v1 de forma aditiva y conservar su duración histórica
+   al importarlos; no convertir silenciosamente un intervalo v1 en activación
+   infinita.
+5. Extender estado de dependencias a slots e imágenes: current, updated,
+   missing, empty y disabled según corresponda.
 
-Un cue guarda `target.slotRevision`. Al importar un manifiesto nuevo, por cada
-cue: **igual** ⇒ al día; **distinta** ⇒ `Updated in Vibrix`; **el id no está** ⇒
-`Missing in Vibrix`, y el cue se queda (nunca se borra solo) pero no se puede
-exportar como válido.
+Criterio: serializar → importar → serializar conserva ids, revisiones, orden y
+tiempos; los fixtures v1 siguen verdes.
 
-Ojo con lo que **no** cambia la revisión: **renombrar un slot en Vibrix no la
-mueve**, porque sólo se hashea el contenido. Si tu UI empareja por nombre, un
-rename romperá un score que en realidad está perfecto.
+## L3 · Carriles sostenidos
 
-## S3 · Primitivas del timeline, sin tocar `LyricClip`
+1. Crear el grupo plegable `Visual composition`.
+2. Renderizar Scene e Image primero; añadir después los carriles granulares.
+3. Derivar cada ancho desde el siguiente cue del **mismo carril** o la duración
+   del audio.
+4. Mover un cue cambia su corte y recalcula visualmente ambos vecinos.
+5. Eliminar resize/end manual de cues v2; mantenerlo sólo al mostrar v1 legacy.
+6. Reutilizar viewport, playhead, snap, selección y undo del proyecto sin
+   convertir `LyricClip` en tipo genérico.
 
-Extraer lo que ya comparten letras y composición —viewport, selección, drag,
-resize, snap, playhead— **sin cambiar `LyricClip`**. Es la Fase B.2 del diseño y
-el punto donde es fácil romper lo que ya funciona: el modelo de contenido **no**
-se comparte, sólo la mecánica.
+## L4 · Catálogo y edición
 
-El diseño pide **undo/redo de proyecto antes de que el timeline crezca** con más
-tipos de item. Es un riesgo que él mismo anota; si hay que elegir, va antes que
-las pistas granulares.
+1. Separar objetos por Images, Scenes y familias granulares.
+2. Mostrar miniatura transportable o placeholder con nombre.
+3. Mantener drag y la alternativa táctil `Add at playhead` con área de 44 px.
+4. Crear/enfocar el carril correcto al colocar un objeto.
+5. Ofrecer `Inherit scene/image` sólo en carriles granulares.
+6. Mostrar Updated/Missing sin borrar cues automáticamente.
 
-## S4 · Catálogo y una sola pista `Scene`
+Lyrixa puede mostrar una representación simple del bloque, pero Vibrix sigue
+siendo la autoridad visual.
 
-El corte vertical del diseño, en modo `Simple`: audio, letras, **una** pista
-Scene, y transición/duración del cue seleccionado. Drag and drop **con
-alternativa explícita** (`Add at playhead`) desde el primer día: en móvil no es
-un extra, es el camino principal, con área táctil de 44 px.
+## L5 · Exportar `.vibrix-score`
 
-## S5 · Cerrar el círculo — esto sí espera a Vibrix
+1. Escribir `score.json` schema 2.
+2. Recopilar únicamente ids realmente referenciados por cues enabled.
+3. Incluir los snapshots y previews de esas dependencias; `inherit` no crea una
+   dependencia.
+4. Validar que revisión y clase del snapshot coincidan con el target.
+5. Mantener `.vibrix-score.json` v1 como export legacy durante la transición.
 
-Exportar `<proyecto>.vibrix-score.json`, que Vibrix lo importe y que al hacer
-seek cambie de escena. Y el mismo resultado en su export offline.
+El primer contenedor puede ser JSON autocontenido. ZIP/binario entra cuando se
+necesiten originales portables; los JSON internos no cambian por ese transporte.
 
-## Transporte: archivo. Y por qué, verificado
+## Integración compartida
 
-`src/core/bridge/liveWallpaperTarget.ts` apunta a
-`POST {base}/api/lyrics-bundle`. El servidor de Vibrix
-(`backend/server/src/index.mjs`) sirve `/api/health`, `/api/ai/scene-intent` y
-`/api/projects*`: **esa ruta no existe**. Hoy el target HTTP siempre informa «no
-disponible» y todo cae al fallback de archivo — que es el camino que funciona de
-verdad, no un plan B.
+El score real de salida coloca:
 
-Además el manifiesto sale del **store del navegador** de Vibrix, que el servidor
-no tiene. Así que la primera versión va por archivo en los dos sentidos. El
-puente ya está bien diseñado para esto: su propio comentario dice que la entrega
-es separable de la construcción, así que añade un `VibrixCatalogSource` para la
-lectura y un `sendScoreToLiveWallpaper` para la escritura **con la misma forma**
-que lo de letras, y HTTP entra después sin tocar los bytes.
+1. Image A `00:00`, Image B `03:00`.
+2. Scene A `00:00`, Scene B `01:00`.
+3. Spectrum 2 `01:30`, `inherit` `02:00`.
 
-## Lo que NO entra
+Vibrix debe producir el mismo frame al hacer seek o reproducir desde cero y el
+mismo resultado en export offline. Esta comprobación es la única parte que
+espera al runtime de Vibrix; L1→L5 no están bloqueados.
 
-- **No dupliques el editor de Vibrix.** Lyrixa decide **qué, cuándo y cuánto**.
-  Ningún parámetro de shader, ningún dial de una familia.
-- **No evalúes el score para pintar «de verdad».** El preview de Lyrixa es una
-  representación simple; la autoridad visual es Vibrix. El evaluador stateless
-  (`resolveVisualStateAt`) es trabajo **de Vibrix**, en su Fase C.
-- **No toques el código de Vibrix desde aquí** (ni al revés): su AGENTS.md y el
-  tuyo lo prohíben. Si el contrato necesita un cambio, se cambia **en su
-  documento**, en Vibrix, y los dos lados lo siguen.
-- Nada de cuentas, nube ni IA desde Lyrixa (sigue vigente en TAREAS.md).
+## No mezclar
 
-## Orden sugerido
+- No tocar el contrato de letras `.lyrixa-lyrics.json`.
+- No añadir endpoints antes de que el archivo funcione; HTTP reutilizará los
+  mismos bytes.
+- No meter parámetros visuales editables de Vibrix en el inspector.
+- No mezclar los cambios locales de exports de letra/refactor con L1.
 
-`S1 → S2 → S3 → S4` sin parar en ninguna puerta, y `S5` cuando Vibrix tenga el
-manifiesto. Si prefieres entregar algo cerrado antes, **L1 (exports LRC/SRT/VTT)
-de [TAREAS.md](TAREAS.md) sigue siendo la prioridad alta** y no depende de nada
-de esto.
+## Siguiente archivo
+
+Crear `src/core/composition/authoringPackage.ts`, extender los tipos con una
+unión v1/v2 y añadir su test contra el fixture contractual. Ése es L1; la UI
+actual queda intacta durante este paso.

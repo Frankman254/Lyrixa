@@ -1,74 +1,83 @@
 # Lyrixa — qué hacer ahora
 
-> Fuente: plan maestro de la suite
-> (`/Users/frankman254/Desktop/Personal-Projects/LiveWallpaperAnimeGlitch/docs/plans/PLAN_MAESTRO_LANZAMIENTO.md`,
-> §0.5 y tareas 2.5 / 2.7). Actualiza este archivo al cerrar cada tarea.
+> Actualizado el 2026-10-13 después de contrastar el código de Lyrixa con el
+> productor y runtime actuales de Vibrix. Empieza por
+> [RELEVO.md](RELEVO.md) y usa
+> [TAREA_SECUENCIADOR.md](TAREA_SECUENCIADOR.md) como cola ejecutable.
 
-Vibrix está en su Fase 1 (export de vídeo). Lyrixa **no bloquea** esa fase, así
-que estas tareas pueden avanzar en paralelo, en este orden:
+## Objetivo activo: migrar el secuenciador Compose a v2
 
-## S0 · El secuenciador de composición — **nuevo, y ya no está bloqueado**
+Lyrixa es el secuenciador temporal; Vibrix prepara y renderiza imágenes,
+escenas, spectra y efectos. El primer corte v1 de Lyrixa fue útil para validar
+la idea, pero ya quedó detrás del contrato real de Vibrix.
 
-Está en su propio documento: **[TAREA_SECUENCIADOR.md](TAREA_SECUENCIADOR.md)**.
+### Estado real
 
-Lo que cambió: el contrato del catálogo ya existe y trae un **fixture literal**,
-así que no hay que esperar a que Vibrix publique nada para empezar. Trae tres
-correcciones al diseño que cambian tipos (`motion` no existe, `background` es en
-realidad el zoom por graves, Spectrum 2 es familia propia).
+| Pieza                                                              | Estado                        |
+| ------------------------------------------------------------------ | ----------------------------- |
+| Dominio `CompositionTrack` / `CompositionCue` / `CompositionScore` | Hecho en v1                   |
+| Import `.vibrix-manifest.json`                                     | Hecho, sólo schema v1         |
+| Revisión Current / Updated / Missing                               | Hecho para slots v1           |
+| Catálogo y pista Scene                                             | Hecho                         |
+| Drag + `Add at playhead`                                           | Hecho                         |
+| Export `.vibrix-score.json`                                        | Hecho en v1, sólo referencias |
+| Import `.vibrix-authoring`                                         | Pendiente                     |
+| Manifiesto e imágenes schema v2                                    | Pendiente                     |
+| Cues sostenidos sin `endTimeMs`                                    | Pendiente                     |
+| Carriles Image y granulares                                        | Pendiente                     |
+| `inherit`                                                          | Pendiente                     |
+| Export `.vibrix-score` autocontenido                               | Pendiente                     |
 
-Contrato (lo mantiene Vibrix):
+## Orden de implementación
+
+1. **L1 · Abrir el paquete de autoría.** Parser puro para
+   `.vibrix-authoring`, manifiestos v1/v2, snapshots y previews. Mantener el
+   JSON v1 como entrada legacy.
+2. **L2 · Dominio score v2.** Nuevos cues guardan sólo `startTimeMs`; leer y
+   normalizar proyectos/scores v1 sin reinterpretarlos silenciosamente.
+3. **L3 · Timeline sostenida.** Añadir Image, Scene y carriles granulares. El
+   borde derecho se deriva del siguiente cue del carril o del final del audio.
+4. **L4 · Catálogo completo.** Slots e imágenes con preview o placeholder,
+   drag, `Add at playhead`, estado de revisión e `inherit` granular.
+5. **L5 · Paquete de score.** Exportar `.vibrix-score` con `score.json` y sólo
+   snapshots, previews y assets referenciados.
+6. **Integración.** Entregar un paquete real a Vibrix y verificar Play, seek y
+   export offline con dos imágenes, dos escenas, Spectrum 2 e `inherit`.
+
+### Siguiente paso concreto
+
+Empieza por **L1** en `src/core/composition/authoringPackage.ts` y amplía los
+tipos/parser existentes. Copia el fixture v2 literal desde el contrato de
+Vibrix y pruébalo antes de tocar componentes React.
+
+Contrato dueño:
 `/Users/frankman254/Desktop/Personal-Projects/LiveWallpaperAnimeGlitch/docs/features/VIBRIX_AUTHORING_CONTRACT.md`.
 
-**L1 sigue siendo la prioridad alta** si prefieres cerrar algo entero primero: no
-depende de Vibrix en absoluto.
+## Trabajo local existente que no se mezcla
 
-## L1 · Exports de letra estándar — prioridad alta
+La revisión encontró cambios sin commit en exports estándar de letras,
+sincronización y refactor del shell. Los serializadores LRC, Enhanced LRC, SRT,
+VTT y TXT están implementados localmente con tests y UI, pero aún falta validar
+manualmente `.srt` en VLC y `.lrc` en un reproductor de letras. Conserva ese
+trabajo y ciérralo como su propio cambio; no lo incluyas en L1.
 
-El autor no sabía qué formatos exportar; la respuesta del plan es esta:
+## Después de Compose
 
-| Formato                         | Para qué                                                    | Estado     |
-| ------------------------------- | ----------------------------------------------------------- | ---------- |
-| `.lyrixa-lyrics.json`           | Vibrix (contrato rico: capas, roles, `words[]`)             | Hecho      |
-| **`.lrc`** (líneas)             | Reproductores, Musixmatch/Spotify, karaoke                  | **Hacer**  |
-| **Enhanced LRC** (`<mm:ss.xx>` por palabra) | Karaoke palabra a palabra cuando hay `words[]`  | **Hacer**  |
-| **`.srt`**                      | Subtítulos de YouTube / Premiere / CapCut                   | **Hacer**  |
-| **`.vtt`**                      | Web, TikTok, players HTML5                                  | **Hacer**  |
-| **`.txt`**                      | Descripción de YouTube, copiar/pegar                        | **Hacer**  |
-| `.ass` (karaoke `\k`)           | Karaoke con estilo en ffmpeg/Aegisub                        | Después de `1.0` |
-| TTML (Apple Music)              | Distribuidoras                                              | Después de `1.0` |
+- Identidad del paquete (`lyra-ui` → `lyrixa`, versión y changelog).
+- Servir bajo subpath y transporte HTTP con los mismos bytes que los archivos.
+- `.ass` y TTML después de `1.0`.
 
-Cómo:
+## No hacer ahora
 
-1. Serializadores **puros** en `src/core/export/` (p. ej. `toLrc.ts`,
-   `toSrt.ts`, `toVtt.ts`, `toTxt.ts`), uno por formato, que reciban el
-   proyecto normalizado y **una capa** (por defecto la de `role: 'primary'`).
-2. Tests por formato: redondeo de tiempos (LRC centésimas, SRT coma, VTT
-   punto), líneas vacías/silencios, solapes, caracteres no latinos (japonés),
-   capa de traducción elegida, clips sin `words[]` en Enhanced LRC.
-3. UI: en el menú de export actual (`useProjectImportExport`), un selector de
-   formato + capa. Sin modales nuevos a pantalla completa.
-4. Documentar los formatos en `docs/01-architecture.md` §Import/export contracts.
+- Añadir efectos visuales que Vibrix no renderiza.
+- Copiar controles de shaders o edición de slots a Lyrixa.
+- Cuentas, nube, colaboración o llamadas directas a modelos.
+- Borrar el soporte v1 antes de que el circuito v2 pase la prueba real.
 
-Criterio de salida: exportar el mismo proyecto a los 5 formatos, abrir el
-`.srt` en VLC y el `.lrc` en un reproductor con letras, y que la sincronía sea
-la del editor.
+## Antes de cerrar cada paso
 
-## L2 · Identidad del paquete — prioridad media
-
-- `package.json`: `name` `lyra-ui` → `lyrixa`, `version` `0.0.0` → `0.1.0`.
-- Crear `CHANGELOG.md` (en español) empezando en `0.1.0`.
-- Revisar restos del nombre viejo "LyraMotion" en `docs/00-product-vision.md`
-  y `docs/agent-bootstrap-prompt.md` (marcar este último como histórico).
-- Borrar o ignorar `Lyrixa (1).zip` de la raíz (preguntar antes de borrar).
-
-## L3 · Preparar el despliegue junto a Vibrix — cuando Vibrix llegue a Fase 2
-
-- La app debe poder servirse bajo un subpath (`base` de Vite, p. ej. `/lyrics/`).
-- "Enviar a Vibrix" por mismo origen (sin descarga manual) usando
-  `liveWallpaperTarget.ts`; coordinar con Vibrix tarea 2.7.
-
-## No hacer (congelado hasta `1.0.0` de Vibrix)
-
-- Nuevos efectos visuales/animaciones de preview que Vibrix no renderiza.
-- Cuentas, nube o colaboración.
-- Llamar a modelos de IA directamente desde Lyrixa (eso es del Transcriptor).
+```bash
+npm test
+npm run lint
+npm run build
+```

@@ -14,6 +14,8 @@ import {
   importLyrixaProjectPackage,
   isLyrixaProjectPackage
 } from './projectPackage';
+import { exportLyrics } from '../../core/export';
+import type { LyricExportOptions } from '../../core/export';
 
 interface UseProjectImportExportArgs {
   project: LyrixaProject;
@@ -53,15 +55,18 @@ export function useProjectImportExport({
   const handleExportLyricsBundle = useCallback(() => {
     const envelope = createLyricsBundleEnvelope(project);
     const blob = new Blob([JSON.stringify(envelope, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    const safeName = sanitizeFileName(project.name) || 'lyrixa-lyrics';
-    link.href = url;
-    link.download = `${safeName}.lyrixa-lyrics.json`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
+    downloadBlob(blob, `${sanitizeFileName(project.name) || 'lyrixa-lyrics'}.lyrixa-lyrics.json`);
+  }, [project]);
+
+  const handleExportLyrics = useCallback((options: LyricExportOptions) => {
+    try {
+      const { text, fileName, mimeType, cueCount } = exportLyrics(project, options);
+      if (cueCount === 0 && !window.confirm('This layer has no timed lyrics yet. Export an empty file anyway?')) return;
+      downloadBlob(new Blob([text], { type: mimeType }), fileName);
+    } catch (err) {
+      console.error('[Lyrixa] Failed to export lyrics:', err);
+      window.alert(err instanceof Error ? err.message : 'Could not export lyrics.');
+    }
   }, [project]);
 
   const handleProjectFileSelected = useCallback(async (e: ChangeEvent<HTMLInputElement>) => {
@@ -108,6 +113,7 @@ export function useProjectImportExport({
     openLyricsBundleImportPicker,
     handleExportProject,
     handleExportLyricsBundle,
+    handleExportLyrics,
     handleProjectFileSelected,
     handleLyricsBundleFileSelected
   };

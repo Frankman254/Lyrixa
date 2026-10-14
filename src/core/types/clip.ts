@@ -26,6 +26,19 @@ export interface ClipCoordinates {
   y: number;
 }
 
+/**
+ * Timing of one word inside a clip, as the Transcriptor emits it (the
+ * `words[]` of the Vibrix lyrics contract). Times are seconds on the master
+ * timeline, like the clip's own.
+ */
+export interface LyricWord {
+  text: string;
+  startTime: number;
+  endTime: number;
+  /** Transcriber confidence, 0–1. */
+  score?: number;
+}
+
 /** Named transition presets applied on clip enter/exit. */
 export type ClipTransition = LyricTransitionPreset;
 
@@ -73,6 +86,12 @@ export interface LyricClip {
    * translations on its own and nothing has to be swept clean.
    */
   sourceTextHash?: string;
+  /**
+   * Word timings inside this clip, when an importer supplied them. Carried
+   * through import/export untouched; nothing in the editor renders them yet.
+   * Enhanced LRC export uses them for word-by-word karaoke tags.
+   */
+  words?: LyricWord[];
   /** Parent lyrics source, used when a long mix contains several lyric sets. */
   lyricSourceId?: string;
   /** Creation path used by sync/import tooling. */

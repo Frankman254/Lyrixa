@@ -2,14 +2,13 @@ import { useEffect, useMemo, useState } from 'react';
 import type { LyricClip } from '../../core/types/clip';
 import type { LyricLayer } from '../../core/types/layer';
 import type {
-  ClipProgressIndicatorConfig,
   LyricAnimationConfig,
   LyricFxConfig,
   LyricVisualStyle
 } from '../../core/types/render';
 import type { TextFillConfig } from '../../core/types/texture';
 import type { LyrixaProject } from '../../core/types/project';
-import type { LyricProjectMode } from '../../core/types/project';
+import type { LyricProjectMode, ProjectRenderDefaultsPatch } from '../../core/types/project';
 import type { AudioLibraryAsset } from '../../core/types/audio';
 import {
   resolveLyricAnimationConfig,
@@ -39,10 +38,8 @@ interface InspectorPanelProps {
   currentTime: number;
   onProjectNameChange: (name: string) => void;
   onLyricModeChange: (mode: LyricProjectMode) => void;
-  onStyleChange: (next: LyricVisualStyle) => void;
-  onAnimationChange: (next: LyricAnimationConfig) => void;
-  onFxChange: (next: LyricFxConfig) => void;
-  onProgressChange: (next: ClipProgressIndicatorConfig) => void;
+  /** Merge into the project-level render defaults (one undo step per call). */
+  onProjectDefaultsChange: (patch: ProjectRenderDefaultsPatch) => void;
   onClipsChange: (next: LyricClip[]) => void;
   onLayersChange: (next: LyricLayer[]) => void;
   /** Clone the selected clip on the same layer (for repeated verses). */
@@ -86,10 +83,7 @@ export function InspectorPanel({
   currentTime,
   onProjectNameChange,
   onLyricModeChange,
-  onStyleChange,
-  onAnimationChange,
-  onFxChange,
-  onProgressChange,
+  onProjectDefaultsChange,
   onClipsChange,
   onLayersChange,
   onDuplicateClip,
@@ -217,7 +211,7 @@ export function InspectorPanel({
       patchLayer({ styleDefaults: { ...(selectedLayer.styleDefaults ?? {}), ...patch } });
       return;
     }
-    onStyleChange({ ...project.styleConfig, ...patch });
+    onProjectDefaultsChange({ styleConfig: patch });
   };
 
   const patchScopedFx = (patch: Partial<LyricFxConfig>) => {
@@ -229,7 +223,7 @@ export function InspectorPanel({
       patchLayer({ fxDefaults: { ...(selectedLayer.fxDefaults ?? {}), ...patch } });
       return;
     }
-    onFxChange({ ...project.fxConfig, ...patch });
+    onProjectDefaultsChange({ fxConfig: patch });
   };
 
   const patchScopedAnimation = (patch: Partial<LyricAnimationConfig>) => {
@@ -241,7 +235,7 @@ export function InspectorPanel({
       patchLayer({ animationDefaults: { ...(selectedLayer.animationDefaults ?? {}), ...patch } });
       return;
     }
-    onAnimationChange({ ...project.animationConfig, ...patch });
+    onProjectDefaultsChange({ animationConfig: patch });
   };
 
   const patchFill = (fill: TextFillConfig) => patchScopedStyle({ textFill: fill });
@@ -272,9 +266,11 @@ export function InspectorPanel({
       return;
     }
     // project scope
-    if (preset.style) onStyleChange({ ...project.styleConfig, ...preset.style });
-    if (preset.animation) onAnimationChange({ ...project.animationConfig, ...preset.animation });
-    if (preset.fx) onFxChange({ ...project.fxConfig, ...preset.fx });
+    onProjectDefaultsChange({
+      styleConfig: preset.style,
+      animationConfig: preset.animation,
+      fxConfig: preset.fx
+    });
   };
 
   const availableScopes: PresetScope[] = [
@@ -330,7 +326,7 @@ export function InspectorPanel({
             currentTime={currentTime}
             onProjectNameChange={onProjectNameChange}
             onLyricModeChange={onLyricModeChange}
-            onProgressChange={onProgressChange}
+            onProgressChange={next => onProjectDefaultsChange({ progressIndicatorConfig: next })}
             onImportLyrics={onImportLyrics}
             onExportProject={onExportProject}
             onImportProject={onImportProject}

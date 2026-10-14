@@ -1,25 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { SetStateAction } from 'react';
-import type { LyricProjectMode, LyricSource, LyrixaProject } from '../../core/types/project';
+import type { LyricProjectMode, LyrixaProject, ProjectRenderDefaultsPatch } from '../../core/types/project';
 import type { LyricClip } from '../../core/types/clip';
 import type { LyricLayer } from '../../core/types/layer';
+import type { LyricVisualStyle } from '../../core/types/render';
 import type { CompositionScore, VibrixAuthoringManifest } from '../../core/composition/types';
-import type {
-  ClipProgressIndicatorConfig,
-  LyricAnimationConfig,
-  LyricFxConfig,
-  LyricVisualStyle,
-  RenderMode
-} from '../../core/types/render';
 import type {
   AudioChannel,
   AudioChannelRole,
   AudioLibraryAsset
 } from '../../core/types/audio';
 import { buildAudioFileKey } from '../../core/types/audio';
-import { normalizeLyricsText } from '../../core/lyrics/normalize';
-import type { NormalizeLyricsOptions } from '../../core/lyrics/normalize';
-import { createTapSyncSourceId, orderedLayerClips } from '../../core/timeline/tapSync';
+import * as lyricSourceLibrary from '../../core/lyrics/lyricSourceLibrary';
+import type { UpsertLyricSourceOptions } from '../../core/lyrics/lyricSourceLibrary';
 import {
   clearLyrixaLocalStorage,
   createEmptyProject,
@@ -72,16 +65,7 @@ export interface LoadAudioOptions {
   persistAudio?: boolean;
 }
 
-export interface ApplyLyricsOptions {
-  /** Normalization options forwarded to normalizeLyricsText. */
-  normalizeOptions?: NormalizeLyricsOptions;
-  /** Replace the active lyrics source or add a new ordered source. */
-  sourceMode?: 'replace-active' | 'add';
-  sourceTitle?: string;
-  sourceStartTime?: number;
-  /** Explicit existing source to edit. Clips already on layers remain untouched. */
-  sourceId?: string;
-}
+export type ApplyLyricsOptions = UpsertLyricSourceOptions;
 
 export interface UseLyrixaProjectResult {
   project: LyrixaProject;
@@ -121,12 +105,9 @@ export interface UseLyrixaProjectResult {
   setLayers: (next: LyricLayer[]) => void;
   setComposition: (next: CompositionUpdate) => void;
   setVibrixManifest: (manifest: VibrixAuthoringManifest) => void;
-  setStyleConfig: (next: LyricVisualStyle) => void;
-  setAnimationConfig: (next: LyricAnimationConfig) => void;
-  setFxConfig: (next: LyricFxConfig) => void;
-  setProgressIndicatorConfig: (next: ClipProgressIndicatorConfig) => void;
+  /** Merge into the project render defaults that layers and clips inherit. */
+  setProjectDefaults: (patch: ProjectRenderDefaultsPatch) => void;
   setCurrentTime: (time: number) => void;
-  setRenderMode: (mode: RenderMode) => void;
   setMasterDuration: (seconds: number) => void;
   importProject: (next: LyrixaProject) => void;
 
@@ -137,7 +118,7 @@ export interface UseLyrixaProjectResult {
   canUndo: boolean;
   canRedo: boolean;
 
-  resetProject: () => Promise<void>;
+  /** Wipe the project, its blobs and editor preferences. Device libraries survive. */
   hardResetProject: () => Promise<void>;
 }
 
@@ -584,237 +565,48 @@ export function useLyrixaProject({
   }, []);
 
   const applyLyrics = useCallback((rawText: string, options: ApplyLyricsOptions = {}) => {
-    const {
-      normalizeOptions,
-      sourceMode = 'replace-active',
-      sourceTitle,
-      sourceStartTime,
-      sourceId
-    } = options;
-
-    const { lines } = normalizeLyricsText(rawText, normalizeOptions);
-
-    // Safety net: when this import overwrites an existing source with different
-    // text, archive the outgoing version in the device lyrics library first.
-    // The library mirror shares the source id, so without this snapshot the
-    // replaced text would be gone everywhere.
-    {
-      const p = projectRef.current;
-      const currentSources = p.lyricSources ?? [];
-      const target = currentSources.find(source => source.id === sourceId)
-        ?? currentSources.find(source => source.id === p.activeLyricSourceId)
-        ?? currentSources[0];
-      const replacing = !!target && !(p.lyricMode === 'multi' && sourceMode === 'add');
-      if (replacing && target.rawText.trim().length > 0 && target.rawText !== rawText) {
-        setLyricsLibrary(archiveLyricsBackup(target));
-      }
-    }
-
-    // Lyrics imports are SOURCE-ONLY: they update the lyric source library
-    // (rawLyricsText / normalizedLyrics / lyricSources) and never touch clips.
-    // The only path that places clips onto a layer is the Sync Lyrics flow,
-    // which preserves clips it has already published. This avoids the previous
-    // "second import wrecks main lyrics with bad heuristic timings" problem.
-    setProject(p => {
-      const now = new Date().toISOString();
-      const currentSources = p.lyricSources ?? [];
-      const activeSource = currentSources.find(source => source.id === sourceId)
-        ?? currentSources.find(source => source.id === p.activeLyricSourceId)
-        ?? currentSources[0];
-      const addingSource = !activeSource || (p.lyricMode === 'multi' && sourceMode === 'add');
-      const lyricSourceId = addingSource
-        ? createLyricSourceId()
-        : activeSource.id;
-      const startTime = typeof sourceStartTime === 'number' && Number.isFinite(sourceStartTime)
-        ? Math.max(0, sourceStartTime)
-        : addingSource
-          ? 0
-          : activeSource.startTime ?? 0;
-      const nextSource = {
-        id: lyricSourceId,
-        title: sourceTitle?.trim() || (addingSource ? `Lyrics ${currentSources.length + 1}` : activeSource?.title) || 'Lyrics 1',
-        rawText,
-        normalizedLines: lines,
-        startTime,
-        audioFileKeys: addingSource
-          ? (p.audioTracks.master?.fileKey ? [p.audioTracks.master.fileKey] : [])
-          : activeSource.audioFileKeys ?? [],
-        order: addingSource
-          ? Math.max(-1, ...currentSources.map(source => source.order)) + 1
-          : activeSource.order,
-        createdAt: addingSource ? now : activeSource.createdAt,
-        updatedAt: now
-      };
-      const nextSources = addingSource
-        ? [...currentSources, nextSource]
-        : currentSources.map(source => source.id === lyricSourceId ? nextSource : source);
-      const sortedSources = [...nextSources].sort((a, b) => a.order - b.order);
-      const combinedRawLyricsText = sortedSources.map(source => source.rawText.trim()).filter(Boolean).join('\n\n');
-      const combinedNormalizedLyrics = sortedSources.flatMap(source => source.normalizedLines);
-
-      return {
-        ...p,
-        rawLyricsText: combinedRawLyricsText,
-        normalizedLyrics: combinedNormalizedLyrics,
-        lyricSources: sortedSources,
-        activeLyricSourceId: lyricSourceId
-      };
-    });
-  }, []);
+    // Resolved against projectRef, exactly as setProject would, so the
+    // archived text is the one actually being replaced.
+    const { project: next, replaced } = lyricSourceLibrary.upsertLyricSource(projectRef.current, rawText, options);
+    // Safety net: the device library mirrors sources by id, so without this
+    // snapshot the replaced text would be gone everywhere.
+    if (replaced) setLyricsLibrary(archiveLyricsBackup(replaced));
+    setProject(next);
+  }, [setProject]);
 
   const setLyricMode = useCallback((mode: LyricProjectMode) => {
-    setProject(p => ({
-      ...p,
-      lyricMode: mode,
-      activeLyricSourceId: p.activeLyricSourceId ?? p.lyricSources[0]?.id
-    }));
-  }, []);
+    setProject(p => lyricSourceLibrary.setLyricMode(p, mode));
+  }, [setProject]);
 
   const setActiveLyricSource = useCallback((id: string) => {
-    setProject(p => {
-      if (!p.lyricSources.some(source => source.id === id)) return p;
-      return { ...p, activeLyricSourceId: id };
-    });
-  }, []);
+    setProject(p => lyricSourceLibrary.setActiveLyricSource(p, id));
+  }, [setProject]);
 
   const setLyricSourceTitle = useCallback((id: string, title: string) => {
-    const trimmed = title.trim();
-    if (!trimmed) return;
-    setProject(p => {
-      const sources = p.lyricSources ?? [];
-      if (!sources.some(source => source.id === id)) return p;
-      const now = new Date().toISOString();
-      const nextSources = sources.map(source =>
-        source.id === id ? { ...source, title: trimmed, updatedAt: now } : source
-      );
-      return { ...p, lyricSources: nextSources };
-    });
-  }, []);
+    setProject(p => lyricSourceLibrary.setLyricSourceTitle(p, id, title));
+  }, [setProject]);
 
   const setLyricSourceStartTime = useCallback((id: string, startTime: number) => {
-    const nextTime = Math.max(0, Number.isFinite(startTime) ? startTime : 0);
-    setProject(p => {
-      const sources = p.lyricSources ?? [];
-      if (!sources.some(source => source.id === id)) return p;
-      const now = new Date().toISOString();
-      return {
-        ...p,
-        lyricSources: sources.map(source =>
-          source.id === id
-            ? { ...source, startTime: nextTime, updatedAt: now }
-            : source
-        )
-      };
-    });
-  }, []);
+    setProject(p => lyricSourceLibrary.setLyricSourceStartTime(p, id, startTime));
+  }, [setProject]);
 
   const removeLyricSource = useCallback((id: string) => {
-    setProject(p => {
-      const sources = p.lyricSources ?? [];
-      if (!sources.some(source => source.id === id)) return p;
-      const nextSources = sources.filter(source => source.id !== id);
-      const sortedSources = [...nextSources].sort((a, b) => a.order - b.order);
-      const combinedRawLyricsText = sortedSources.map(s => s.rawText.trim()).filter(Boolean).join('\n\n');
-      const combinedNormalizedLyrics = sortedSources.flatMap(s => s.normalizedLines);
-      const nextActiveId = p.activeLyricSourceId === id
-        ? sortedSources[0]?.id
-        : p.activeLyricSourceId;
-      return {
-        ...p,
-        lyricSources: sortedSources,
-        activeLyricSourceId: nextActiveId,
-        rawLyricsText: combinedRawLyricsText,
-        normalizedLyrics: combinedNormalizedLyrics
-      };
-    });
-  }, []);
+    setProject(p => lyricSourceLibrary.removeLyricSource(p, id));
+  }, [setProject]);
 
   const recoverLyricsFromLayer = useCallback((layerId: string) => {
-    setProject(p => {
-      const layer = p.layers.find(item => item.id === layerId);
-      if (!layer) return p;
-
-      const sourceClips = orderedLayerClips(p.clips, layerId)
-        .filter(clip => !clip.muted && clip.text.trim().length > 0);
-      if (sourceClips.length === 0) return p;
-
-      const rawText = sourceClips.map(clip => clip.text.trim()).join('\n');
-      const { lines } = normalizeLyricsText(rawText);
-      if (lines.length === 0) return p;
-
-      const now = new Date().toISOString();
-      const sourceId = createLyricSourceId();
-      const order = Math.max(-1, ...p.lyricSources.map(source => source.order)) + 1;
-      const recoveredSource: LyricSource = {
-        id: sourceId,
-        title: `Recovered from ${layer.name}`,
-        rawText,
-        normalizedLines: lines,
-        startTime: Math.max(0, sourceClips[0]?.startTime ?? 0),
-        audioFileKeys: p.audioTracks.master?.fileKey ? [p.audioTracks.master.fileKey] : [],
-        order,
-        createdAt: now,
-        updatedAt: now
-      };
-      const clipPatches = new Map<string, Partial<LyricClip>>();
-      sourceClips.forEach((clip, index) => {
-        const text = lines[index] ?? clip.text.trim();
-        clipPatches.set(clip.id, {
-          sourceIndex: index,
-          sourceId: createTapSyncSourceId(index, text, sourceId),
-          lyricSourceId: sourceId,
-          createdBy: clip.createdBy ?? 'tap-sync'
-        });
-      });
-
-      const lyricSources = [...p.lyricSources, recoveredSource].sort((a, b) => a.order - b.order);
-      return {
-        ...p,
-        lyricMode: lyricSources.length > 1 ? 'multi' : p.lyricMode,
-        lyricSources,
-        activeLyricSourceId: sourceId,
-        rawLyricsText: lyricSources.map(source => source.rawText.trim()).filter(Boolean).join('\n\n'),
-        normalizedLyrics: lyricSources.flatMap(source => source.normalizedLines),
-        clips: p.clips.map(clip => {
-          const patch = clipPatches.get(clip.id);
-          return patch ? { ...clip, ...patch } : clip;
-        })
-      };
-    });
-  }, []);
+    setProject(p => lyricSourceLibrary.recoverLyricSourceFromLayer(p, layerId));
+  }, [setProject]);
 
   const attachLyricSourceFromLibrary = useCallback((id: string) => {
     const source = lyricsLibrary.find(item => item.id === id);
     if (!source) return;
-    setProject(p => {
-      if (p.lyricSources.some(item => item.id === id)) {
-        return { ...p, activeLyricSourceId: id };
-      }
-      const lyricSources = [...p.lyricSources, { ...source, order: p.lyricSources.length }];
-      return {
-        ...p,
-        lyricMode: lyricSources.length > 1 ? 'multi' : p.lyricMode,
-        lyricSources,
-        activeLyricSourceId: id,
-        rawLyricsText: lyricSources.map(item => item.rawText.trim()).filter(Boolean).join('\n\n'),
-        normalizedLyrics: lyricSources.flatMap(item => item.normalizedLines)
-      };
-    });
-  }, [lyricsLibrary]);
+    setProject(p => lyricSourceLibrary.attachLyricSource(p, source));
+  }, [lyricsLibrary, setProject]);
 
   const setLyricSourceAudioAssignment = useCallback((id: string, fileKey: string, assigned: boolean) => {
-    if (!fileKey) return;
-    setProject(p => ({
-      ...p,
-      lyricSources: p.lyricSources.map(source => {
-        if (source.id !== id) return source;
-        const keys = new Set(source.audioFileKeys ?? []);
-        if (assigned) keys.add(fileKey);
-        else keys.delete(fileKey);
-        return { ...source, audioFileKeys: [...keys], updatedAt: new Date().toISOString() };
-      })
-    }));
-  }, []);
+    setProject(p => lyricSourceLibrary.setLyricSourceAudioAssignment(p, id, fileKey, assigned));
+  }, [setProject]);
 
   const setClips = useCallback((next: ClipUpdate) => {
     setProject(p => ({
@@ -845,47 +637,26 @@ export function useLyrixaProject({
     setProject(p => ({ ...p, vibrixManifest: manifest }));
   }, [setProject]);
 
-  const setStyleConfig = useCallback((next: LyricVisualStyle) => {
-    setProject(p => ({ ...p, styleConfig: next }));
-  }, []);
-
-  const setAnimationConfig = useCallback((next: LyricAnimationConfig) => {
-    setProject(p => ({ ...p, animationConfig: next }));
-  }, []);
-
-  const setFxConfig = useCallback((next: LyricFxConfig) => {
-    setProject(p => ({ ...p, fxConfig: next }));
-  }, []);
-
-  const setProgressIndicatorConfig = useCallback((next: ClipProgressIndicatorConfig) => {
-    setProject(p => ({ ...p, progressIndicatorConfig: next }));
-  }, []);
+  const setProjectDefaults = useCallback((patch: ProjectRenderDefaultsPatch) => {
+    setProject(p => ({
+      ...p,
+      ...(patch.styleConfig && { styleConfig: { ...p.styleConfig, ...patch.styleConfig } }),
+      ...(patch.animationConfig && { animationConfig: { ...p.animationConfig, ...patch.animationConfig } }),
+      ...(patch.fxConfig && { fxConfig: { ...p.fxConfig, ...patch.fxConfig } }),
+      ...(patch.progressIndicatorConfig && {
+        progressIndicatorConfig: { ...p.progressIndicatorConfig, ...patch.progressIndicatorConfig }
+      })
+    }));
+  }, [setProject]);
 
   const setCurrentTime = useCallback((time: number) => {
     setProject(p => (p.currentTime === time ? p : { ...p, currentTime: time }), { record: false });
-  }, []);
-
-  const setRenderMode = useCallback((mode: RenderMode) => {
-    setProject(p => ({ ...p, renderMode: mode }));
   }, []);
 
   const getAudioBlob = useCallback(
     (role: AudioChannelRole): Blob | null => blobsRef.current[role],
     []
   );
-
-  const resetProject = useCallback(async () => {
-    const oldId = projectIdRef.current;
-    blobsRef.current = { master: null };
-    setProject(p => {
-      const m = p.audioTracks.master?.objectUrl;
-      if (m) URL.revokeObjectURL(m);
-      return createEmptyProject();
-    }, { record: false });
-    clearHistory();
-    setAudioNeedsReload(false);
-    await deleteAllProjectAudio(oldId);
-  }, [clearHistory, setProject]);
 
   const hardResetProject = useCallback(async () => {
     const oldId = projectIdRef.current;
@@ -985,19 +756,14 @@ export function useLyrixaProject({
     setLayers,
     setComposition,
     setVibrixManifest,
-    setStyleConfig,
-    setAnimationConfig,
-    setFxConfig,
-    setProgressIndicatorConfig,
+    setProjectDefaults,
     setCurrentTime,
-    setRenderMode,
     setMasterDuration,
     importProject,
     undo,
     redo,
     canUndo: historyCounts.undo > 0,
     canRedo: historyCounts.redo > 0,
-    resetProject,
     hardResetProject
   };
 }
@@ -1074,13 +840,6 @@ function upsertAudioLibraryAsset(
   const existing = assets.findIndex(asset => asset.fileKey === channel.fileKey);
   if (existing < 0) return [...assets, next];
   return assets.map(asset => asset.fileKey === channel.fileKey ? { ...asset, ...next } : asset);
-}
-
-function createLyricSourceId(): string {
-  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
-    return `lyrics-${crypto.randomUUID()}`;
-  }
-  return `lyrics-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 function collectTextureIds(project: LyrixaProject): string[] {

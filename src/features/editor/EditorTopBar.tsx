@@ -1,6 +1,9 @@
 import { useRef, type ChangeEvent, type RefObject } from 'react';
 import type { AudioChannel, AudioChannelRole } from '../../core/types/audio';
+import type { LyrixaProject } from '../../core/types/project';
+import type { LyricExportOptions } from '../../core/export';
 import type { SaveStatus } from './useLyrixaProject';
+import { LyricsExportSection } from './LyricsExportSection';
 import { ACCENT_OPTIONS } from '../../shared/theme/useAccentTheme';
 import type { AccentName } from '../../shared/theme/useAccentTheme';
 import { useIsDenseDesktop } from '../../shared/layout/useViewportTier';
@@ -22,117 +25,113 @@ const SAVE_TONE: Record<SaveStatus, 'live' | 'dirty' | 'idle'> = {
   saved: 'live'
 };
 
-interface EditorTopBarProps {
-  projectName: string;
-  nameEditing: boolean;
-  draftName: string;
-  masterChannel: AudioChannel | null;
+/** Inline project rename. */
+export interface TopBarNameEdit {
+  editing: boolean;
+  draft: string;
+  onDraftChange: (value: string) => void;
+  onStart: () => void;
+  onCommit: () => void;
+  onCancel: () => void;
+}
+
+export interface TopBarPlayback {
   isPlaying: boolean;
   currentTime: number;
   duration: number;
-  saveStatus: SaveStatus;
+  onPlayToggle: () => void;
+  onSeek: (time: number) => void;
+}
+
+export interface TopBarHistory {
+  canUndo: boolean;
+  canRedo: boolean;
+  onUndo: () => void;
+  onRedo: () => void;
+}
+
+export interface TopBarMode {
+  current: EditorMode;
+  onChange: (next: EditorMode) => void;
   syncMode: boolean;
   canSync: boolean;
-  editorMode: EditorMode;
-  onEditorModeChange: (next: EditorMode) => void;
-  /** Viewport tier — drives which clusters render in the bar vs. the More menu. */
-  tier: ViewportTier;
+  onToggleSync: () => void;
+}
+
+export interface TopBarPanels {
   inspectorVisible: boolean;
   /** False while the inspector is already occupying the stage (mobile style mode) or in preview mode. */
   showInspectorToggle: boolean;
   onToggleInspector: () => void;
   /** Opens the layers drawer on compact/mobile tiers. */
   onToggleSidebar: () => void;
-  onUndo: () => void;
-  onRedo: () => void;
-  canUndo: boolean;
-  canRedo: boolean;
-  previewOpen: boolean;
-  transparentPreviewOpen: boolean;
-  miniPreviewVisible: boolean;
-  accent: AccentName;
+}
+
+export interface TopBarPreview {
+  open: boolean;
+  transparentOpen: boolean;
+  miniVisible: boolean;
+  onToggle: () => void;
+  onOpenOverlay: () => void;
+  onShowMini: () => void;
+  onHideMini: () => void;
+}
+
+/** Hidden file inputs the bar owns, and the pickers that open them. */
+export interface TopBarFiles {
   masterFileInputRef: RefObject<HTMLInputElement | null>;
   projectImportInputRef: RefObject<HTMLInputElement | null>;
   lyricsBundleImportInputRef: RefObject<HTMLInputElement | null>;
-  onDraftNameChange: (value: string) => void;
-  onStartNameEdit: () => void;
-  onCommitName: () => void;
-  onCancelNameEdit: () => void;
-  onOpenMasterPicker: () => void;
-  onOpenProjectImportPicker: () => void;
-  onOpenLyricsBundleImportPicker: () => void;
   onAudioFileSelected: (role: AudioChannelRole) => (e: ChangeEvent<HTMLInputElement>) => void;
   onProjectFileSelected: (e: ChangeEvent<HTMLInputElement>) => void;
   onLyricsBundleFileSelected: (e: ChangeEvent<HTMLInputElement>) => void;
+  onOpenMasterPicker: () => void;
+  onOpenProjectImportPicker: () => void;
+  onOpenLyricsBundleImportPicker: () => void;
+}
+
+/** Project-level commands: lyrics in, exports out, reset. */
+export interface TopBarProjectActions {
   onOpenLyricsImport: () => void;
-  onToggleSync: () => void;
   onExportProject: () => void;
   onExportLyricsBundle: () => void;
+  onExportLyrics: (options: LyricExportOptions) => void;
   onSendToLiveWallpaper: () => void;
-  onTogglePreview: () => void;
-  onOpenOverlay: () => void;
-  onShowMiniPreview: () => void;
-  onHideMiniPreview: () => void;
-  onPlayToggle: () => void;
-  onSeek: (time: number) => void;
   onResetProject: () => void;
-  onAccentChange: (next: AccentName) => void;
   onOpenShortcuts: () => void;
 }
 
+interface EditorTopBarProps {
+  project: LyrixaProject;
+  masterChannel: AudioChannel | null;
+  saveStatus: SaveStatus;
+  /** Viewport tier — drives which clusters render in the bar vs. the More menu. */
+  tier: ViewportTier;
+  nameEdit: TopBarNameEdit;
+  playback: TopBarPlayback;
+  history: TopBarHistory;
+  mode: TopBarMode;
+  panels: TopBarPanels;
+  preview: TopBarPreview;
+  files: TopBarFiles;
+  actions: TopBarProjectActions;
+  accent: { value: AccentName; onChange: (next: AccentName) => void };
+}
+
 export function EditorTopBar({
-  projectName,
-  nameEditing,
-  draftName,
+  project,
   masterChannel,
-  isPlaying,
-  currentTime,
-  duration,
   saveStatus,
-  syncMode,
-  canSync,
-  editorMode,
-  onEditorModeChange,
   tier,
-  inspectorVisible,
-  showInspectorToggle,
-  onToggleInspector,
-  onToggleSidebar,
-  onUndo,
-  onRedo,
-  canUndo,
-  canRedo,
-  previewOpen,
-  transparentPreviewOpen,
-  miniPreviewVisible,
-  accent,
-  masterFileInputRef,
-  projectImportInputRef,
-  lyricsBundleImportInputRef,
-  onDraftNameChange,
-  onStartNameEdit,
-  onCommitName,
-  onCancelNameEdit,
-  onOpenMasterPicker,
-  onOpenProjectImportPicker,
-  onOpenLyricsBundleImportPicker,
-  onAudioFileSelected,
-  onProjectFileSelected,
-  onLyricsBundleFileSelected,
-  onOpenLyricsImport,
-  onToggleSync,
-  onExportProject,
-  onExportLyricsBundle,
-  onSendToLiveWallpaper,
-  onTogglePreview,
-  onOpenOverlay,
-  onShowMiniPreview,
-  onHideMiniPreview,
-  onPlayToggle,
-  onSeek,
-  onResetProject,
-  onAccentChange,
-  onOpenShortcuts
+  nameEdit,
+  playback,
+  history,
+  mode,
+  panels,
+  preview,
+  files,
+  actions,
+  accent
 }: EditorTopBarProps) {
   const moreRef = useRef<HTMLDetailsElement>(null);
   const saveTone = SAVE_TONE[saveStatus];
@@ -173,7 +172,7 @@ export function EditorTopBar({
       {!isDesktop && (
         <button
           className="tr-btn icon-only"
-          onClick={onToggleSidebar}
+          onClick={panels.onToggleSidebar}
           title="Layers"
           aria-label="Toggle layers drawer"
         >
@@ -185,21 +184,21 @@ export function EditorTopBar({
         <>
           <div className="tr-divider" />
 
-          {nameEditing ? (
+          {nameEdit.editing ? (
             <input
               className="tr-name-input"
               autoFocus
-              value={draftName}
-              onChange={(e) => onDraftNameChange(e.target.value)}
-              onBlur={onCommitName}
+              value={nameEdit.draft}
+              onChange={(e) => nameEdit.onDraftChange(e.target.value)}
+              onBlur={nameEdit.onCommit}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') onCommitName();
-                else if (e.key === 'Escape') onCancelNameEdit();
+                if (e.key === 'Enter') nameEdit.onCommit();
+                else if (e.key === 'Escape') nameEdit.onCancel();
               }}
             />
           ) : (
-            <button className="tr-name" onClick={onStartNameEdit} title="Rename project">
-              {projectName}
+            <button className="tr-name" onClick={nameEdit.onStart} title="Rename project">
+              {project.name}
             </button>
           )}
 
@@ -207,7 +206,7 @@ export function EditorTopBar({
 
           <button
             className="song-chip"
-            onClick={onOpenMasterPicker}
+            onClick={files.onOpenMasterPicker}
             title={masterChannel ? `Master track: ${masterChannel.fileName}` : 'Load the main audio file'}
           >
             <span className="song-chip-icon" aria-hidden>♪</span>
@@ -223,9 +222,9 @@ export function EditorTopBar({
                 key={m}
                 type="button"
                 role="tab"
-                aria-selected={editorMode === m}
-                className={`tr-mode-tab ${editorMode === m ? 'active' : ''}`}
-                onClick={() => onEditorModeChange(m)}
+                aria-selected={mode.current === m}
+                className={`tr-mode-tab ${mode.current === m ? 'active' : ''}`}
+                onClick={() => mode.onChange(m)}
                 title={MODE_TITLES[m]}
               >
                 <span className="tr-mode-icon" aria-hidden>{MODE_ICONS[m]}</span>
@@ -239,20 +238,20 @@ export function EditorTopBar({
       )}
 
       <EditorPlaybackControls
-        isPlaying={isPlaying}
-        currentTime={currentTime}
-        duration={duration}
+        isPlaying={playback.isPlaying}
+        currentTime={playback.currentTime}
+        duration={playback.duration}
         enabled={!!masterChannel?.objectUrl}
         compact={isMobile}
-        onPlayToggle={onPlayToggle}
-        onSeek={onSeek}
+        onPlayToggle={playback.onPlayToggle}
+        onSeek={playback.onSeek}
       />
 
       <div className="tr-group" role="group" aria-label="History">
         <button
           className="tr-btn icon-only"
-          onClick={onUndo}
-          disabled={!canUndo}
+          onClick={history.onUndo}
+          disabled={!history.canUndo}
           title="Undo (Ctrl/⌘+Z)"
           aria-label="Undo"
         >
@@ -260,8 +259,8 @@ export function EditorTopBar({
         </button>
         <button
           className="tr-btn icon-only"
-          onClick={onRedo}
-          disabled={!canRedo}
+          onClick={history.onRedo}
+          disabled={!history.canRedo}
           title="Redo (Ctrl/⌘+Shift+Z)"
           aria-label="Redo"
         >
@@ -274,20 +273,20 @@ export function EditorTopBar({
         <>
           <div className="tr-divider" />
 
-          <button className="tr-btn" onClick={onOpenLyricsImport} title="Paste or import lyrics text">
+          <button className="tr-btn" onClick={actions.onOpenLyricsImport} title="Paste or import lyrics text">
             Import lyrics
           </button>
           <button
-            className={`tr-btn primary ${syncMode ? 'active' : ''}`}
-            onClick={onToggleSync}
-            disabled={!canSync && !syncMode}
-            title={syncMode
+            className={`tr-btn primary ${mode.syncMode ? 'active' : ''}`}
+            onClick={mode.onToggleSync}
+            disabled={!mode.canSync && !mode.syncMode}
+            title={mode.syncMode
               ? 'Exit tap-to-sync mode'
-              : canSync
+              : mode.canSync
               ? 'Tap-to-sync: play the song and press Space on each line'
               : 'Load audio and import lyrics first'}
           >
-            {syncMode ? '✕ Exit sync' : '⊙ Sync lyrics'}
+            {mode.syncMode ? '✕ Exit sync' : '⊙ Sync lyrics'}
           </button>
         </>
       )}
@@ -302,32 +301,32 @@ export function EditorTopBar({
       {isWide && (
         <>
           <div className="tr-group">
-            <button className="tr-btn small" onClick={onExportProject} title="Export the full Lyrixa project">
+            <button className="tr-btn small" onClick={actions.onExportProject} title="Export the full Lyrixa project">
               Export
             </button>
           </div>
 
           <div className="tr-group">
             <button
-              className={`tr-btn small ${previewOpen ? 'active' : ''}`}
-              onClick={onTogglePreview}
+              className={`tr-btn small ${preview.open ? 'active' : ''}`}
+              onClick={preview.onToggle}
               title="Toggle the large preview overlay"
             >
-              {previewOpen ? '✕ Preview' : '◉ Preview'}
+              {preview.open ? '✕ Preview' : '◉ Preview'}
             </button>
             <button
-              className={`tr-btn small ${transparentPreviewOpen ? 'active' : ''}`}
-              onClick={onOpenOverlay}
+              className={`tr-btn small ${preview.transparentOpen ? 'active' : ''}`}
+              onClick={preview.onOpenOverlay}
               title="Open the transparent overlay preview"
             >
               ⧉
             </button>
-            {miniPreviewVisible && !previewOpen ? (
-              <button className="tr-btn small active" onClick={onHideMiniPreview} title="Hide the floating preview">
+            {preview.miniVisible && !preview.open ? (
+              <button className="tr-btn small active" onClick={preview.onHideMini} title="Hide the floating preview">
                 ✕ ◳
               </button>
-            ) : !previewOpen ? (
-              <button className="tr-btn small" onClick={onShowMiniPreview} title="Show the floating preview">
+            ) : !preview.open ? (
+              <button className="tr-btn small" onClick={preview.onShowMini} title="Show the floating preview">
                 ◳
               </button>
             ) : null}
@@ -336,8 +335,8 @@ export function EditorTopBar({
           <label className="accent-picker" title="Accent color">
             <span aria-hidden style={{ background: 'var(--accent)' }} />
             <select
-              value={accent}
-              onChange={(e) => onAccentChange(e.target.value as AccentName)}
+              value={accent.value}
+              onChange={(e) => accent.onChange(e.target.value as AccentName)}
             >
               {ACCENT_OPTIONS.map(o => (
                 <option key={o.value} value={o.value}>{o.label}</option>
@@ -347,13 +346,13 @@ export function EditorTopBar({
         </>
       )}
 
-      {showInspectorToggle && (
+      {panels.showInspectorToggle && (
         <button
-          className={`tr-btn icon-only ${inspectorVisible ? 'active' : ''}`}
-          onClick={onToggleInspector}
-          title={inspectorVisible ? 'Hide inspector' : 'Show inspector'}
-          aria-label={inspectorVisible ? 'Hide inspector' : 'Show inspector'}
-          aria-pressed={inspectorVisible}
+          className={`tr-btn icon-only ${panels.inspectorVisible ? 'active' : ''}`}
+          onClick={panels.onToggleInspector}
+          title={panels.inspectorVisible ? 'Hide inspector' : 'Show inspector'}
+          aria-label={panels.inspectorVisible ? 'Hide inspector' : 'Show inspector'}
+          aria-pressed={panels.inspectorVisible}
         >
           ◨
         </button>
@@ -363,55 +362,59 @@ export function EditorTopBar({
         <summary className="tr-btn small">More ▾</summary>
         <div className="tr-more-menu" role="menu">
           {isMobile && (
-            <button className="tr-more-item" onClick={() => runMoreAction(onOpenMasterPicker)}>
+            <button className="tr-more-item" onClick={() => runMoreAction(files.onOpenMasterPicker)}>
               ♪ Load audio <span className="tr-more-key">{masterChannel ? masterDuration : ''}</span>
             </button>
           )}
           {!isWide && (
-            <button className="tr-more-item" onClick={() => runMoreAction(onOpenLyricsImport)}>
+            <button className="tr-more-item" onClick={() => runMoreAction(actions.onOpenLyricsImport)}>
               Import lyrics
             </button>
           )}
           {!isWide && (
             <>
-              <button className="tr-more-item" onClick={() => runMoreAction(onExportProject)}>
+              <button className="tr-more-item" onClick={() => runMoreAction(actions.onExportProject)}>
                 Export project
               </button>
-              <button className="tr-more-item" onClick={() => runMoreAction(onOpenOverlay)}>
+              <button className="tr-more-item" onClick={() => runMoreAction(preview.onOpenOverlay)}>
                 ⧉ Transparent overlay
               </button>
-              {miniPreviewVisible && !previewOpen ? (
-                <button className="tr-more-item" onClick={() => runMoreAction(onHideMiniPreview)}>
+              {preview.miniVisible && !preview.open ? (
+                <button className="tr-more-item" onClick={() => runMoreAction(preview.onHideMini)}>
                   ✕ Hide floating preview
                 </button>
-              ) : !previewOpen && (
-                <button className="tr-more-item" onClick={() => runMoreAction(onShowMiniPreview)}>
+              ) : !preview.open && (
+                <button className="tr-more-item" onClick={() => runMoreAction(preview.onShowMini)}>
                   ◳ Floating preview
                 </button>
               )}
             </>
           )}
-          <button className="tr-more-item" onClick={() => runMoreAction(onOpenProjectImportPicker)}>
+          <button className="tr-more-item" onClick={() => runMoreAction(files.onOpenProjectImportPicker)}>
             Import project (.lyrixa.json)
           </button>
-          <button className="tr-more-item" onClick={() => runMoreAction(onExportLyricsBundle)}>
+          <button className="tr-more-item" onClick={() => runMoreAction(actions.onExportLyricsBundle)}>
             Export lyrics bundle
           </button>
           {/* Same bundle as the export above; this picks the destination
               instead of always writing a file. With no renderer configured it
               falls back to that export, so the action is never a dead end. */}
-          <button className="tr-more-item" onClick={() => runMoreAction(onSendToLiveWallpaper)}>
+          <button className="tr-more-item" onClick={() => runMoreAction(actions.onSendToLiveWallpaper)}>
             Send to LiveWallpaper
           </button>
-          <button className="tr-more-item" onClick={() => runMoreAction(onOpenLyricsBundleImportPicker)}>
+          <button className="tr-more-item" onClick={() => runMoreAction(files.onOpenLyricsBundleImportPicker)}>
             Import lyrics bundle
           </button>
+          <LyricsExportSection
+            project={project}
+            onExport={options => runMoreAction(() => actions.onExportLyrics(options))}
+          />
           {!isWide && (
             <label className="tr-more-item tr-more-accent" title="Accent color">
               <span>Accent color</span>
               <select
-                value={accent}
-                onChange={(e) => onAccentChange(e.target.value as AccentName)}
+                value={accent.value}
+                onChange={(e) => accent.onChange(e.target.value as AccentName)}
               >
                 {ACCENT_OPTIONS.map(o => (
                   <option key={o.value} value={o.value}>{o.label}</option>
@@ -419,22 +422,22 @@ export function EditorTopBar({
               </select>
             </label>
           )}
-          <button className="tr-more-item" onClick={() => runMoreAction(onOpenShortcuts)}>
+          <button className="tr-more-item" onClick={() => runMoreAction(actions.onOpenShortcuts)}>
             ⌨ Keyboard shortcuts <span className="tr-more-key">Shift+?</span>
           </button>
-          <button className="tr-more-item danger" onClick={() => runMoreAction(onResetProject)}>
+          <button className="tr-more-item danger" onClick={() => runMoreAction(actions.onResetProject)}>
             ⚠ Delete project
           </button>
         </div>
       </details>
 
       <EditorHiddenFileInputs
-        masterFileInputRef={masterFileInputRef}
-        projectImportInputRef={projectImportInputRef}
-        lyricsBundleImportInputRef={lyricsBundleImportInputRef}
-        onAudioFileSelected={onAudioFileSelected}
-        onProjectFileSelected={onProjectFileSelected}
-        onLyricsBundleFileSelected={onLyricsBundleFileSelected}
+        masterFileInputRef={files.masterFileInputRef}
+        projectImportInputRef={files.projectImportInputRef}
+        lyricsBundleImportInputRef={files.lyricsBundleImportInputRef}
+        onAudioFileSelected={files.onAudioFileSelected}
+        onProjectFileSelected={files.onProjectFileSelected}
+        onLyricsBundleFileSelected={files.onLyricsBundleFileSelected}
       />
     </header>
   );

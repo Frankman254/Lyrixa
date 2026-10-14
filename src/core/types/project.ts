@@ -77,3 +77,17 @@ export interface LyrixaProject {
   currentTime: number;
   renderMode: RenderMode;
 }
+
+/** The project-level render defaults that layers and clips inherit from. */
+export type ProjectRenderDefaults = Pick<
+  LyrixaProject,
+  'styleConfig' | 'animationConfig' | 'fxConfig' | 'progressIndicatorConfig'
+>;
+
+/**
+ * A change to project render defaults. Each config present is merged over the
+ * current one; configs left out are untouched. One patch is one undo step.
+ */
+export type ProjectRenderDefaultsPatch = {
+  [K in keyof ProjectRenderDefaults]?: Partial<ProjectRenderDefaults[K]>;
+};

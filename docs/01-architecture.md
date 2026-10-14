@@ -18,16 +18,23 @@ catalog imported from Vibrix. Composition UI must not keep a second cue array.
 ## Main editor flow
 
 1. `src/features/editor/LyrixaEditorShell.tsx` composes the editor workspace.
-2. `useLyrixaProject` owns the in-memory project state and persistence.
+2. `useLyrixaProject` owns the in-memory project state, undo history and persistence.
+   Its callbacks are thin adapters over pure `(project, …) => project`
+   functions in `src/core`. Project-wide render defaults (style, animation, FX,
+   progress indicator) change through one `setProjectDefaults(patch)`.
 3. `usePlaybackController` owns transport time, play/pause, and seek state.
-4. `useProjectImportExport` owns project and lyrics bundle import/export file workflows.
+4. `useProjectImportExport` owns project, lyrics bundle and standard lyric
+   format (LRC/SRT/VTT/TXT) import/export file workflows.
 5. `TimelineEditor` owns timeline viewport interactions: selection, drag, resize, nudge, snapping, minimap, and waveform lanes.
 6. `InspectorPanel` owns context-aware editing for project, layer, clip, style, texture, FX, and animation.
 7. `ClipLyricsRenderer` resolves final visual settings and renders active lyric clips in previews.
 
 ## Workspace zones
 
-- Top transport: `EditorTopBar`, `EditorPlaybackControls`, `EditorHiddenFileInputs`.
+- Top transport: `EditorTopBar`, `EditorPlaybackControls`, `EditorHiddenFileInputs`,
+  `LyricsExportSection`. `EditorTopBar` takes grouped props (`nameEdit`,
+  `playback`, `history`, `mode`, `panels`, `preview`, `files`, `actions`,
+  `accent`); add a new control to the group it belongs to.
 - Alerts/status: `EditorAlerts`.
 - Timeline: `TimelineEditor`, `TimelineToolbar`, `TimelineSelectionToolbar`, `TimelineAudioLanes`, `TimelineLayerList`, `TimelineMinimap`.
 - Inspector: `src/features/inspector/*Inspector.tsx`.
@@ -113,6 +120,12 @@ Project lyrics and device lyrics are separate:
 
 Lyrics are small enough for localStorage; audio is not.
 
+`core/lyrics/lyricSourceLibrary.ts` owns every change to `project.lyricSources`
+(upsert, remove, attach, recover from a layer, active source, mode, title,
+start time, audio assignment). It is also the only place that derives
+`project.rawLyricsText` and `project.normalizedLyrics` from the sources, so
+those two fields can never drift from them.
+
 Editing a linked lyric source is intentionally non-destructive:
 
 - The source text is updated in the project and device library.
@@ -135,11 +148,20 @@ Tap-sync progress is stored in `project.clips`, never in the floating window.
 - The list marks previously published paragraphs as done before highlighting
   the current pending row.
 
+Ownership:
+
+- `core/timeline/syncQueue.ts` (`buildSyncQueue`) is pure: given a project, a
+  layer and an optional lyric source it returns the lines to time, the clips
+  with line identity attached, the cursor and the resume time.
+- `features/sync/useSyncSession.ts` holds the session's choices (target layer,
+  source, speed) and wires `useTapSync` to playback. The shell only passes it
+  playback callbacks and renders `TapSyncPanel` with the returned session.
+
 ## Line identity across layers
 
 A project can hold the same lyric several times: the original, a romanization,
 and one translation per language. `clip.sourceId` is what ties those copies
-together — it names *the line*, not a layer and not a clip, so
+together — it names _the line_, not a layer and not a clip, so
 `clip-main-42`, `clip-es-42` and `clip-romaji-42` all carry
 `sourceId = "line-42"`.
 
@@ -194,16 +216,16 @@ No host or port appears anywhere under `src/`. In development the Vite server
 proxies `/transcriptor` (see `vite.config.ts`), which also avoids needing CORS
 on the Python side.
 
-### Future Vibrix composition sequencer
+### Vibrix composition sequencer
 
 The cross-app composition proposal lives in
 [`03-vibrix-composition-sequencer.md`](03-vibrix-composition-sequencer.md).
-It deliberately does not extend the current lyrics bundle: lyrics remain the
-stable v1 contract, while a future `vibrix-score` envelope will carry
-deterministic scene and feature-slot cues. Vibrix remains the owner of slot
-values and rendering; Lyrixa authors references and timing.
+It does not extend the lyrics bundle: lyrics remain the stable v1 contract,
+while `.vibrix-authoring` and `.vibrix-score` carry the visual authoring
+catalogue and deterministic timing. Vibrix remains the owner of object values
+and rendering; Lyrixa authors references and activation times.
 
-The first vertical slice is now implemented:
+The first schema-v1 vertical slice is implemented:
 
 - `core/composition/types.ts` owns manifest, track, cue and score types.
 - `core/composition/authoringManifest.ts` validates untrusted manifest files.
@@ -215,10 +237,12 @@ The first vertical slice is now implemented:
 - `features/timeline-editor/CompositionTrackLane.tsx` renders and edits the
   Scene track on the shared audio timeline.
 
-This stage exports reference dependencies (id, family, name and revision), not
-portable slot values. Vibrix remains responsible for resolving those ids. A
-portable package with immutable slot snapshots belongs to the later packaging
-phase because the authoring manifest intentionally contains no slot values.
+This slice imports a loose v1 manifest, exposes Scene only, creates eight-second
+intervals and exports reference dependencies. The active migration is schema
+v2: import `.vibrix-authoring`, include Image and granular tracks, store only
+`startTimeMs`, support `inherit` and export `.vibrix-score` with the referenced
+snapshots/previews. The executable order lives in
+`.agents/TAREA_SECUENCIADOR.md`.
 
 ## Import/export contracts
 
@@ -230,6 +254,30 @@ phase because the authoring manifest intentionally contains no slot values.
   `layers[].role`, `layers[].language` and `clips[].sourceId` through to
   LiveWallpaper; layer ids are not part of the contract. Adding a field does
   not bump `schemaVersion`.
+
+- Standard lyric formats: `core/export/index.ts`. One entry point,
+  `exportLyrics(project, { format, layerId? })`, returns `{ fileName, mimeType,
+text, cueCount }` for one layer. These files carry timing and text only (no
+  style, FX or audio):
+
+  | Format         | Shape                                                                                                                                            |
+  | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+  | `lrc`          | `[ti:]`, `[length:]`, `[re:Lyrixa]` header; `[mm:ss.xx]text` per clip; an empty `[mm:ss.xx]` line closes each silence and the last line          |
+  | `lrc-enhanced` | Same, plus A2 word tags `<mm:ss.xx>word` from `clip.words[]`, closed by the last word's end; clips without usable words fall back to plain lines |
+  | `srt`          | Numbered cues, `hh:mm:ss,mmm --> hh:mm:ss,mmm`                                                                                                   |
+  | `vtt`          | `WEBVTT` header, `hh:mm:ss.mmm`, text escaped (`&`, `<`, `>`, `-->`)                                                                             |
+  | `txt`          | One clip per line, no timing                                                                                                                     |
+
+  Rules shared by every format: only non-muted clips with text and valid times
+  on the chosen layer, sorted by start; overlaps are kept as authored. Times are
+  rounded to the format's resolution before being split into fields, so
+  `59.999s` is `01:00.00`, never `00:60.00`. The default layer is the one with
+  `role: 'primary'`, else the top-most layer with text. A non-default layer
+  tags the file name with its `language` or name (`Song.es.srt`).
+
+- `LyricClip.words[]` (optional, `{ text, startTime, endTime, score? }`) is the
+  word timing the Transcriptor produces. Lyrixa preserves it and uses it only
+  for Enhanced LRC; it does not edit it yet.
 
 Exports should never include browser-only values such as object URLs. Audio blobs belong
 in the full package only, never localStorage. Imports should normalize old saved
