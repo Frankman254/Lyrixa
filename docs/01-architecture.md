@@ -16,11 +16,12 @@ deterministas de Vibrix. Durante la migración v2 se convierte en una unión
 discriminada por `schemaVersion`; la forma actual sin discriminante se lee como
 v1.
 
-El catálogo importado se normaliza una sola vez en
-`LyrixaProject.vibrixAuthoring`, como manifiesto legacy o paquete completo. El
-campo actual `vibrixManifest` se sigue leyendo al importar proyectos antiguos,
-pero no convive como otra fuente de verdad. La UI de composición nunca mantiene
-un segundo array de cues.
+El catálogo importado se normaliza una sola vez y se guarda en IndexedDB como
+manifiesto legacy o paquete completo. `LyrixaProject.vibrixAuthoringRef` sólo
+guarda la clave y metadatos ligeros necesarios para hidratarlo. El campo actual
+`vibrixManifest` se sigue leyendo al importar proyectos antiguos y se migra a
+ese almacenamiento, pero no convive como otra fuente de verdad. La UI de
+composición nunca mantiene un segundo array de cues.
 
 ## Main editor flow
 
@@ -232,22 +233,25 @@ mientras `.vibrix-authoring` y `.vibrix-score` transportan el catálogo visual y
 los tiempos deterministas. Vibrix sigue siendo dueño de los valores y del
 render; Lyrixa crea referencias y tiempos de activación.
 
-El primer corte vertical schema v1 está implementado:
+El corte vertical schema v1 y la entrada L1 de schema v2 están implementados:
 
 - `core/composition/types.ts` owns manifest, track, cue and score types.
-- `core/composition/authoringManifest.ts` validates untrusted manifest files.
+- `core/composition/authoringManifest.ts` valida manifiestos v1/v2 y paquetes
+  `.vibrix-authoring` v1 sin APIs de navegador.
 - `core/composition/slotStatus.ts` compares cue revisions with the catalog.
 - `core/composition/score.ts` normalizes project composition and builds the
   `.vibrix-score.json` envelope.
-- `features/composition/CompositionCatalog.tsx` imports the catalog and edits
-  the selected Scene cue.
+- `features/composition/authoringSourceStorage.ts` persiste la fuente completa
+  en IndexedDB mediante `features/storage/lyrixaDatabase.ts`.
+- `features/composition/CompositionCatalog.tsx` importa paquete o manifiesto,
+  resume slots/imágenes y edita el cue Scene seleccionado.
 - `features/timeline-editor/CompositionTrackLane.tsx` renders and edits the
   Scene track on the shared audio timeline.
 
-Este corte importa un manifiesto v1 suelto, muestra sólo Scene, crea intervalos
-de ocho segundos y exporta dependencias por referencia. La migración activa es
-schema v2: importar `.vibrix-authoring`, incluir Image y pistas granulares,
-guardar sólo `startTimeMs`, soportar `inherit` y exportar `.vibrix-score` con el
+Este corte abre manifiestos v1/v2 y paquetes v1, pero todavía muestra sólo
+Scene, crea intervalos de ocho segundos y exporta dependencias por referencia.
+La migración activa continúa en L2: incluir Image y pistas granulares, guardar
+sólo `startTimeMs`, soportar `inherit` y exportar `.vibrix-score` con el
 cierre transitivo de snapshots referenciados y las previews disponibles. Los
 binarios originales permanecen en Vibrix y no forman parte del primer paquete
 JSON. El orden ejecutable vive en `.agents/TAREA_SECUENCIADOR.md`.

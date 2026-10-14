@@ -1,12 +1,16 @@
 import { useRef, useState } from 'react';
 import type { ChangeEvent, DragEvent } from 'react';
-import { isManifestSlotDraggable, parseAuthoringManifest } from '../../core/composition/authoringManifest';
+import {
+  isManifestSlotDraggable,
+  parseAuthoringSource
+} from '../../core/composition/authoringManifest';
 import { resolveCueSlotStatus } from '../../core/composition/slotStatus';
 import { createCompositionCueId } from '../../core/composition/score';
 import type {
   CompositionCue,
   CompositionScore,
   VibrixAuthoringManifest,
+  VibrixAuthoringSource,
   VibrixManifestSlot
 } from '../../core/composition/types';
 import './CompositionCatalog.css';
@@ -16,7 +20,9 @@ interface CompositionCatalogProps {
   score: CompositionScore;
   selectedCueId: string | null;
   currentTime: number;
-  onManifestChange: (manifest: VibrixAuthoringManifest) => void;
+  sourceKind?: VibrixAuthoringSource['kind'];
+  sourceUnavailable?: boolean;
+  onAuthoringImport: (source: VibrixAuthoringSource) => Promise<void>;
   onScoreChange: (score: CompositionScore) => void;
   onSelectCue: (cueId: string | null) => void;
   onExportScore: () => void;
@@ -30,7 +36,9 @@ export function CompositionCatalog({
   score,
   selectedCueId,
   currentTime,
-  onManifestChange,
+  sourceKind,
+  sourceUnavailable,
+  onAuthoringImport,
   onScoreChange,
   onSelectCue,
   onExportScore,
@@ -38,6 +46,8 @@ export function CompositionCatalog({
 }: CompositionCatalogProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
   const scenes = manifest?.slots.filter(slot => slot.family === 'scene') ?? [];
   const selectedCue = score.cues.find(cue => cue.id === selectedCueId) ?? null;
 
@@ -45,13 +55,20 @@ export function CompositionCatalog({
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file) return;
+    setImporting(true);
     try {
-      const parsed = parseAuthoringManifest(JSON.parse(await file.text()));
+      const parsed = parseAuthoringSource(JSON.parse(await file.text()));
       if (!parsed.ok) throw new Error(parsed.errors.join('\n'));
-      onManifestChange(parsed.manifest);
+      await onAuthoringImport(parsed.source);
       setError(null);
+      setNotice(parsed.source.kind === 'package'
+        ? `Authoring package imported (${formatFileSize(file.size)}).`
+        : 'Legacy manifest imported.');
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Could not read Vibrix manifest.');
+      setNotice(null);
+      setError(reason instanceof Error ? reason.message : 'Could not read Vibrix authoring source.');
+    } finally {
+      setImporting(false);
     }
   };
 
@@ -104,25 +121,49 @@ export function CompositionCatalog({
       </header>
 
       <div className="composition-catalog-actions">
-        <button type="button" onClick={() => inputRef.current?.click()}>Import manifest</button>
+        <button type="button" disabled={importing} onClick={() => inputRef.current?.click()}>
+          {importing ? 'Importing…' : 'Import authoring'}
+        </button>
         <button type="button" onClick={onExportScore} disabled={score.cues.length === 0}>Export score</button>
-        <input ref={inputRef} type="file" accept=".json,application/json" hidden onChange={handleFile} />
+        <input
+          ref={inputRef}
+          type="file"
+          accept=".vibrix-authoring,.vibrix-manifest.json,.json,application/json,application/x-vibrix-authoring+json"
+          hidden
+          onChange={handleFile}
+        />
       </div>
 
       {manifest ? (
         <div className="composition-catalog-meta">
           <strong>{manifest.projectName}</strong>
           <span>Renderer {manifest.rendererVersion}</span>
-          <span>{scenes.length} scenes · revision {manifest.revision}</span>
+          <span>
+            {manifest.slots.length} slots
+            {manifest.schemaVersion === 2 ? ` · ${manifest.images.length} images` : ''}
+            {` · ${scenes.length} scenes`}
+          </span>
+          <span>{sourceKind === 'package' ? 'Portable package' : 'Loose manifest'} · revision {manifest.revision}</span>
         </div>
       ) : (
         <div className="composition-catalog-empty">
-          Import the <code>.vibrix-manifest.json</code> exported by Vibrix.
+          Import a <code>.vibrix-authoring</code> package or legacy <code>.vibrix-manifest.json</code> exported by Vibrix.
+        </div>
+      )}
+      {sourceUnavailable && (
+        <div className="composition-catalog-error" role="alert">
+          The saved authoring source is not available on this device. Import it again.
         </div>
       )}
       {error && <div className="composition-catalog-error" role="alert">{error}</div>}
+      {notice && <div className="composition-catalog-notice" role="status">{notice}</div>}
 
       <div className="composition-slot-list">
+        {manifest && scenes.length === 0 && (
+          <div className="composition-catalog-empty">
+            Package ready. This Vibrix project publishes no scene slots yet; image and granular-track authoring arrives in later sequencer levels.
+          </div>
+        )}
         {scenes.map(slot => {
           const draggable = isManifestSlotDraggable(slot);
           return (
@@ -209,6 +250,11 @@ export function CompositionCatalog({
       )}
     </aside>
   );
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function CueStatus({ cue, manifest }: { cue: CompositionCue; manifest?: VibrixAuthoringManifest }) {

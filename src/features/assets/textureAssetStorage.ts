@@ -1,6 +1,10 @@
-const DB_NAME = 'lyrixa';
-const DB_VERSION = 3;
-const STORE_TEXTURES = 'texture-assets';
+import {
+  LYRIXA_DB_STORES,
+  openLyrixaDatabase,
+  withLyrixaStore
+} from '../storage/lyrixaDatabase';
+
+const STORE_TEXTURES = LYRIXA_DB_STORES.textureAssets;
 
 export interface StoredTextureAsset {
   blob: Blob;
@@ -17,19 +21,7 @@ function isAvailable(): boolean {
 }
 
 function openDB(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onupgradeneeded = () => {
-      const db = req.result;
-      if (!db.objectStoreNames.contains('audio')) db.createObjectStore('audio');
-      if (!db.objectStoreNames.contains(STORE_TEXTURES)) db.createObjectStore(STORE_TEXTURES);
-      if (!db.objectStoreNames.contains('audio-library-metadata')) {
-        db.createObjectStore('audio-library-metadata');
-      }
-    };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error ?? new Error('IndexedDB open failed'));
-  });
+  return openLyrixaDatabase();
 }
 
 function withStore<T>(
@@ -37,16 +29,7 @@ function withStore<T>(
   fn: (store: IDBObjectStore) => IDBRequest<T>
 ): Promise<T> {
   if (!isAvailable()) return Promise.reject(new Error('IndexedDB is not available'));
-  return openDB().then(db =>
-    new Promise<T>((resolve, reject) => {
-      const tx = db.transaction(STORE_TEXTURES, mode);
-      const store = tx.objectStore(STORE_TEXTURES);
-      const req = fn(store);
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
-      tx.onerror = () => reject(tx.error);
-    })
-  );
+  return withLyrixaStore(STORE_TEXTURES, mode, fn);
 }
 
 export async function putTextureAsset(

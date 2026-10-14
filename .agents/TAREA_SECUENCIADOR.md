@@ -57,14 +57,16 @@ modelo es compatibilidad, no la base de la nueva timeline.
   `StoredCompositionV1 | StoredCompositionV2`, con `schemaVersion` dentro de
   `project.composition`. La ausencia del campo al abrir un proyecto antiguo se
   interpreta como v1. No se infiere la versión mirando si existen cues.
-- La fuente importada se guarda una sola vez en `project.vibrixAuthoring` como
-  unión `manifest` / `package`. `project.vibrixManifest` es entrada legacy y se
-  normaliza a esa unión; no se mantienen las dos copias como fuentes de verdad.
+- La fuente importada se guarda una sola vez en IndexedDB como unión
+  `manifest` / `package`; `project.vibrixAuthoringRef` contiene sólo su clave y
+  metadatos ligeros. `project.vibrixManifest` es entrada legacy y se migra a ese
+  almacenamiento; no se mantienen dos copias como fuentes de verdad ni se mete
+  el paquete completo en `localStorage`.
 - Un manifiesto suelto permite editar y exportar JSON por referencias. El
   paquete autocontenido `.vibrix-score` exige haber importado
   `.vibrix-authoring`, porque sólo éste trae snapshots.
 
-## L1 · Importar `.vibrix-authoring`
+## L1 · Importar `.vibrix-authoring` — completado
 
 Trabajo puro en `src/core/composition/`:
 
@@ -81,9 +83,17 @@ Trabajo puro en `src/core/composition/`:
 6. Probar por separado el fixture literal del manifiesto —que lleva
    `images: []`—, un fixture de paquete con imagen/miniatura y un paquete real
    exportado por Vibrix.
+7. Persistir los bytes/objeto validado en IndexedDB desde `src/features`; el
+   dominio puro sólo parsea. El paquete real revisado pesa 9.7 MB y no cabe de
+   forma segura en el proyecto que hoy se guarda en `localStorage`.
 
 Criterio: abrir el paquete desconectado y construir catálogo, snapshots y
 previews sin `blob:` URLs ni acceso a otro origen.
+
+Comprobado el 2026-10-13 con el paquete real de 9.7 MB: 330 slots, 230 imágenes
+y 560 snapshots válidos. La UI lo importó, mostró el resumen y lo recuperó de
+IndexedDB tras recargar. El paquete contiene 0 escenas; no cubre aún la prueba
+de colocación de cues, que corresponde a un fixture/proyecto posterior.
 
 ## L2 · Score v2 y migración
 
@@ -169,6 +179,7 @@ espera al runtime de Vibrix; L1→L5 no están bloqueados.
 
 ## Siguiente archivo
 
-Crear `src/core/composition/authoringPackage.ts`, extender los tipos con una
-unión v1/v2 y añadir su test contra el fixture contractual. Ése es L1; la UI
-actual queda intacta durante este paso.
+Continuar L2 en `src/core/composition/types.ts` y
+`src/core/composition/score.ts`: introducir la unión discriminada v1/v2 y sus
+tests de round-trip/migración. La timeline actual queda intacta durante este
+paso.

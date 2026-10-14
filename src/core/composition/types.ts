@@ -15,8 +15,7 @@ export interface VibrixManifestSlot {
   cueable: boolean;
 }
 
-export interface VibrixAuthoringManifest {
-  schemaVersion: 1;
+interface VibrixAuthoringManifestBase {
   app: 'Vibrix';
   exportKind: 'vibrix-manifest';
   exportedAt: string;
@@ -26,6 +25,62 @@ export interface VibrixAuthoringManifest {
   revision: string;
   slots: VibrixManifestSlot[];
 }
+
+export interface VibrixAuthoringManifestV1 extends VibrixAuthoringManifestBase {
+  schemaVersion: 1;
+}
+
+export interface VibrixManifestImage {
+  id: string;
+  kind: 'image';
+  name: string;
+  revision: string;
+  enabled: boolean;
+  sceneSlotId: string | null;
+  thumbnailDataUrl?: string;
+}
+
+export interface VibrixAuthoringManifestV2 extends VibrixAuthoringManifestBase {
+  schemaVersion: 2;
+  images: VibrixManifestImage[];
+}
+
+export type VibrixAuthoringManifest =
+  | VibrixAuthoringManifestV1
+  | VibrixAuthoringManifestV2;
+
+export interface VibrixAuthoringSlotSnapshot {
+  kind: 'slot';
+  id: string;
+  family: VibrixSlotFamily;
+  name: string;
+  revision: string;
+  values: unknown;
+}
+
+export interface VibrixAuthoringImageSnapshot {
+  kind: 'image';
+  id: string;
+  name: string;
+  revision: string;
+  values: unknown;
+}
+
+export type VibrixAuthoringSnapshot =
+  | VibrixAuthoringSlotSnapshot
+  | VibrixAuthoringImageSnapshot;
+
+export interface VibrixAuthoringPackage {
+  format: 'vibrix-authoring';
+  packageVersion: 1;
+  exportedAt: string;
+  manifest: VibrixAuthoringManifestV2;
+  snapshots: VibrixAuthoringSnapshot[];
+}
+
+export type VibrixAuthoringSource =
+  | { kind: 'manifest'; manifest: VibrixAuthoringManifest }
+  | { kind: 'package'; package: VibrixAuthoringPackage };
 
 export interface CompositionTrack {
   id: string;

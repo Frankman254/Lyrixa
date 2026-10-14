@@ -19,45 +19,47 @@ editores de slots ni transiciones internas de Vibrix.
 
 ## Estado comprobado
 
-El primer corte del secuenciador existe, pero sigue en el contrato v1:
+El primer corte del secuenciador existe y **L1 de la migración v2 está
+completado**:
 
 - `src/core/composition/` define manifiesto, tracks, cues y score v1.
-- Se importa `.vibrix-manifest.json` y se comparan revisiones de slots.
+- Se importan `.vibrix-manifest.json` schema 1/2 y `.vibrix-authoring` v1.
+- El paquete completo se valida en `src/core` y se guarda una sola vez en
+  IndexedDB; el proyecto conserva `vibrixAuthoringRef`.
 - El catálogo sólo muestra escenas.
 - La timeline tiene una pista Scene; drag y `Add at playhead` crean un bloque de
   ocho segundos con `startTimeMs` y `endTimeMs`.
 - Se exporta `.vibrix-score.json` con referencias, no snapshots portables.
-- El proyecto persiste `composition` y `vibrixManifest`.
+- El proyecto persiste `composition` y la referencia ligera al catálogo.
 
 Vibrix ya avanzó a v2: exporta `.vibrix-authoring` con slots, imágenes,
 snapshots y previews; acepta score v2 con activaciones sostenidas e `inherit`.
-Lyrixa todavía no abre ese paquete ni conoce imágenes, pistas granulares o
-duración derivada.
+Lyrixa ya abre ese paquete, pero aún no ofrece imágenes, pistas granulares ni
+duración derivada en la timeline.
 
-Revisión cruzada: Vibrix tiene W2 en progreso local (sesión Compose y migración
-153). No tocar ese trabajo desde Lyrixa. Su parser de score aún usa una unión
+Revisión cruzada: Vibrix cerró W2 en `338c8e03` (sesión Compose y migración
+153). Su parser de score aún usa una unión
 demasiado amplia que admite `intro-window` como carril/target; el contrato
 cerrado lo excluye y Vibrix debe endurecer ese lector antes de la integración.
 
+Prueba manual del 2026-10-13: se importó
+`future-core-techcore-mix-clairvoyance.vibrix-authoring` (9.7 MB), se mostraron
+330 slots y 230 imágenes, y el catálogo sobrevivió una recarga desde IndexedDB.
+El proyecto Vibrix exportado contiene 0 escenas, así que sirve para cerrar L1
+pero no para probar todavía cues Scene.
+
 ## Trabajo local que debes preservar
 
-Al revisar el repo había cambios sin commit en exports de letra, cola de sync,
-hooks del editor y documentación. No los reviertas ni los mezcles con la
-migración Compose. Valídalos y ciérralos como su propio cambio si siguen
-presentes; después trabaja por pasos L1→L5.
+El usuario cerró en un commit el trabajo previo de exports de letra, cola de
+sync, hooks del editor y documentación antes de iniciar L1. Los cambios actuales
+corresponden a L1; no los mezcles con L2 hasta cerrar este corte.
 
 ## Próximo movimiento
 
-Empieza por **L1**, sólo en dominio puro:
-
-1. ampliar tipos para leer manifiesto v1 y v2;
-2. parsear el contenedor `.vibrix-authoring`;
-3. validar el fixture literal v2 del manifiesto, que tiene `images: []`;
-4. añadir otro fixture de paquete con imagen, snapshot y preview transportable;
-5. conservar import de `.vibrix-manifest.json` como legacy.
-
-No cambies todavía la timeline. Cuando el parser y los fixtures estén verdes,
-L2 migra el score a cues con sólo `startTimeMs` y mantiene lectura v1.
+Empieza por **L2** en `src/core/composition/types.ts` y
+`src/core/composition/score.ts`: añade la unión discriminada del score, crea
+cues v2 con sólo `startTimeMs` y conserva lectura/serialización histórica v1.
+No cambies todavía la timeline; los carriles sostenidos pertenecen a L3.
 
 ## Reglas del repo
 
@@ -66,8 +68,10 @@ L2 migra el score a cues con sólo `startTimeMs` y mantiene lectura v1.
 - La UI usa una sola `project.composition`; no crea un segundo array de cues.
 - `project.composition` lleva discriminante v1/v2; un proyecto antiguo sin él
   se lee como v1.
-- El paquete/manifiesto importado tiene una sola representación normalizada en
-  `project.vibrixAuthoring`; `vibrixManifest` queda sólo como entrada legacy.
+- El paquete/manifiesto importado vive una sola vez en IndexedDB;
+  `project.vibrixAuthoringRef` guarda una referencia ligera y `vibrixManifest`
+  queda sólo como entrada legacy. No persistir el paquete dentro del JSON de
+  `localStorage`.
 - No reutilices `LyricClip` para composición.
 - Archivo primero; HTTP llega después con los mismos bytes.
 - Tests junto al dominio como `*.test.ts`.
@@ -76,4 +80,4 @@ L2 migra el score a cues con sólo `startTimeMs` y mantiene lectura v1.
 
 Actualiza `TAREAS.md`, `TAREA_SECUENCIADOR.md` y este relevo. Indica el último
 paso L completado, las comprobaciones ejecutadas y el siguiente archivo
-concreto. No marques v2 como terminado hasta abrir un `.vibrix-authoring` real.
+concreto. No marques v2 completo hasta cerrar L2→L5 y la integración real.

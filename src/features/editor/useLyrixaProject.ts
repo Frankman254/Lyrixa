@@ -1,10 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { SetStateAction } from 'react';
-import type { LyricProjectMode, LyrixaProject, ProjectRenderDefaultsPatch } from '../../core/types/project';
+import type {
+  LyricProjectMode,
+  LyrixaProject,
+  ProjectRenderDefaultsPatch,
+  VibrixAuthoringReference
+} from '../../core/types/project';
 import type { LyricClip } from '../../core/types/clip';
 import type { LyricLayer } from '../../core/types/layer';
 import type { LyricVisualStyle } from '../../core/types/render';
-import type { CompositionScore, VibrixAuthoringManifest } from '../../core/composition/types';
+import type { CompositionScore } from '../../core/composition/types';
 import type {
   AudioChannel,
   AudioChannelRole,
@@ -39,6 +44,7 @@ import {
   deleteAllProjectTextures,
   getTextureAsset
 } from '../assets/textureAssetStorage';
+import { deleteProjectAuthoringSource } from '../composition/authoringSourceStorage';
 
 const AUTOSAVE_DEBOUNCE_MS = 400;
 
@@ -104,7 +110,7 @@ export interface UseLyrixaProjectResult {
   updateClip: (clipId: string, patch: Partial<LyricClip>) => void;
   setLayers: (next: LyricLayer[]) => void;
   setComposition: (next: CompositionUpdate) => void;
-  setVibrixManifest: (manifest: VibrixAuthoringManifest) => void;
+  setVibrixAuthoringRef: (reference: VibrixAuthoringReference) => void;
   /** Merge into the project render defaults that layers and clips inherit. */
   setProjectDefaults: (patch: ProjectRenderDefaultsPatch) => void;
   setCurrentTime: (time: number) => void;
@@ -633,8 +639,12 @@ export function useLyrixaProject({
     }));
   }, [setProject]);
 
-  const setVibrixManifest = useCallback((manifest: VibrixAuthoringManifest) => {
-    setProject(p => ({ ...p, vibrixManifest: manifest }));
+  const setVibrixAuthoringRef = useCallback((reference: VibrixAuthoringReference) => {
+    setProject(p => ({
+      ...p,
+      vibrixAuthoringRef: reference,
+      vibrixManifest: undefined
+    }));
   }, [setProject]);
 
   const setProjectDefaults = useCallback((patch: ProjectRenderDefaultsPatch) => {
@@ -680,7 +690,8 @@ export function useLyrixaProject({
     clearLyrixaLocalStorage();
     await Promise.all([
       deleteAllProjectAudio(oldId),
-      deleteAllProjectTextures(oldId)
+      deleteAllProjectTextures(oldId),
+      deleteProjectAuthoringSource(oldId)
     ]);
   }, [clearHistory, setProject]);
 
@@ -755,7 +766,7 @@ export function useLyrixaProject({
     updateClip,
     setLayers,
     setComposition,
-    setVibrixManifest,
+    setVibrixAuthoringRef,
     setProjectDefaults,
     setCurrentTime,
     setMasterDuration,

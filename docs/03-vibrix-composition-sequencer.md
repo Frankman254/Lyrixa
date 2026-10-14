@@ -1,8 +1,9 @@
 # Lyrixa como secuenciador determinista de Vibrix
 
-> Estado al 2026-10-13: Lyrixa tiene un vertical slice v1 con una pista Scene.
-> Vibrix ya publica el paquete de autoría v2 y posee un evaluador puro, pero aún
-> no lo conecta a Play/seek ni al export offline.
+> Estado al 2026-10-13: Lyrixa tiene un vertical slice v1 con una pista Scene y
+> completó L1: abre y persiste el paquete de autoría v2. Vibrix ya publica ese
+> paquete y cerró la persistencia de su sesión Compose; aún falta la integración
+> completa de reproducción y export.
 
 ## Límite entre productos
 
@@ -191,18 +192,35 @@ otro array de cues. La composición persistida es una unión discriminada
 histórica sin discriminante se normaliza como v1. Así un score vacío también
 conserva su versión sin inferirla por la presencia de `endTimeMs`.
 
-La fuente de catálogo se persiste una vez en `project.vibrixAuthoring`:
+La fuente completa de catálogo se persiste una vez en IndexedDB:
 
 ```ts
-type StoredVibrixAuthoring =
+type VibrixAuthoringSource =
   | { kind: "manifest"; manifest: VibrixAuthoringManifestV1 | VibrixAuthoringManifestV2 }
   | { kind: "package"; package: VibrixAuthoringPackage };
+
+interface VibrixAuthoringReference {
+  storageKey: string;
+  sourceKind: "manifest" | "package";
+  manifestRevision: string;
+  projectName: string;
+  slotCount: number;
+  imageCount: number;
+}
 ```
 
-El campo histórico `project.vibrixManifest` se acepta al importar y se
-normaliza a la rama `manifest`; no convive como segunda fuente de verdad. Un
-manifiesto suelto sirve para editar y exportar por referencias, pero no permite
-crear `.vibrix-score` autocontenido porque no trae snapshots.
+`project.vibrixAuthoringRef` contiene sólo `VibrixAuthoringReference`; el hook
+de navegador hidrata `VibrixAuthoringSource` en memoria. Los parsers y
+validadores siguen en `src/core`, mientras el adaptador IndexedDB vive en
+`src/features`. El proyecto ligero continúa en `localStorage`: nunca embebe el
+paquete completo ni sus previews. El paquete real revisado el 2026-10-13 pesa
+9.7 MB, suficiente para exceder cuotas habituales si se duplicara allí.
+
+El campo histórico `project.vibrixManifest` se acepta al importar, se almacena
+como rama `manifest` y se reemplaza por la referencia; no convive como segunda
+fuente de verdad. Un manifiesto suelto sirve para editar y exportar por
+referencias, pero no permite crear `.vibrix-score` autocontenido porque no trae
+snapshots.
 
 Letras y composición comparten viewport, selección, snap, playhead y undo,
 pero conservan modelos distintos; `LyricClip` no se convierte en cue genérico.
@@ -236,7 +254,7 @@ del store mutado por el frame anterior. Esa regla garantiza que saltar a
 
 | Fase | Lyrixa                          | Vibrix                                        |
 | ---- | ------------------------------- | --------------------------------------------- |
-| 1    | Abrir paquete v2 y manifiestos v1/v2 | Completar transición de imagen pura       |
+| 1    | **Hecho:** paquete v2 y manifiestos v1/v2 | Completar transición de imagen pura  |
 | 2    | Score v2 y migración v1         | Persistir score/base/mode Compose             |
 | 3    | Carriles sostenidos             | Conectar preview, Play y seek                 |
 | 4    | Catálogo, previews e `inherit`  | Conectar export offline                       |

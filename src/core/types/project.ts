@@ -10,6 +10,15 @@ import type {
 import type { AudioLibraryAsset, AudioPeak, ProjectAudioTracks } from './audio';
 import type { CompositionScore, VibrixAuthoringManifest } from '../composition/types';
 
+export interface VibrixAuthoringReference {
+  storageKey: string;
+  sourceKind: 'manifest' | 'package';
+  manifestRevision: string;
+  projectName: string;
+  slotCount: number;
+  imageCount: number;
+}
+
 /**
  * Legacy single-track shape. Older projects persisted this as `track`.
  * New code reads `project.audioTracks.master` instead — `LyrixaTrack`
@@ -70,6 +79,8 @@ export interface LyrixaProject {
   composition: CompositionScore;
   /** Last imported read-only Vibrix authoring catalog. */
   vibrixManifest?: VibrixAuthoringManifest;
+  /** Lightweight pointer to the full authoring source stored in IndexedDB. */
+  vibrixAuthoringRef?: VibrixAuthoringReference;
   styleConfig: LyricVisualStyle;
   animationConfig: LyricAnimationConfig;
   fxConfig: LyricFxConfig;

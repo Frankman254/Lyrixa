@@ -1,4 +1,8 @@
 import type { AudioChannelRole, AudioLibraryAsset } from '../../core/types/audio';
+import {
+  LYRIXA_DB_STORES,
+  withLyrixaStore
+} from '../storage/lyrixaDatabase';
 
 /**
  * IndexedDB-backed storage for project audio files.
@@ -11,10 +15,8 @@ import type { AudioChannelRole, AudioLibraryAsset } from '../../core/types/audio
  * listing the library never reads large audio blobs into React state.
  */
 
-const DB_NAME = 'lyrixa';
-const DB_VERSION = 3;
-const STORE_AUDIO = 'audio';
-const STORE_AUDIO_LIBRARY_METADATA = 'audio-library-metadata';
+const STORE_AUDIO = LYRIXA_DB_STORES.audio;
+const STORE_AUDIO_LIBRARY_METADATA = LYRIXA_DB_STORES.audioLibraryMetadata;
 
 export interface StoredAudio {
   blob: Blob;
@@ -61,43 +63,12 @@ function isAvailable(): boolean {
   return typeof indexedDB !== 'undefined';
 }
 
-function openDB(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onupgradeneeded = () => {
-      const db = req.result;
-      if (!db.objectStoreNames.contains(STORE_AUDIO)) {
-        db.createObjectStore(STORE_AUDIO);
-      }
-      if (!db.objectStoreNames.contains('texture-assets')) {
-        db.createObjectStore('texture-assets');
-      }
-      if (!db.objectStoreNames.contains(STORE_AUDIO_LIBRARY_METADATA)) {
-        db.createObjectStore(STORE_AUDIO_LIBRARY_METADATA);
-      }
-    };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error ?? new Error('IndexedDB open failed'));
-  });
-}
-
 function withStore<T>(
   mode: IDBTransactionMode,
   fn: (store: IDBObjectStore) => IDBRequest<T>
 ): Promise<T> {
-  if (!isAvailable()) {
-    return Promise.reject(new Error('IndexedDB is not available in this environment'));
-  }
-  return openDB().then(db =>
-    new Promise<T>((resolve, reject) => {
-      const tx = db.transaction(STORE_AUDIO, mode);
-      const store = tx.objectStore(STORE_AUDIO);
-      const req = fn(store);
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
-      tx.onerror = () => reject(tx.error);
-    })
-  );
+  if (!isAvailable()) return Promise.reject(new Error('IndexedDB is not available in this environment'));
+  return withLyrixaStore(STORE_AUDIO, mode, fn);
 }
 
 function withMetadataStore<T>(
@@ -107,16 +78,7 @@ function withMetadataStore<T>(
   if (!isAvailable()) {
     return Promise.reject(new Error('IndexedDB is not available in this environment'));
   }
-  return openDB().then(db =>
-    new Promise<T>((resolve, reject) => {
-      const tx = db.transaction(STORE_AUDIO_LIBRARY_METADATA, mode);
-      const store = tx.objectStore(STORE_AUDIO_LIBRARY_METADATA);
-      const req = fn(store);
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
-      tx.onerror = () => reject(tx.error);
-    })
-  );
+  return withLyrixaStore(STORE_AUDIO_LIBRARY_METADATA, mode, fn);
 }
 
 export async function putAudio(

@@ -101,12 +101,36 @@ export function normalizeProject(input: Partial<LyrixaProject>): LyrixaProject {
     clips: normalizeClips(input.clips),
     composition: normalizeCompositionScore(input.composition),
     vibrixManifest: normalizeManifest(input.vibrixManifest),
+    vibrixAuthoringRef: normalizeAuthoringReference(input.vibrixAuthoringRef),
     styleConfig: resolveLyricVisualStyle(input.styleConfig),
     animationConfig: resolveLyricAnimationConfig(input.animationConfig),
     fxConfig: resolveLyricFxConfig(input.fxConfig),
     progressIndicatorConfig: resolveProgressIndicatorConfig(input.progressIndicatorConfig),
     currentTime: Number.isFinite(input.currentTime) ? input.currentTime! : 0,
     renderMode: input.renderMode ?? 'editor'
+  };
+}
+
+function normalizeAuthoringReference(
+  input: LyrixaProject['vibrixAuthoringRef'] | undefined
+): LyrixaProject['vibrixAuthoringRef'] {
+  if (!isObject(input)) return undefined;
+  if (
+    typeof input.storageKey !== 'string' || !input.storageKey ||
+    (input.sourceKind !== 'manifest' && input.sourceKind !== 'package') ||
+    typeof input.manifestRevision !== 'string' || !input.manifestRevision ||
+    typeof input.projectName !== 'string' || !input.projectName ||
+    !Number.isFinite(input.slotCount) || !Number.isFinite(input.imageCount)
+  ) {
+    return undefined;
+  }
+  return {
+    storageKey: input.storageKey,
+    sourceKind: input.sourceKind,
+    manifestRevision: input.manifestRevision,
+    projectName: input.projectName,
+    slotCount: Math.max(0, Math.round(input.slotCount)),
+    imageCount: Math.max(0, Math.round(input.imageCount))
   };
 }
 

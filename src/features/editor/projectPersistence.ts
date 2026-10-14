@@ -89,6 +89,7 @@ export function createEmptyProject(): LyrixaProject {
     clips: [],
     composition: cloneDefaultCompositionScore(),
     vibrixManifest: undefined,
+    vibrixAuthoringRef: undefined,
     styleConfig: { ...DEFAULT_LYRIC_STYLE },
     animationConfig: { ...DEFAULT_LYRIC_ANIMATION },
     fxConfig: { ...DEFAULT_LYRIC_FX },

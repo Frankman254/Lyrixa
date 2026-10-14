@@ -38,6 +38,12 @@ import {
   sendProjectToLiveWallpaper
 } from '../../core/bridge/liveWallpaperTarget';
 import { createVibrixScoreEnvelope } from '../../core/composition/score';
+import { manifestFromAuthoringSource } from '../../core/composition/authoringManifest';
+import type { VibrixAuthoringSource } from '../../core/composition/types';
+import {
+  getAuthoringSource,
+  putAuthoringSource
+} from '../composition/authoringSourceStorage';
 import './LyrixaEditorShell.css';
 
 export function LyrixaEditorShell() {
@@ -69,7 +75,7 @@ export function LyrixaEditorShell() {
     setClips,
     setLayers,
     setComposition,
-    setVibrixManifest,
+    setVibrixAuthoringRef,
     setProjectDefaults,
     setCurrentTime,
     setMasterDuration,
@@ -106,10 +112,41 @@ export function LyrixaEditorShell() {
   const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
   const [selectedLayerId, setSelectedLayerId] = useState<string | null>(project.layers[0]?.id ?? null);
   const [selectedCompositionCueId, setSelectedCompositionCueId] = useState<string | null>(null);
+  const [vibrixAuthoringSource, setVibrixAuthoringSource] = useState<VibrixAuthoringSource | null>(null);
+  const [vibrixSourceUnavailable, setVibrixSourceUnavailable] = useState(false);
   const [timelineFocusRequest, setTimelineFocusRequest] = useState<{ time: number; nonce: number } | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() =>
     safeGetLocalStorage('lyrixa_sidebar_collapsed') === '1'
   );
+
+  useEffect(() => {
+    let cancelled = false;
+    const reference = project.vibrixAuthoringRef;
+    if (!reference) {
+      setVibrixAuthoringSource(project.vibrixManifest
+        ? { kind: 'manifest', manifest: project.vibrixManifest }
+        : null);
+      setVibrixSourceUnavailable(false);
+      return () => { cancelled = true; };
+    }
+    void getAuthoringSource(reference).then(source => {
+      if (cancelled) return;
+      setVibrixAuthoringSource(source);
+      setVibrixSourceUnavailable(source === null);
+    });
+    return () => { cancelled = true; };
+  }, [project.vibrixAuthoringRef, project.vibrixManifest]);
+
+  const activeVibrixManifest = vibrixAuthoringSource
+    ? manifestFromAuthoringSource(vibrixAuthoringSource)
+    : project.vibrixManifest;
+
+  const importVibrixAuthoring = useCallback(async (source: VibrixAuthoringSource) => {
+    const reference = await putAuthoringSource(project.id, source);
+    setVibrixAuthoringSource(source);
+    setVibrixSourceUnavailable(false);
+    setVibrixAuthoringRef(reference);
+  }, [project.id, setVibrixAuthoringRef]);
 
   const tier = useViewportTier();
   const isMobile = tier === 'mobile';
@@ -598,14 +635,19 @@ export function LyrixaEditorShell() {
       {(!sidebarIsDrawer || sidebarDrawerOpen) && (
         isCompose ? (
           <CompositionCatalog
-            manifest={project.vibrixManifest}
+            manifest={activeVibrixManifest}
             score={project.composition}
             selectedCueId={selectedCompositionCueId}
             currentTime={playbackTime}
-            onManifestChange={setVibrixManifest}
+            sourceKind={vibrixAuthoringSource?.kind}
+            sourceUnavailable={vibrixSourceUnavailable}
+            onAuthoringImport={importVibrixAuthoring}
             onScoreChange={setComposition}
             onSelectCue={setSelectedCompositionCueId}
-            onExportScore={() => downloadVibrixScore(project)}
+            onExportScore={() => downloadVibrixScore({
+              ...project,
+              vibrixManifest: activeVibrixManifest
+            })}
             onClose={sidebarIsDrawer ? () => setSidebarDrawerOpen(false) : undefined}
           />
         ) : (
@@ -674,7 +716,7 @@ export function LyrixaEditorShell() {
               setSelectedLayerId(layerId);
             }}
             composition={isCompose ? project.composition : undefined}
-            vibrixManifest={project.vibrixManifest}
+            vibrixManifest={activeVibrixManifest}
             selectedCompositionCueId={selectedCompositionCueId}
             onCompositionChange={isCompose ? setComposition : undefined}
             onCompositionSelectionChange={isCompose ? setSelectedCompositionCueId : undefined}

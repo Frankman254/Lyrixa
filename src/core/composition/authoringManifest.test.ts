@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { isManifestSlotDraggable, parseAuthoringManifest } from './authoringManifest';
+import {
+  isManifestSlotDraggable,
+  manifestFromAuthoringSource,
+  parseAuthoringManifest,
+  parseAuthoringPackage,
+  parseAuthoringSource
+} from './authoringManifest';
+import type { VibrixAuthoringPackage } from './types';
 
 const CONTRACT_FIXTURE = {
   "schemaVersion": 1,
@@ -84,6 +91,76 @@ const CONTRACT_FIXTURE = {
   ]
 };
 
+const PACKAGE_FIXTURE: VibrixAuthoringPackage = {
+  format: 'vibrix-authoring',
+  packageVersion: 1,
+  exportedAt: '2026-10-14T03:19:44.097Z',
+  manifest: {
+    schemaVersion: 2,
+    app: 'Vibrix',
+    exportKind: 'vibrix-manifest',
+    exportedAt: '2026-10-14T03:19:44.097Z',
+    rendererVersion: '0.7.0-alpha',
+    storePersistVersion: 153,
+    projectName: 'Package fixture',
+    revision: 'catalog-revision',
+    slots: [
+      {
+        id: 'spectrum-a',
+        family: 'spectrum-second',
+        name: 'Spectrum 2',
+        revision: 'spectrum-revision',
+        sceneBindable: true,
+        cueable: true
+      },
+      {
+        id: 'intro-a',
+        family: 'intro-window',
+        name: 'Intro',
+        revision: 'empty',
+        sceneBindable: false,
+        cueable: false
+      }
+    ],
+    images: [
+      {
+        id: 'image-a',
+        kind: 'image',
+        name: 'Cover.webp',
+        revision: 'image-revision',
+        enabled: true,
+        sceneSlotId: null,
+        thumbnailDataUrl: 'data:image/webp;base64,AQID'
+      }
+    ]
+  },
+  snapshots: [
+    {
+      kind: 'slot',
+      id: 'spectrum-a',
+      family: 'spectrum-second',
+      name: 'Spectrum 2',
+      revision: 'spectrum-revision',
+      values: { enabled: true }
+    },
+    {
+      kind: 'slot',
+      id: 'intro-a',
+      family: 'intro-window',
+      name: 'Intro',
+      revision: 'empty',
+      values: null
+    },
+    {
+      kind: 'image',
+      id: 'image-a',
+      name: 'Cover.webp',
+      revision: 'image-revision',
+      values: { assetId: 'image-a', transitionType: 'fade' }
+    }
+  ]
+};
+
 describe('parseAuthoringManifest', () => {
   it('accepts the literal shared contract fixture', () => {
     const result = parseAuthoringManifest(CONTRACT_FIXTURE);
@@ -125,5 +202,71 @@ describe('parseAuthoringManifest', () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.errors.join('\n')).toContain('sceneBindable is false');
+  });
+
+  it('accepts a schema v2 manifest with transportable image previews', () => {
+    const result = parseAuthoringManifest(PACKAGE_FIXTURE.manifest);
+    expect(result.ok).toBe(true);
+    if (!result.ok || result.manifest.schemaVersion !== 2) return;
+    expect(result.manifest.images[0]?.thumbnailDataUrl).toBe('data:image/webp;base64,AQID');
+  });
+
+  it('rejects browser-local previews', () => {
+    const malformed = structuredClone(PACKAGE_FIXTURE.manifest);
+    malformed.images[0]!.thumbnailDataUrl = 'blob:http://localhost/private';
+    const result = parseAuthoringManifest(malformed);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors.join('\n')).toContain('transportable image data URL');
+  });
+});
+
+describe('parseAuthoringPackage', () => {
+  it('accepts a complete v2 package and detects it as an authoring source', () => {
+    const parsed = parseAuthoringPackage(PACKAGE_FIXTURE);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.package.snapshots).toHaveLength(3);
+
+    const source = parseAuthoringSource(PACKAGE_FIXTURE);
+    expect(source.ok).toBe(true);
+    if (!source.ok) return;
+    expect(source.source.kind).toBe('package');
+    expect(manifestFromAuthoringSource(source.source).schemaVersion).toBe(2);
+  });
+
+  it('rejects missing, orphaned and mismatched snapshots', () => {
+    const malformed = structuredClone(PACKAGE_FIXTURE);
+    malformed.snapshots = [
+      ...malformed.snapshots.filter(snapshot => snapshot.id !== 'intro-a'),
+      {
+        kind: 'slot',
+        id: 'orphan',
+        family: 'looks',
+        name: 'Orphan',
+        revision: 'orphan-revision',
+        values: {}
+      }
+    ];
+    const image = malformed.snapshots.find(snapshot => snapshot.id === 'image-a')!;
+    image.revision = 'wrong-revision';
+
+    const result = parseAuthoringPackage(malformed);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors.join('\n')).toContain('Missing slot:intro-a snapshot.');
+    expect(result.errors.join('\n')).toContain('Orphan slot:orphan snapshot.');
+    expect(result.errors.join('\n')).toContain('image:image-a snapshot revision');
+  });
+
+  it('rejects duplicate snapshot keys and non-transportable snapshot values', () => {
+    const malformed = structuredClone(PACKAGE_FIXTURE);
+    malformed.snapshots.push(structuredClone(malformed.snapshots[0]!));
+    malformed.snapshots[0]!.values = { url: 'blob:http://localhost/private' };
+    const result = parseAuthoringPackage(malformed);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors.join('\n')).toContain('contains a non-transportable URL');
+    expect(result.errors.join('\n')).toContain('duplicates (slot, "spectrum-a")');
   });
 });
