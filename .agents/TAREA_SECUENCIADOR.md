@@ -171,6 +171,32 @@ on-demand en orden correcto, drag con snap exacto y undo del par carril+cue.
 `npm test` 185/185 (14 nuevos en `catalog.test.ts`), lint sin errores, build
 correcto. Los 6 puntos de arriba quedaron cubiertos.
 
+### L4.1 · Navegación del catálogo para paquetes grandes — completado (2026-10-14)
+
+Con el paquete Clairvoyance real (230 imágenes, 330 slots, 0 escenas) el rail
+único hacía que `Images 230` dominara la lista y ocultara Scenes y las familias
+granulares: encontrar una familia exigía scrollear. Solo UI; el contrato y el
+formato del paquete no cambiaron.
+
+1. Barra de pestañas por tipo **All / Images / Scenes / Slots** (filtro de
+   vista, conteos no filtrados, la selección persiste en `localStorage`).
+2. Cada sección es un **acordeón plegable**; en All/Slots arrancan cerradas, así
+   cualquier familia queda a **≤2 clics** (pestaña + familia). `Inherit` sigue
+   dentro de su familia.
+3. Una búsqueda **fuerza abrir** todas las secciones con matches.
+4. Render **incremental** (`WindowedList`, 80 filas + `IntersectionObserver`)
+   para no montar de golpe 230 previews `data:image`; sin añadir dependencia de
+   virtualización.
+5. **0 escenas** se anuncia explícitamente («This package has 0 scenes.») en vez
+   de ocultar la sección.
+
+Verificado en navegador real con el paquete Clairvoyance: pestañas con conteos
+(All 560 · Images 230 · Scenes 0 · Slots 330); windowing 80→230 al scrollear;
+≤2 clics a Background Zoom (última familia); search auto-expande; `Add at
+playhead` y drag intactos. Lógica de agrupación/filtro sigue pura en
+`src/core/composition/catalog.ts`; la presentación vive en
+`CompositionCatalog.tsx`.
+
 ## L5 · Exportar `.vibrix-score` — completado
 
 Implementado en `src/core/composition/scorePackage.ts` (+ `scorePackage.test.ts`)

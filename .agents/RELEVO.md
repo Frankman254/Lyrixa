@@ -76,24 +76,32 @@ El usuario commiteó y sincronizó L3/L4/L5 en `main`; `main == origin/main` en
 - L4 `db49a23`: catálogo v2 (`catalog.ts` + test, `CompositionCatalog.tsx`).
 - L5 `0b90a01`: contenedor `.vibrix-score` (`scorePackage.ts` + test,
   `snapshotKey` exportada, `downloadVibrixScore` en `LyrixaEditorShell.tsx`).
-
-Quedan **sin commit** (aún no iniciado cuando se escribió lo de arriba, ahora
-local tras la revisión cruzada del agente de Vibrix, 2026-10-14):
-
-- P1 — `LyrixaEditorShell.tsx` + `CompositionCatalog.tsx`: al cambiar de
-  proyecto con `vibrixAuthoringRef`, la fuente anterior se descarta
+- **Frente B (revisión cruzada Vibrix) `ac0fa1c`:** P1 + P2 ya commiteados y
+  subidos. P1 — en `LyrixaEditorShell.tsx` + `CompositionCatalog.tsx`, al cambiar
+  de proyecto con `vibrixAuthoringRef` la fuente anterior se descarta
   síncronamente (`setVibrixAuthoringSource(null)`) y un flag
   `vibrixSourceLoading` deshabilita `Export score` hasta resolver IndexedDB.
-  Sin esto, catálogo y export podían correr con snapshots del proyecto previo.
-- P2 — `score.ts` + `scorePackage.ts`: los cues cuyo `trackId` pertenece a un
+  P2 — en `score.ts` + `scorePackage.ts`, los cues cuyo `trackId` pertenece a un
   track `enabled:false` se tratan como inactivos (igual que
-  `resolveVisualStateAt` de Vibrix): fuera del cierre, de `dependencies` y de
-  los issues de export. Una referencia rota bajo un carril apagado ya no
-  bloquea el export. Tests nuevos en `scorePackage.test.ts` (carril apagado
-  v2 y v1, referencia rota en carril apagado exporta limpio).
+  `resolveVisualStateAt` de Vibrix): fuera del cierre, `dependencies` e issues;
+  una referencia rota bajo un carril apagado ya no bloquea el export. Tests en
+  `scorePackage.test.ts`. `main == origin/main == ac0fa1c`.
 
-No descartar esos archivos. El usuario decidió continuar directamente en
-`main`; no crear otra rama salvo que lo pida.
+Queda **sin commit** (trabajo local de esta sesión):
+
+- **L4.1 · navegación del catálogo (solo UI)** —
+  `CompositionCatalog.tsx` + `CompositionCatalog.css`: pestañas **All / Images /
+  Scenes / Slots** (filtro de vista, conteos no filtrados, selección persistida
+  en `localStorage`), **acordeones plegables** por familia (arrancan cerradas en
+  All/Slots → cualquier familia a **≤2 clics**; el search fuerza abrir),
+  **render incremental** `WindowedList` (80 filas + `IntersectionObserver`, sin
+  dependencia nueva de virtualización) para que 230 previews `data:image` no
+  congelen el panel, y aviso explícito **«This package has 0 scenes.»**. No tocó
+  el contrato ni el formato del paquete; `catalog.ts` sigue puro (agrupar/filtrar).
+
+No descartar esos archivos. `.agents/*` **sí está versionado** (no es
+gitignore). El usuario decidió continuar directamente en `main`; no crear otra
+rama salvo que lo pida.
 
 ## Próximo movimiento
 
@@ -205,6 +213,31 @@ Play/seek/export offline con el mismo resultado.
    `~/Downloads/future-core-techcore-mix-clairvoyance.vibrix-authoring`; aparece
    el catálogo completo con previews y 10 carriles granulares; coloca un Spectrum
    (crea su carril) y deshaz con Cmd/Ctrl+Z.
+
+### Cómo probar L4.1 manualmente
+
+1. `npm run dev`, abre `/#/editor` → Compose → Catálogo → Import authoring →
+   `~/Downloads/future-core-techcore-mix-clairvoyance.vibrix-authoring`
+   (230 imágenes, 330 slots, 0 escenas).
+2. Ver la barra **All 560 / Images 230 / Scenes 0 / Slots 330** sobre la lista.
+   En **All** las 12 secciones (Images, Scenes, 10 familias) aparecen **cerradas**
+   con su contador — ya no hay un `IMAGES 230` que tape el resto.
+3. **≤2 clics:** pestaña Slots → clic en «Background Zoom» (última familia) → se
+   despliega con sus 3 slots + «Inherit Background Zoom». Ninguna familia queda a
+   más de 2 clics.
+4. **Windowing:** pestaña Images → el header «Images 230» se abre mostrando las
+   primeras 80; al scrollear hacia abajo crece de 80 en 80 hasta 230 sin congelar.
+   (`IntersectionObserver`, sin añadir dependencia de virtualización.)
+5. **0 escenas:** pestaña Scenes → mensaje explícito «This package has 0 scenes.»
+   en vez de esconder la sección.
+6. **Search auto-expande:** escribe en el buscador con acordeones cerrados; las
+   secciones con matches se abren solas. Limpiar y cambiar de manifiesto resetea
+   la búsqueda (ya existía).
+7. **No regresión:** el `+` de una tarjeta coloca el cue (inspector + Export
+   habilitado) y el drag sigue cayendo en su carril. La pestaña elegida persiste
+   entre recargas (`localStorage`).
+8. Verificación de la sesión: `npm test` 200/200, `npm run lint` 0 errores
+   (13 warnings preexistentes), `npm run build` correcto.
 
 ## Reglas del repo
 

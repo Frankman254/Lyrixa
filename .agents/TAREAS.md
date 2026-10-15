@@ -26,6 +26,7 @@ la idea, pero ya quedó detrás del contrato real de Vibrix.
 | Cues sostenidos sin `endTimeMs`                                    | Hecho en dominio (L2)         |
 | Carriles Image y granulares                                        | Hecho en timeline (L3)        |
 | Catálogo v2 (images/scenes/granular + preview + inherit)           | Hecho (L4)                    |
+| Navegación catálogo: pestañas + acordeones + lista grande (≤2 clics)| Hecho (L4.1, sin commit)      |
 | `inherit`                                                          | Hecho en catálogo (L4)        |
 | Export `.vibrix-score` autocontenido                               | Hecho (L5)                    |
 
