@@ -31,6 +31,7 @@ interface CompositionCatalogProps {
   currentTime: number;
   sourceKind?: VibrixAuthoringSource['kind'];
   sourceUnavailable?: boolean;
+  sourceLoading?: boolean;
   onAuthoringImport: (source: VibrixAuthoringSource) => Promise<void>;
   onScoreChange: (score: CompositionScore) => void;
   onSelectCue: (cueId: string | null) => void;
@@ -48,6 +49,7 @@ export function CompositionCatalog({
   currentTime,
   sourceKind,
   sourceUnavailable,
+  sourceLoading,
   onAuthoringImport,
   onScoreChange,
   onSelectCue,
@@ -208,7 +210,7 @@ export function CompositionCatalog({
         <button type="button" disabled={importing} onClick={() => inputRef.current?.click()}>
           {importing ? 'Importing…' : 'Import authoring'}
         </button>
-        <button type="button" onClick={onExportScore} disabled={score.cues.length === 0}>Export score</button>
+        <button type="button" onClick={onExportScore} disabled={score.cues.length === 0 || sourceLoading}>Export score</button>
         <input
           ref={inputRef}
           type="file"

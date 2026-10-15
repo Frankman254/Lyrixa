@@ -69,6 +69,10 @@ export function computeScoreClosure(
   const errors: string[] = [];
   const visited = new Set<string>();
   const queue: ClosureNode[] = [];
+  // A cue sitting on a disabled track never plays (same rule as Vibrix's
+  // resolveVisualStateAt), so it must not pull snapshots into the closure or
+  // block export on a reference that will never resolve.
+  const activeTrackIds = new Set(score.tracks.filter(track => track.enabled).map(track => track.id));
 
   const enqueue = (node: ClosureNode) => {
     const key = snapshotKey(node.kind, node.id);
@@ -80,12 +84,12 @@ export function computeScoreClosure(
   if (score.schemaVersion === 1) {
     // Legacy cues only reference slots (via slotId), never inherit or images.
     for (const cue of score.cues) {
-      if (!cue.enabled) continue;
+      if (!cue.enabled || !activeTrackIds.has(cue.trackId)) continue;
       enqueue({ kind: 'slot', id: cue.target.slotId });
     }
   } else {
     for (const cue of score.cues) {
-      if (!cue.enabled) continue;
+      if (!cue.enabled || !activeTrackIds.has(cue.trackId)) continue;
       if (cue.target.kind === 'inherit') continue;
       if (cue.target.kind === 'image') enqueue({ kind: 'image', id: cue.target.id });
       else enqueue({ kind: 'slot', id: cue.target.id });

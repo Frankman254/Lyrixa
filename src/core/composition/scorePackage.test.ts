@@ -128,6 +128,31 @@ describe('computeScoreClosure', () => {
     expect(result.snapshots).toEqual([]);
   });
 
+  it('ignores cues on a disabled track (matches Vibrix playback)', () => {
+    const muted = score([cue('c1', { kind: 'scene', family: 'scene', id: 'scene-a', revision: 'sa-1' })]);
+    muted.tracks[0] = { ...muted.tracks[0]!, enabled: false };
+    const result = computeScoreClosure(muted, MANIFEST, SNAPSHOTS);
+    expect(result.snapshots).toEqual([]);
+    expect(result.previews).toEqual([]);
+  });
+
+  it('drops a v1 cue whose legacy track is disabled', () => {
+    const result = computeScoreClosure(
+      {
+        schemaVersion: 1,
+        tracks: [{ id: 'scenes', name: 'Scene', kind: 'scene', order: 0, enabled: false, locked: false }],
+        cues: [{
+          id: 'c1', trackId: 'scenes', startTimeMs: 0, endTimeMs: 1000,
+          target: { kind: 'scene', family: 'scene', slotId: 'scene-a', slotRevision: 'sa-1' },
+          priority: 0, enabled: true
+        }]
+      },
+      MANIFEST,
+      SNAPSHOTS
+    );
+    expect(result.snapshots).toEqual([]);
+  });
+
   it('pulls the scene (and its bindings) through an image sceneSlotId', () => {
     const result = computeScoreClosure(
       score([cue('c1', { kind: 'image', family: 'image', id: 'img-a', revision: 'im-1' })]),
@@ -240,5 +265,18 @@ describe('buildVibrixScorePackage', () => {
       manifest: MANIFEST,
       source: { kind: 'package', package: PACKAGE_SOURCE }
     })).toThrow(VibrixScorePackageError);
+  });
+
+  it('exports when a broken reference sits on a disabled track', () => {
+    const muted = score([cue('c1', { kind: 'scene', family: 'scene', id: 'nope', revision: 'x' })]);
+    muted.tracks[0] = { ...muted.tracks[0]!, enabled: false };
+    const pkg = buildVibrixScorePackage({
+      project: makeProject(muted),
+      manifest: MANIFEST,
+      source: { kind: 'package', package: PACKAGE_SOURCE }
+    });
+    // The cue never plays, so it must neither block export nor appear as a dependency.
+    expect(pkg.envelope.dependencies).toEqual([]);
+    expect(pkg.snapshots).toEqual([]);
   });
 });

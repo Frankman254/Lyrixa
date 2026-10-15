@@ -5,6 +5,7 @@ import {
   DEFAULT_COMPOSITION_SCORE_V1,
   VIBRIX_GRANULAR_FAMILIES,
   VIBRIX_SLOT_FAMILIES,
+  type CompositionCue,
   type CompositionCueV1,
   type CompositionCueV2,
   type CompositionEasing,
@@ -113,7 +114,11 @@ export function getCompositionExportIssues(
   score: CompositionScore,
   manifest: VibrixAuthoringManifest | undefined
 ): string[] {
-  if (!score.cues.some(cue => cue.enabled)) return [];
+  // A cue on a disabled track never plays (Vibrix drops it in resolveVisualStateAt),
+  // so a broken reference under it must not block the export either.
+  const activeTrackIds = new Set(score.tracks.filter(track => track.enabled).map(track => track.id));
+  const isPlayed = (cue: CompositionCue) => cue.enabled && activeTrackIds.has(cue.trackId);
+  if (!score.cues.some(isPlayed)) return [];
   if (!manifest) return ['Import the Vibrix authoring manifest before exporting cues.'];
   const slots = new Map(manifest.slots.map(slot => [slot.id, slot]));
   const images = new Map(manifest.schemaVersion === 2
@@ -121,7 +126,7 @@ export function getCompositionExportIssues(
     : []);
 
   if (score.schemaVersion === 1) {
-    return score.cues.filter(cue => cue.enabled).flatMap(cue => {
+    return score.cues.filter(isPlayed).flatMap(cue => {
       const slot = slots.get(cue.target.slotId);
       if (!slot) return [`Cue "${cue.id}" references missing slot "${cue.target.slotId}".`];
       if (!slot.cueable) return [`Cue "${cue.id}" references non-cueable slot "${slot.name}".`];
@@ -129,7 +134,7 @@ export function getCompositionExportIssues(
       return [];
     });
   }
-  return score.cues.filter(cue => cue.enabled).flatMap(cue => {
+  return score.cues.filter(isPlayed).flatMap(cue => {
     if (cue.target.kind === 'inherit') return [];
     if (cue.target.kind === 'image') {
       const image = images.get(cue.target.id);
@@ -307,7 +312,12 @@ function collectV1Dependencies(
   score: StoredCompositionV1,
   manifest: VibrixAuthoringManifest | undefined
 ): VibrixScoreDependencyV1[] {
-  const referencedIds = new Set(score.cues.filter(cue => cue.enabled).map(cue => cue.target.slotId));
+  const activeTrackIds = new Set(score.tracks.filter(track => track.enabled).map(track => track.id));
+  const referencedIds = new Set(
+    score.cues
+      .filter(cue => cue.enabled && activeTrackIds.has(cue.trackId))
+      .map(cue => cue.target.slotId)
+  );
   return manifest?.slots
     .filter(slot => referencedIds.has(slot.id))
     .map(slot => ({ slotId: slot.id, family: slot.family, name: slot.name, revision: slot.revision })) ?? [];
@@ -318,10 +328,11 @@ function collectV2Dependencies(
   manifest: VibrixAuthoringManifest | undefined
 ): VibrixScoreDependencyV2[] {
   if (!manifest) return [];
+  const activeTrackIds = new Set(score.tracks.filter(track => track.enabled).map(track => track.id));
   const slotIds = new Set<string>();
   const imageIds = new Set<string>();
   score.cues.forEach(cue => {
-    if (!cue.enabled || cue.target.kind === 'inherit') return;
+    if (!cue.enabled || !activeTrackIds.has(cue.trackId) || cue.target.kind === 'inherit') return;
     if (cue.target.kind === 'image') imageIds.add(cue.target.id);
     else slotIds.add(cue.target.id);
   });

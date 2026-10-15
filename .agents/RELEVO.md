@@ -65,33 +65,32 @@ Prueba manual del 2026-10-13: se importó
 El proyecto Vibrix exportado contiene 0 escenas, así que sirve para cerrar L1
 pero no para probar todavía cues Scene.
 
-## Trabajo local que debes preservar
+## Commits reales y trabajo local actual
 
-El usuario integró L1/L2 a `main`; `main` y `origin/main` estaban en `58c2382`
-al iniciar L3. L3, L4 y L5 permanecen como cambios locales sin commit en esa
-misma rama:
+El usuario commiteó y sincronizó L3/L4/L5 en `main`; `main == origin/main` en
+`0b90a01`:
 
-- `src/core/composition/timeline.ts` y su test: orden, duración derivada, snap
-  y movimiento puro (`snapAndClampStartTimeMs` extraído y reutilizado);
-- `src/core/composition/catalog.ts` + `catalog.test.ts` (L4): placements puros,
-  agrupación del manifiesto, filtros, descriptores de drag y
-  `placeFromCatalog`/`ensureTimelineTrack`;
-- `SustainedCompositionTrackLane.tsx`: vista v2 sin handles de resize y ahora
-  con `onDragOver`/`onDrop` de placements (L4);
-- `CompositionCatalog.tsx`/`.css` (L4): catálogo v2 reescrito con secciones,
-  search, previews, `Add at playhead`, `inherit` e inspector v2;
-- `TimelineEditor.tsx`/`.css`: grupo plegable, altura/playhead y orden visual;
-- `docs/fixtures/l3-sustained-score.lyrixa.json`: proyecto manual de 30 s con
-  Scene, Image, Looks y Rain.
-- `src/core/composition/scorePackage.ts` + `scorePackage.test.ts` (L5):
-  `computeScoreClosure` (cierre transitivo por `bindings` de escena y
-  `sceneSlotId` de imagen, excluye `inherit` y `off`, valida revisión/familia)
-  y `buildVibrixScorePackage` (reusa el envelope de `score.ts`; emite
-  `snapshots`/`previews` sólo con fuente `.vibrix-authoring`, referencia pura en
-  lo demás). `authoringManifest.ts`: `snapshotKey` exportada para reutilizar.
-- `LyrixaEditorShell.tsx` (L5): `downloadVibrixScore` recibe la fuente de
-  authoría; descarga `<nombre>.vibrix-score` (contenedor) con paquete o
-  `<nombre>.vibrix-score.json` (envelope legacy) con manifiesto suelto.
+- L3 `b884174`: cues sostenidos, orden/duración derivada/snap (`timeline.ts` +
+  test, `SustainedCompositionTrackLane.tsx`, `TimelineEditor.tsx`,
+  `docs/fixtures/l3-sustained-score.lyrixa.json`).
+- L4 `db49a23`: catálogo v2 (`catalog.ts` + test, `CompositionCatalog.tsx`).
+- L5 `0b90a01`: contenedor `.vibrix-score` (`scorePackage.ts` + test,
+  `snapshotKey` exportada, `downloadVibrixScore` en `LyrixaEditorShell.tsx`).
+
+Quedan **sin commit** (aún no iniciado cuando se escribió lo de arriba, ahora
+local tras la revisión cruzada del agente de Vibrix, 2026-10-14):
+
+- P1 — `LyrixaEditorShell.tsx` + `CompositionCatalog.tsx`: al cambiar de
+  proyecto con `vibrixAuthoringRef`, la fuente anterior se descarta
+  síncronamente (`setVibrixAuthoringSource(null)`) y un flag
+  `vibrixSourceLoading` deshabilita `Export score` hasta resolver IndexedDB.
+  Sin esto, catálogo y export podían correr con snapshots del proyecto previo.
+- P2 — `score.ts` + `scorePackage.ts`: los cues cuyo `trackId` pertenece a un
+  track `enabled:false` se tratan como inactivos (igual que
+  `resolveVisualStateAt` de Vibrix): fuera del cierre, de `dependencies` y de
+  los issues de export. Una referencia rota bajo un carril apagado ya no
+  bloquea el export. Tests nuevos en `scorePackage.test.ts` (carril apagado
+  v2 y v1, referencia rota en carril apagado exporta limpio).
 
 No descartar esos archivos. El usuario decidió continuar directamente en
 `main`; no crear otra rama salvo que lo pida.

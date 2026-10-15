@@ -115,6 +115,7 @@ export function LyrixaEditorShell() {
   const [selectedCompositionCueId, setSelectedCompositionCueId] = useState<string | null>(null);
   const [vibrixAuthoringSource, setVibrixAuthoringSource] = useState<VibrixAuthoringSource | null>(null);
   const [vibrixSourceUnavailable, setVibrixSourceUnavailable] = useState(false);
+  const [vibrixSourceLoading, setVibrixSourceLoading] = useState(false);
   const [timelineFocusRequest, setTimelineFocusRequest] = useState<{ time: number; nonce: number } | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() =>
     safeGetLocalStorage('lyrixa_sidebar_collapsed') === '1'
@@ -128,12 +129,19 @@ export function LyrixaEditorShell() {
         ? { kind: 'manifest', manifest: project.vibrixManifest }
         : null);
       setVibrixSourceUnavailable(false);
+      setVibrixSourceLoading(false);
       return () => { cancelled = true; };
     }
+    // The reference belongs to the current project; drop the previous project's
+    // source synchronously so the catalog and export never run on a stale snapshot set.
+    setVibrixAuthoringSource(null);
+    setVibrixSourceUnavailable(false);
+    setVibrixSourceLoading(true);
     void getAuthoringSource(reference).then(source => {
       if (cancelled) return;
       setVibrixAuthoringSource(source);
       setVibrixSourceUnavailable(source === null);
+      setVibrixSourceLoading(false);
     });
     return () => { cancelled = true; };
   }, [project.vibrixAuthoringRef, project.vibrixManifest]);
@@ -642,6 +650,7 @@ export function LyrixaEditorShell() {
             currentTime={playbackTime}
             sourceKind={vibrixAuthoringSource?.kind}
             sourceUnavailable={vibrixSourceUnavailable}
+            sourceLoading={vibrixSourceLoading}
             onAuthoringImport={importVibrixAuthoring}
             onScoreChange={setComposition}
             onSelectCue={setSelectedCompositionCueId}

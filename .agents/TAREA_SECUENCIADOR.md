@@ -198,9 +198,12 @@ portable futura y no cambia los JSON internos.
 
 Antes de intercambiar el primer archivo, Vibrix debe aplicar el mismo
 vocabulario estricto: su parser no puede aceptar `intro-window` como
-`track.kind`, `feature-slot.family` o `inherit.family`. En la revisión del
-2026-10-13 su tipo `VibrixTimelineKind` todavía se construía con todas las
-familias y requería ese ajuste del lado lector.
+`track.kind`, `feature-slot.family` o `inherit.family`. La tarea quedó abierta
+en su cola: `LiveWallpaperAnimeGlitch/.agents/TAREA_COMPOSE_TIMELINE.md`
+(§V2.2b), y el formato del contenedor más la regla compartida de
+**carril apagado = cue inactivo** (cierre, dependencias e issues, verificada
+en Lyrixa el 2026-10-14) están documentados en
+`docs/features/VIBRIX_AUTHORING_CONTRACT.md`.
 
 El score real de salida coloca:
 
