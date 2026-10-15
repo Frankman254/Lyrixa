@@ -201,6 +201,9 @@ function parseSlot(raw: unknown, index: number, errors: string[]): VibrixManifes
   if (typeof raw.family !== 'string' || !FAMILY_SET.has(raw.family)) {
     errors.push(`${path}.family is not a supported Vibrix slot family.`);
   }
+  if (raw.thumbnailDataUrl !== undefined && !isTransportableImageDataUrl(raw.thumbnailDataUrl)) {
+    errors.push(`${path}.thumbnailDataUrl must be a transportable image data URL.`);
+  }
 
   let bindings: VibrixManifestSlot['bindings'];
   if (raw.bindings !== undefined) {
@@ -228,7 +231,10 @@ function parseSlot(raw: unknown, index: number, errors: string[]): VibrixManifes
     revision: raw.revision as string,
     ...(bindings ? { bindings } : {}),
     sceneBindable: raw.sceneBindable as boolean,
-    cueable: raw.cueable as boolean
+    cueable: raw.cueable as boolean,
+    ...(typeof raw.thumbnailDataUrl === 'string'
+      ? { thumbnailDataUrl: raw.thumbnailDataUrl }
+      : {})
   };
 }
 

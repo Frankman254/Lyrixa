@@ -13,6 +13,8 @@ import {
   parseAuthoringSource
 } from '../../core/composition/authoringManifest';
 import { resolveCueDependencyStatus, resolveCueSlotStatus } from '../../core/composition/slotStatus';
+import { resolveCompositionVisualState } from '../../core/composition/visualState';
+import type { CompositionVisualStateAtTime, ResolvedVisualActivation } from '../../core/composition/visualState';
 import { createCompositionCueId } from '../../core/composition/score';
 import type {
   CompositionCueV1,
@@ -170,6 +172,15 @@ export function CompositionCatalog({
   const selectedCueV1 = legacyScore?.cues.find(cue => cue.id === selectedCueId) ?? null;
   const selectedCueV2 = sustainedScore?.cues.find(cue => cue.id === selectedCueId) ?? null;
 
+  // Orientational "what is on right now" read-out for the authoring timeline.
+  // Pure fold over score + manifest; the authoritative render stays in Vibrix.
+  const visualAtPlayhead = useMemo(
+    () => (sustainedScore
+      ? resolveCompositionVisualState(sustainedScore, manifest, Math.round(currentTime * 1000))
+      : null),
+    [sustainedScore, manifest, currentTime]
+  );
+
   const handleFile = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = '';
@@ -283,6 +294,9 @@ export function CompositionCatalog({
         key={`${placement.kind === 'granular' ? placement.family : 'slot'}-${slot.id}`}
         name={slot.name}
         sub={slot.revision === 'empty' ? 'Empty slot' : slot.id}
+        thumbnail={slot.thumbnailDataUrl
+          ? <img src={slot.thumbnailDataUrl} alt="" draggable={false} />
+          : undefined}
         enabled={enabled}
         disabledHint={disabledHint ?? 'This project uses a legacy score; place objects after opening it in v2'}
         onDragStart={event => startPlacementDrag(event, placement)}
@@ -314,6 +328,10 @@ export function CompositionCatalog({
           onChange={handleFile}
         />
       </div>
+
+      {visualAtPlayhead && (
+        <VisualAtPlayhead state={visualAtPlayhead} />
+      )}
 
       {manifest ? (
         <div className="composition-catalog-meta">
@@ -594,6 +612,88 @@ function CatalogItem({
       </button>
     </article>
   );
+}
+
+/**
+ * A read-only, orientational view of what the score resolves to at the playhead.
+ * It mirrors Vibrix's own fold (contract §Preview del score en vivo) using only
+ * the manifest labels/thumbnails already imported — Lyrixa never renders shaders.
+ */
+function VisualAtPlayhead({ state }: { state: CompositionVisualStateAtTime }) {
+  return (
+    <section className="composition-visual-at-playhead" aria-label="Visual state at playhead">
+      <div className="composition-visual-head">
+        <span className="label-eyebrow">At playhead</span>
+        <strong>{formatPlayheadTime(state.timeMs)}</strong>
+      </div>
+
+      {!state.active ? (
+        <p className="composition-visual-empty">
+          Nothing placed yet — the score follows your manual Vibrix settings.
+        </p>
+      ) : (
+        <>
+          <div className="composition-visual-hero">
+            <VisualThumb activation={state.image} fallback="IMG" />
+            <div className="composition-visual-hero-text">
+              <strong>{state.image?.name ?? 'No image'}</strong>
+              <span>Scene: {state.scene?.name ?? 'none'}</span>
+            </div>
+          </div>
+
+          {state.lanes.length > 0 ? (
+            <ul className="composition-visual-lanes">
+              {state.lanes.map(lane => (
+                <li key={lane.family} className={lane.off ? 'off' : ''}>
+                  <span className="composition-visual-lane-label">
+                    {timelineTrackNameForKind(lane.family)}
+                  </span>
+                  {lane.off
+                    ? <span className="composition-visual-lane-state">off</span>
+                    : lane.activation
+                      ? (
+                        <span className="composition-visual-lane-value">
+                          {lane.activation.thumbnailDataUrl
+                            ? <img src={lane.activation.thumbnailDataUrl} alt="" draggable={false} />
+                            : <span className="composition-thumb-placeholder">
+                                {lane.activation.name.slice(0, 2).toUpperCase()}
+                              </span>}
+                          <span>
+                            {lane.activation.name}
+                            {lane.activation.fromScene ? <em> (scene)</em> : null}
+                          </span>
+                        </span>
+                      )
+                      : <span className="composition-visual-lane-state">missing in Vibrix</span>}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="composition-visual-empty">Only scene and image are set here.</p>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
+function VisualThumb({ activation, fallback }: { activation: ResolvedVisualActivation | null; fallback: string }) {
+  return (
+    <span className="composition-visual-thumb" aria-hidden="true">
+      {activation?.thumbnailDataUrl
+        ? <img src={activation.thumbnailDataUrl} alt="" draggable={false} />
+        : <span className="composition-thumb-placeholder">
+            {activation ? activation.name.slice(0, 2).toUpperCase() : fallback}
+          </span>}
+    </span>
+  );
+}
+
+function formatPlayheadTime(ms: number): string {
+  const totalSeconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 }
 
 function formatFileSize(bytes: number): string {

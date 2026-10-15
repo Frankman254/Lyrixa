@@ -1,6 +1,6 @@
 # Tarea — secuenciador Compose v2 (lado Lyrixa)
 
-> Actualizado el 2026-10-13. Diseño:
+> Actualizado el 2026-10-14. Diseño:
 > [../docs/03-vibrix-composition-sequencer.md](../docs/03-vibrix-composition-sequencer.md).
 > Contrato dueño:
 > `/Users/frankman254/Desktop/Personal-Projects/LiveWallpaperAnimeGlitch/docs/features/VIBRIX_AUTHORING_CONTRACT.md`.
@@ -197,8 +197,47 @@ playhead` y drag intactos. Lógica de agrupación/filtro sigue pura en
 `src/core/composition/catalog.ts`; la presentación vive en
 `CompositionCatalog.tsx`.
 
-## L5 · Exportar `.vibrix-score` — completado
+## L4.2 · «Visual at playhead» — completado (2026-10-14)
 
+Queja del autor: al editar la timeline se trabaja «a ciegas» — el catálogo no
+dice qué está activo en el cursor ni con qué pinta. Solución **orientativa** en
+Lyrixa (decisión acordada: el secuenciador sigue en Lyrixa; la autoridad visual
+es Vibrix, que nunca se duplica renderizando shaders aquí). La miniatura de slot
+con imagen real es un hueco de contrato que resuelve Vibrix (V2.4a); mientras
+tanto el panel ya funciona con nombres y placeholders.
+
+1. **Resolver puro** en `src/core/composition/visualState.ts`:
+   `resolveCompositionVisualState(score, manifest, timeMs)` repliega los cues
+   `startTimeMs <= t` (carriles y cues enabled) exactamente como el contrato:
+   escena aplica `bindings`; imagen fija imagen y arrastra su `sceneSlotId`;
+   `feature-slot` pisa su carril; `inherit` lo libera a la binding de escena.
+   Empates al ms en orden `TRACK_KIND_ORDER` (Scene → Image → granulares). Un
+   carril devuelto por escena se marca `fromScene`; `'off'` se marca `off`.
+   Sin manifest → inactivo. Sin cues activos → `active: false` (mensajes de
+   «Nothing placed yet»). Slots/imágenes inexistentes degradan a id desnudo.
+2. **Miniatura de slot en Lyrixa (plumbing V2.4a):** `VibrixManifestSlot`
+   admite `thumbnailDataUrl?` (aditivo, **no sube `schemaVersion`**); el parser
+   la valida como data URL transportable y rechaza `blob:`; `renderSlotCard` la
+   muestra si viene. Un manifiesto sin el campo sigue siendo válido (Vibrix aún
+   no la genera).
+3. **Panel** `VisualAtPlayhead` en `CompositionCatalog.tsx`: hero con imagen
+   actual (miniatura real del paquete) + escena; una línea por carril granular
+   resuelto (miniatura o iniciales, marca `(scene)` / `off` /
+   `missing in Vibrix`); tiempo del playhead formateado `m:ss`; tope de altura
+   con scroll interno.
+
+Pruebas: 9 casos en `visualState.test.ts` (pliegue, bindings on/off/absent,
+override sostenido → inherit, imagen→escena, empates ms, carril apagado,
+referencia inexistente, clamp de tiempo) + 2 en `authoringManifest.test.ts`
+(thumbnail de slot aceptada/rechazada). `npm test` 211/211.
+
+Verificado en navegador real con el paquete Clairvoyance (2026-10-14): en `0:00`
+el carril Spectrum muestra «Cardioid Bars» con iniciales; al colocar una imagen
+en el playhead el hero pasa de «No image» a su nombre **con su miniatura real**
+(data URL del paquete) y el undo lo revierte. Clairvoyance tiene 0 escenas, así
+que la rama escena+bindings se ejercita con los tests del fixture v2 inline.
+
+## L5 · Exportar `.vibrix-score` — completado
 Implementado en `src/core/composition/scorePackage.ts` (+ `scorePackage.test.ts`)
 y conectado al botón `Export score` de `LyrixaEditorShell.tsx`.
 

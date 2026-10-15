@@ -219,6 +219,24 @@ describe('parseAuthoringManifest', () => {
     if (result.ok) return;
     expect(result.errors.join('\n')).toContain('transportable image data URL');
   });
+
+  it('carries an optional slot thumbnail when present', () => {
+    const withThumb = structuredClone(PACKAGE_FIXTURE.manifest);
+    withThumb.slots[0]!.thumbnailDataUrl = 'data:image/png;base64,AAA';
+    const result = parseAuthoringManifest(withThumb);
+    expect(result.ok).toBe(true);
+    if (!result.ok || result.manifest.schemaVersion !== 2) return;
+    expect(result.manifest.slots[0]?.thumbnailDataUrl).toBe('data:image/png;base64,AAA');
+  });
+
+  it('rejects a non-transportable slot thumbnail', () => {
+    const malformed = structuredClone(PACKAGE_FIXTURE.manifest);
+    malformed.slots[0]!.thumbnailDataUrl = 'blob:http://localhost/effect';
+    const result = parseAuthoringManifest(malformed);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors.join('\n')).toContain('slots[0].thumbnailDataUrl');
+  });
 });
 
 describe('parseAuthoringPackage', () => {

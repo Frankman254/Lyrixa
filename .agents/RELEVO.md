@@ -1,6 +1,6 @@
 # Relevo de Lyrixa
 
-> Actualizado el 2026-10-13. Continúa por
+> Actualizado el 2026-10-14. Continúa por
 > [TAREAS.md](TAREAS.md) y
 > [TAREA_SECUENCIADOR.md](TAREA_SECUENCIADOR.md).
 
@@ -98,6 +98,22 @@ Queda **sin commit** (trabajo local de esta sesión):
   dependencia nueva de virtualización) para que 230 previews `data:image` no
   congelen el panel, y aviso explícito **«This package has 0 scenes.»**. No tocó
   el contrato ni el formato del paquete; `catalog.ts` sigue puro (agrupar/filtrar).
+
+- **L4.2 · «Visual at playhead» (Fase 0, orientativa)** —
+  nuevo **`src/core/composition/visualState.ts`** (resolver puro del pliegue
+  escena/imagen/carriles en un instante, espejo de la semántica del contrato) +
+  **`visualState.test.ts`** (9 casos). Panel `VisualAtPlayhead` en
+  `CompositionCatalog.tsx`/`.css` (hero imagen+escena, líneas por carril con
+  miniatura/iniciales, marca `(scene)`/`off`/`missing`, tiempo `m:ss`, tope con
+  scroll). **Plumbing V2.4a en Lyrixa:** `VibrixManifestSlot.thumbnailDataUrl?`
+  (aditivo, sin subir `schemaVersion`), validado como data URL en
+  `authoringManifest.ts` (+2 tests) y mostrado en `renderSlotCard`. Vibrix aún
+  no genera esas miniaturas: el panel funciona ya con nombres/placeholders.
+  `npm test` 211/211, lint 0 errores (13 warnings preexistentes), build correcto.
+  En el lado **Vibrix** (repo aparte, sin commit) se documentó el contrato
+  correspondiente: `docs/features/VIBRIX_AUTHORING_CONTRACT.md` (secciones
+  «Miniaturas de slot» y «Preview del score en vivo durante la edición»),
+  `.agents/TAREA_COMPOSE_TIMELINE.md` §V2.4 y `.agents/TAREAS.md`.
 
 No descartar esos archivos. `.agents/*` **sí está versionado** (no es
 gitignore). El usuario decidió continuar directamente en `main`; no crear otra
@@ -238,6 +254,28 @@ Play/seek/export offline con el mismo resultado.
    entre recargas (`localStorage`).
 8. Verificación de la sesión: `npm test` 200/200, `npm run lint` 0 errores
    (13 warnings preexistentes), `npm run build` correcto.
+
+### Cómo probar L4.2 manualmente
+
+1. `npm run dev`, abre `/#/editor` → Compose. El panel **«Visual at playhead»**
+   vive bajo los botones Importar/Exportar del catálogo, siempre visible.
+2. Con el paquete Clairvoyance cargado y un score con cues: mueve el playhead y
+   observa el pliegue en vivo — el hero muestra la **imagen actual con su
+   miniatura real** (data URL del paquete) y la escena; cada carril granular
+   resuelto aparece en una línea (miniatura o iniciales, y `(scene)` cuando
+   viene del binding de la escena).
+3. Coloca una imagen en el playhead (`+` en una tarjeta): el hero pasa de
+   «No image» al nombre de esa imagen al instante; Cmd/Ctrl+Z lo revierte.
+4. Sin ningún cue antes del cursor: «Nothing placed yet — the score follows your
+   manual Vibrix settings.» El score del fixture L3 (escenas + bindings) ejercita
+   el caso escena→carriles; Clairvoyance tiene 0 escenas, así que esa rama se
+   comprueba sobre todo vía `visualState.test.ts` (9 casos: bindings on/off/
+   ausente, override→inherit, imagen→escena, empates al ms, carril apagado).
+5. **Las miniaturas de slot con imagen real llegarán con V2.4a (lado Vibrix):**
+   hoy `renderSlotCard` ya muestra `slot.thumbnailDataUrl` si el manifiesto la
+   trae; como Vibrix aún no la emite, los slots salen con iniciales. Es un campo
+   **aditivo**: un paquete sin él sigue importando igual (2 nuevos tests de
+   parser: data URL aceptada, `blob:` rechazada).
 
 ## Reglas del repo
 
