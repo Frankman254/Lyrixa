@@ -38,6 +38,7 @@ import {
   sendProjectToLiveWallpaper
 } from '../../core/bridge/liveWallpaperTarget';
 import { createVibrixScoreEnvelope } from '../../core/composition/score';
+import { buildVibrixScorePackage, VibrixScorePackageError } from '../../core/composition/scorePackage';
 import { manifestFromAuthoringSource } from '../../core/composition/authoringManifest';
 import type { VibrixAuthoringSource } from '../../core/composition/types';
 import {
@@ -647,7 +648,7 @@ export function LyrixaEditorShell() {
             onExportScore={() => downloadVibrixScore({
               ...project,
               vibrixManifest: activeVibrixManifest
-            })}
+            }, vibrixAuthoringSource)}
             onClose={sidebarIsDrawer ? () => setSidebarDrawerOpen(false) : undefined}
           />
         ) : (
@@ -985,20 +986,36 @@ function formatPreviewTime(seconds: number): string {
   return `${minutes}:${String(secs).padStart(2, '0')}`;
 }
 
-function downloadVibrixScore(project: LyrixaProject): void {
+function downloadVibrixScore(
+  project: LyrixaProject,
+  source: VibrixAuthoringSource | null
+): void {
   try {
-    const envelope = createVibrixScoreEnvelope(project);
-    const blob = new Blob([JSON.stringify(envelope, null, 2)], { type: 'application/json' });
+    const packageSource = source?.kind === 'package' ? source : null;
+    let payload: string;
+    let fileName: string;
+    if (packageSource) {
+      const scorePackage = buildVibrixScorePackage({ project, manifest: project.vibrixManifest, source: packageSource });
+      payload = JSON.stringify(scorePackage, null, 2);
+      fileName = 'vibrix-score';
+    } else {
+      payload = JSON.stringify(createVibrixScoreEnvelope(project), null, 2);
+      fileName = 'vibrix-score.json';
+    }
+    const blob = new Blob([payload], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     const safeName = project.name.trim().replace(/[^a-z0-9-_]+/gi, '-').replace(/^-+|-+$/g, '') || 'lyrixa-score';
     link.href = url;
-    link.download = `${safeName}.vibrix-score.json`;
+    link.download = `${safeName}.${fileName}`;
     document.body.appendChild(link);
     link.click();
     link.remove();
     URL.revokeObjectURL(url);
   } catch (reason) {
-    window.alert(reason instanceof Error ? reason.message : 'Could not export Vibrix score.');
+    const issues = reason instanceof VibrixScorePackageError
+      ? reason.issues.join('\n')
+      : reason instanceof Error ? reason.message : 'Could not export Vibrix score.';
+    window.alert(issues);
   }
 }

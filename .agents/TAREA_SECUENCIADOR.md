@@ -171,16 +171,23 @@ on-demand en orden correcto, drag con snap exacto y undo del par carril+cue.
 `npm test` 185/185 (14 nuevos en `catalog.test.ts`), lint sin errores, build
 correcto. Los 6 puntos de arriba quedaron cubiertos.
 
-## L5 · Exportar `.vibrix-score`
+## L5 · Exportar `.vibrix-score` — completado
 
-1. Escribir el sobre de score schema 2 dentro del contenedor.
-2. Calcular el cierre de dependencias de los cues enabled: targets directos y
-   todo slot/escena que sus snapshots referencien. No basta con recopilar sólo
-   los ids escritos directamente en los cues.
-3. Incluir los snapshots de ese cierre y las miniaturas de las imágenes del
-   cierre. `inherit` no crea una dependencia.
-4. Validar que revisión y clase del snapshot coincidan con el target.
-5. Mantener `.vibrix-score.json` v1 como export legacy durante la transición.
+Implementado en `src/core/composition/scorePackage.ts` (+ `scorePackage.test.ts`)
+y conectado al botón `Export score` de `LyrixaEditorShell.tsx`.
+
+1. El contenedor reusa el sobre de `score.ts` (score schema 2 + deps directas +
+   metadatos) como `envelope`.
+2. `computeScoreClosure` recorre los cues enabled y expande el grafo: escena →
+   cada `bindings` (omitido `'off'`, exige familia coincidente), imagen →
+   `sceneSlotId` → escena → sus bindings, transitivamente. No se queda en los
+   ids escritos a mano.
+3. Trae los snapshots del cierre y las `thumbnailDataUrl` de las imágenes del
+   cierre; `inherit` no encola nada y los cues deshabilitados se ignoran.
+4. Valida que revisión y clase (familia) de cada snapshot alcancen el target; si
+   falta o difiere, `VibrixScorePackageError` con la lista de issues.
+5. Sin `.vibrix-authoring` (manifiesto suelto) degrada al envelope de
+   referencias y se conserva `.vibrix-score.json` v1 legacy intacto.
 
 El contenedor v1 es JSON autocontenido con `format`, `packageVersion`,
 `exportedAt`, el sobre `score`, `snapshots` y `previews`. No lleva originales de
@@ -215,10 +222,11 @@ espera al runtime de Vibrix; L1→L5 no están bloqueados.
 
 ## Siguiente archivo
 
-L4 quedó verificada en navegador real el 2026-10-14 (pasos en `RELEVO.md`).
-Continuar **L5** creando un módulo de export portátil en
-`src/core/composition/` (p. ej. `scorePackage.ts` + test): sobre score schema 2,
-cierre transitivo de snapshots (targets directos + lo que referencien, excluido
-`inherit`), previews del cierre, validación revisión/clase, y mantener el JSON
-`.vibrix-score.json` v1 como export legacy. Conectarlo después al botón
-`Export score` de `CompositionCatalog.tsx`.
+L5 quedó verificada en navegador real el 2026-10-14 (cierre transitivo,
+previews, herencia sin dependencia y envelope legacy intacto; pasos en
+`RELEVO.md`). El trabajo restante es del lado **Vibrix**:
+`src/features/composition/vibrixScore.ts` hoy sólo parsea el envelope plano
+(`app:'Lyrixa'` + `exportKind`), así que hay que enseñarle a reconocer
+`format:'vibrix-score'` + `packageVersion:1` con `snapshots`/`previews` y
+resolverlos por `kind:id`, además de endurecer el parser excluyendo
+`intro-window` de `track.kind`/`feature-slot.family`/`inherit.family`.

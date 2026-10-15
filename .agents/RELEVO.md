@@ -19,7 +19,7 @@ editores de slots ni transiciones internas de Vibrix.
 
 ## Estado comprobado
 
-El primer corte del secuenciador existe y **L1, L2, L3 y L4 están
+El primer corte del secuenciador existe y **L1, L2, L3, L4 y L5 están
 completados y verificados en el navegador**:
 
 - `src/core/composition/` define manifiesto, tracks, cues y scores v1/v2.
@@ -36,7 +36,10 @@ completados y verificados en el navegador**:
   vecinos; v2 no ofrece resize ni guarda `endTimeMs`.
 - La timeline v1 conserva su editor de intervalos y sus dos handles sin
   reinterpretar proyectos históricos.
-- Se exporta `.vibrix-score.json` con referencias, no snapshots portables.
+- Se exporta `.vibrix-score.json` con referencias (envelope legacy) cuando sólo
+  hay manifiesto suelto, y el contenedor autocontenido `.vibrix-score` cuando se
+  importó `.vibrix-authoring`: score + cierre transitivo de snapshots usados +
+  previews transportables (`src/core/composition/scorePackage.ts`).
 - El proyecto persiste `composition` y la referencia ligera al catálogo.
 - `project.composition` es una unión discriminada v1/v2. Los proyectos nuevos
   nacen en v2; la forma histórica sin `schemaVersion` se conserva como v1 con
@@ -46,11 +49,10 @@ completados y verificados en el navegador**:
 
 Vibrix ya avanzó a v2: exporta `.vibrix-authoring` con slots, imágenes,
 snapshots y previews; acepta score v2 con activaciones sostenidas e `inherit`.
-Lyrixa ya abre ese paquete, entiende el score v2, muestra/mueve cues y ahora
-(L4) los puebla desde el catálogo: imágenes, escenas, slots granulares e
-`inherit`, con previews, search, `Add at playhead` y drag al carril correcto.
-Sólo falta L5 (exportar contenedor `.vibrix-score` con snapshots y previews) y
-la integración real con Vibrix.
+Lyrixa ya abre ese paquete, entiende el score v2, muestra/mueve cues, los
+puebla desde el catálogo (L4) y exporta el contenedor `.vibrix-score`
+autocontenido (L5). Sólo falta la integración real con Vibrix (leer el
+contenedor y endurecer su parser).
 
 Revisión cruzada: Vibrix cerró W2 en `338c8e03` (sesión Compose y migración
 153). Su parser de score aún usa una unión
@@ -66,8 +68,8 @@ pero no para probar todavía cues Scene.
 ## Trabajo local que debes preservar
 
 El usuario integró L1/L2 a `main`; `main` y `origin/main` estaban en `58c2382`
-al iniciar L3. L3 y L4 permanecen como cambios locales sin commit en esa misma
-rama:
+al iniciar L3. L3, L4 y L5 permanecen como cambios locales sin commit en esa
+misma rama:
 
 - `src/core/composition/timeline.ts` y su test: orden, duración derivada, snap
   y movimiento puro (`snapAndClampStartTimeMs` extraído y reutilizado);
@@ -81,6 +83,15 @@ rama:
 - `TimelineEditor.tsx`/`.css`: grupo plegable, altura/playhead y orden visual;
 - `docs/fixtures/l3-sustained-score.lyrixa.json`: proyecto manual de 30 s con
   Scene, Image, Looks y Rain.
+- `src/core/composition/scorePackage.ts` + `scorePackage.test.ts` (L5):
+  `computeScoreClosure` (cierre transitivo por `bindings` de escena y
+  `sceneSlotId` de imagen, excluye `inherit` y `off`, valida revisión/familia)
+  y `buildVibrixScorePackage` (reusa el envelope de `score.ts`; emite
+  `snapshots`/`previews` sólo con fuente `.vibrix-authoring`, referencia pura en
+  lo demás). `authoringManifest.ts`: `snapshotKey` exportada para reutilizar.
+- `LyrixaEditorShell.tsx` (L5): `downloadVibrixScore` recibe la fuente de
+  authoría; descarga `<nombre>.vibrix-score` (contenedor) con paquete o
+  `<nombre>.vibrix-score.json` (envelope legacy) con manifiesto suelto.
 
 No descartar esos archivos. El usuario decidió continuar directamente en
 `main`; no crear otra rama salvo que lo pida.
@@ -127,17 +138,60 @@ Pruebas automáticas: `npm test` → 185/185 (36 en `src/core/composition/`, 14
 nuevos en `catalog.test.ts`); `npm run lint` → 0 errores (13 warnings
 preexistentes de hooks en `useLyrixaProject.ts`); `npm run build` → correcto.
 
-### Próximo paso: L5
+**L5 está verificada en el navegador y a escala (2026-10-14, sesión de relevo).**
 
-Exportar el contenedor `.vibrix-score` (score + cierre transitivo de snapshots
-utilizados + previews; validar revisión/clase vs target; `inherit` no crea
-dependencia; mantener `.vibrix-score.json` v1 legacy). Empezar en
-`src/core/composition/` (nuevo módulo de export portátil), luego el botón en el
-encabezado del catálogo / exportador actual.
+- Núcleo puro: 12 tests nuevos en `scorePackage.test.ts` cubren cierre
+  transitivo por `bindings`, parada en `off`, exclusión de `inherit` y cues
+  deshabilitados, imagen→`sceneSlotId`→escena→bindings, preview sólo para
+  imágenes del cierre con `thumbnailDataUrl`, degrades a referencia pura con
+  manifiesto suelto, y rechazo por revisión/familia/missing snapshot.
+- Navegador real (`/#/editor` → Compose → Export score) con un fixture
+  sintético escena→(spec-a, look-a, rain=off) e imagen→escena: el JSON
+  descargado trajo `format:'vibrix-score'`, `packageVersion:1`,
+  `selfContained:true`, 4 snapshots exactos (`scene-main`, `spec-a`, `look-a`,
+  `image-cover`), preview `data:image/...` de `image-cover`, y **cero fugas**
+  (`rain-a` por `off`, `spec-b` por cue deshabilitado, `image-raw` no
+  referenciado). El envelope interno conserva schema 2 y sólo deps directas.
+- Escala real: sobre `future-core-techcore-mix-clairvoyance.vibrix-authoring`
+  (9,7 MB, 560 snapshots, 0 escenas, 230 imágenes con `sceneSlotId:null`) el
+  builder cerró 3 imágenes sin arrastrar ninguna escena y previews todos
+  `data:image/` (ningún `blob:`/ruta local); un target inexistente lanza
+  `VibrixScorePackageError`.
 
-Antes del primer intercambio real, **endurecer el parser de score de Vibrix**
-(excluir `intro-window` de `track.kind`/`feature-slot.family`/`inherit.family`);
-es trabajo del lado Vibrix, ya anotado en la revisión cruzada.
+Pruebas finales de la sesión: `npm test` → 197/197 (48 en
+`src/core/composition/`); `npm run lint` → 0 errores; `npm run build` →
+correcto; `tsc --noEmit` limpio.
+
+### Próximo paso: Integración con Vibrix
+
+Lyrixa ya emite el contenedor. Falta el lado Vibrix: enseñar a
+`src/features/composition/vibrixScore.ts` a reconocer `format:'vibrix-score'`
+con `packageVersion` (hoy sólo parsea el envelope plano `app:'Lyrixa'` +
+`exportKind`), resolver `snapshots`/`previews` por `kind:id` en lugar de
+buscar en su store, y **endurecer el parser** excluyendo `intro-window` de
+`track.kind`/`feature-slot.family`/`inherit.family` (anotado en la revisión
+cruzada). Luego el primer intercambio real Clairvoyance → Vibrix y comprobar
+Play/seek/export offline con el mismo resultado.
+
+### Cómo probar L5 manualmente
+
+1. `npm run dev`, abre `/#/editor`.
+2. More → Import project → `docs/fixtures/l3-sustained-score.lyrixa.json`;
+   Catálogo → Import authoring → `~/Downloads/future-core-techcore-mix-clairvoyance.vibrix-authoring`.
+   Con sólo el manifiesto del fixture (sin paquete) → `Export score` descarga
+   `<proyecto>.vibrix-score.json` (envelope de referencias, comportamiento
+   legacy intacto).
+3. Con el paquete Clairvoyance cargado: coloca un cue de imagen (todas tienen
+   `sceneSlotId:null`) y pulsa `Export score` → descarga `<proyecto>.vibrix-score`.
+   `cat` del archivo: `format:'vibrix-score'`, `packageVersion:1`,
+   `selfContained:true`, `snapshots` = las imágenes usadas (sin escenas),
+   `previews` con `thumbnailDataUrl` `data:image/...`.
+4. Para ver el cierre transitivo: construye un `.vibrix-authoring` con una
+   escena que enlace `bindings` (como el fixture de `scorePackage.test.ts`),
+   colócala y exporta — el JSON debe traer escena + slots enlazados + imagen,
+   y excluir los enlazados a `'off'`.
+5. Un cue roto (target que ya no existe en el catálogo) muestra `window.alert`
+   con la lista de issues y no descarga nada.
 
 ### Cómo probar L4 manualmente
 

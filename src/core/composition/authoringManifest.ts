@@ -341,7 +341,7 @@ function validateSnapshots(
   }
 }
 
-function snapshotKey(kind: 'slot' | 'image', id: string): string {
+export function snapshotKey(kind: 'slot' | 'image', id: string): string {
   return `${kind}:${id}`;
 }
 
