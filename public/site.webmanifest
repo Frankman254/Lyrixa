@@ -1,0 +1,14 @@
+{
+  "name": "Lyrixa",
+  "short_name": "Lyrixa",
+  "description": "Edita y sincroniza letras con la música.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f0e0d",
+  "theme_color": "#f5b83d",
+  "icons": [
+    { "src": "/lyrixa-logo.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/lyrixa-logo-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/lyrixa-logo-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
