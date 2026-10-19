@@ -1,6 +1,7 @@
 # Lyrixa — qué hacer ahora
 
-> Actualizado el 2026-10-14 después de cerrar y verificar L5 en el navegador.
+> Actualizado el 2026-10-16: Vibrix ya lee el contenedor y el contrato pasa la
+> comprobación cruzada; falta el intercambio real con escenas.
 > Empieza por
 > [RELEVO.md](RELEVO.md) y usa
 > [TAREA_SECUENCIADOR.md](TAREA_SECUENCIADOR.md) como cola ejecutable.
@@ -26,10 +27,12 @@ la idea, pero ya quedó detrás del contrato real de Vibrix.
 | Cues sostenidos sin `endTimeMs`                                    | Hecho en dominio (L2)         |
 | Carriles Image y granulares                                        | Hecho en timeline (L3)        |
 | Catálogo v2 (images/scenes/granular + preview + inherit)           | Hecho (L4)                    |
-| Navegación catálogo: pestañas + acordeones + lista grande (≤2 clics)| Hecho (L4.1, sin commit)      |
-| «Visual at playhead» orientativo + plumbing miniatura de slot (V2.4a)| Hecho (L4.2, sin commit)      |
+| Navegación catálogo: pestañas + acordeones + lista grande (≤2 clics)| Hecho (L4.1, `202c719`)       |
+| «Visual at playhead» orientativo + plumbing miniatura de slot (V2.4a)| Hecho (L4.2, `571cc51`)       |
 | `inherit`                                                          | Hecho en catálogo (L4)        |
 | Export `.vibrix-score` autocontenido                               | Hecho (L5)                    |
+| Vibrix lee el contenedor y rechaza `intro-window`                  | Hecho en Vibrix (`9dec2b48`)  |
+| Carriles de letra sin solape en el preview                         | Hecho, sin commit             |
 
 ## Orden de implementación
 
@@ -68,22 +71,19 @@ la idea, pero ya quedó detrás del contrato real de Vibrix.
    real con fixture de escena+bindings, y cierre sin fugas + previews
    `data:image/` sobre el paquete real Clairvoyance (560 snapshots) (pasos en
    `RELEVO.md`).
-6. **Integración.** Enseñar a Vibrix a leer el contenedor (hoy su
-   `vibrixScore.ts` sólo parsea el envelope plano) y endurecer su parser
-   excluyendo `intro-window` de `track.kind`/`feature-slot.family`/
-   `inherit.family`. Entregar un paquete real y verificar Play, seek y
-   export offline con dos imágenes, dos escenas, Spectrum 2 e `inherit`.
+6. **Integración.** El lado Vibrix está hecho (`9dec2b48`: contenedor,
+   `snapshots`/`previews` por `kind:id`, `intro-window` rechazado). El
+   2026-10-16 un test cruzado pasó un paquete de Lyrixa por el parser real de
+   Vibrix: 7/7 cues `ready`. Falta entregar un paquete real y verificar Play,
+   seek y export offline con dos imágenes, dos escenas, Spectrum 2 e `inherit`.
 
 ### Siguiente paso concreto
 
-**L5** quedó verificada en navegador real el 2026-10-14 (cierre transitivo por
-`bindings`/`sceneSlotId`, previews transportables, herencia sin dependencia y
-envelope legacy intacto; pasos en `RELEVO.md`). Continúa con **Integración** en
-el repo Vibrix (`LiveWallpaperAnimeGlitch`): extender
-`src/features/composition/vibrixScore.ts` para aceptar
-`format:'vibrix-score'` + `packageVersion:1`, resolver los `snapshots`/`previews`
-del contenedor por `kind:id` en lugar de la store local, y endurecer el parser
-contra `intro-window`. Luego el primer intercambio real Clairvoyance → Vibrix.
+**Intercambio real.** Hace falta un `.vibrix-authoring` exportado de un
+proyecto Vibrix con ≥2 escenas (Clairvoyance tiene 0). Pasos en `RELEVO.md`
+§«Próximo paso: intercambio real con Vibrix». Mientras tanto, commitear los
+carriles de letra (`src/core/render/previewLanes.ts` + `ClipLyricsRenderer`)
+si el usuario lo pide.
 
 Contrato dueño:
 `/Users/frankman254/Desktop/Personal-Projects/LiveWallpaperAnimeGlitch/docs/features/VIBRIX_AUTHORING_CONTRACT.md`.

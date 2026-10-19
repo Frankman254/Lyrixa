@@ -173,7 +173,14 @@
 }
 
 .tl-sel-stats {
-  flex: 1;
+  /* Basis 0 + min-width 0: the stats line shrinks and ellipsizes instead of
+     wrapping the bar onto a second row — a bar whose height changes with the
+     selection moves every lane under the pointer between two clicks. */
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   font-size: 0.78rem;
   color: var(--fg-1);
 }
@@ -921,4 +928,39 @@
   }
 
   .tl-track-header.variant-thin { padding: 4px 8px; }
+}
+
+/* ── Box selection + inline text editing ─────────────── */
+.tl-marquee {
+  position: absolute;
+  z-index: 6;
+  pointer-events: none;
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  background: rgba(46, 122, 251, 0.18);
+  border-radius: 2px;
+}
+
+.tl-clip-editor {
+  position: absolute;
+  top: 4px;
+  z-index: 7;
+  min-height: calc(100% - 8px);
+  max-height: 160px;
+  padding: 6px 10px;
+  border: 2px solid #ffffff;
+  border-radius: 6px;
+  background: var(--bg-1);
+  color: var(--fg-0);
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  line-height: 1.3;
+  resize: none;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.6);
+  outline: none;
+}
+
+.tl-sel-hint {
+  font-size: 0.7rem;
+  opacity: 0.55;
 }

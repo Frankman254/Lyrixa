@@ -62,11 +62,14 @@ export function LyricClip({
   const handleKeyDown = useCallback(
     (e: ReactKeyboardEvent<HTMLDivElement>) => {
       if (e.key !== 'Enter' && e.key !== ' ') return;
+      // Enter on a clip that is already selected opens its text editor —
+      // the timeline's shortcut handler takes it from here.
+      if (e.key === 'Enter' && selected) return;
       e.preventDefault();
       e.stopPropagation();
       if (!locked && !clip.locked) onKeyboardSelect(clip.id);
     },
-    [clip.id, clip.locked, locked, onKeyboardSelect]
+    [clip.id, clip.locked, locked, onKeyboardSelect, selected]
   );
 
   let classes = 'tl-clip';

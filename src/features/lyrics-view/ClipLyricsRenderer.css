@@ -113,6 +113,15 @@
 .pos-top-right { right: 8%; top: 10%; text-align: right; }
 .pos-bottom-left { left: 8%; bottom: 10%; }
 .pos-bottom-right { right: 8%; bottom: 10%; text-align: right; }
+/* One band per text layer (see core/render/previewLanes.ts): the clip is
+   centered in its band; --clip-lane-fit (set by the renderer after measuring)
+   shrinks the font when wrapped text is taller than the band. */
+.pos-lane {
+  left: 50%;
+  top: var(--clip-lane-center, 50%);
+  transform: translate(-50%, -50%);
+  font-size: calc(var(--lyric-font-size, 2.5rem) * var(--clip-lane-fit, 1));
+}
 
 .tx-none { animation: none; }
 .tx-fade,

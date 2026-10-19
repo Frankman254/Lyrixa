@@ -26,6 +26,10 @@ interface TimelineLayerListProps {
   ) => void;
   /** Keyboard activation of a clip (Enter / Space). */
   onClipKeyboardSelect: (clipId: string) => void;
+  editingClipId: string | null;
+  onClipTextCommit: (clipId: string, text: string) => void;
+  onClipEditCancel: (clipId: string) => void;
+  onLaneDoubleClick: (layerId: string, clientX: number) => void;
   onLayerToggleVisible: (layerId: string) => void;
   onLayerToggleLocked: (layerId: string) => void;
   onLayerPositionChange: (layerId: string, preset: ClipPositionPreset) => void;
@@ -46,6 +50,10 @@ export const TimelineLayerList = memo(function TimelineLayerList({
   setLaneRef,
   onClipPointerDown,
   onClipKeyboardSelect,
+  editingClipId,
+  onClipTextCommit,
+  onClipEditCancel,
+  onLaneDoubleClick,
   onLayerToggleVisible,
   onLayerToggleLocked,
   onLayerPositionChange,
@@ -69,6 +77,10 @@ export const TimelineLayerList = memo(function TimelineLayerList({
           laneRef={setLaneRef(layer.id)}
           onClipPointerDown={onClipPointerDown}
           onClipKeyboardSelect={onClipKeyboardSelect}
+          editingClipId={editingClipId}
+          onClipTextCommit={onClipTextCommit}
+          onClipEditCancel={onClipEditCancel}
+          onLaneDoubleClick={onLaneDoubleClick}
           onLayerToggleVisible={onLayerToggleVisible}
           onLayerToggleLocked={onLayerToggleLocked}
           onLayerPositionChange={onLayerPositionChange}

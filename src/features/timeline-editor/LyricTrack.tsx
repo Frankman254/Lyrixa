@@ -1,6 +1,9 @@
 import type { LyricLayer } from '../../core/types/layer';
 import type { LyricClip as LyricClipModel, ClipPositionPreset } from '../../core/types/clip';
 import { LyricClip } from './LyricClip';
+import { ClipTextEditor } from './ClipTextEditor';
+import { timeToPx } from '../../core/timeline/clips';
+import { clipDuration } from '../../core/types/clip';
 import type { ClipPointerModifiers, DragMode } from './LyricClip';
 
 const POSITION_OPTIONS: { value: ClipPositionPreset; label: string }[] = [
@@ -37,6 +40,12 @@ interface LyricTrackProps {
   ) => void;
   /** Keyboard activation of a clip (Enter / Space). */
   onClipKeyboardSelect: (clipId: string) => void;
+  /** Clip whose text is open for typing, if it lives on this layer. */
+  editingClipId?: string | null;
+  onClipTextCommit: (clipId: string, text: string) => void;
+  onClipEditCancel: (clipId: string) => void;
+  /** Double-click on empty lane space: add a block there. */
+  onLaneDoubleClick: (layerId: string, clientX: number) => void;
   onLayerToggleVisible: (layerId: string) => void;
   onLayerToggleLocked: (layerId: string) => void;
   onLayerPositionChange: (layerId: string, preset: ClipPositionPreset) => void;
@@ -57,6 +66,10 @@ export function LyricTrack({
   laneRef,
   onClipPointerDown,
   onClipKeyboardSelect,
+  editingClipId = null,
+  onClipTextCommit,
+  onClipEditCancel,
+  onLaneDoubleClick,
   onLayerToggleVisible,
   onLayerToggleLocked,
   onLayerPositionChange,
@@ -78,6 +91,9 @@ export function LyricTrack({
   ].filter(Boolean).join(' ');
 
   const currentPos = layer.renderSettings?.positionPreset ?? 'center';
+  const editingClip = editingClipId
+    ? clips.find(c => c.id === editingClipId) ?? null
+    : null;
 
   return (
     <div className={trackClass}>
@@ -132,6 +148,10 @@ export function LyricTrack({
         ref={laneRef}
         data-layer-id={layer.id}
         style={{ width: `${totalWidth}px`, height: `${trackHeight}px` }}
+        onDoubleClick={(e) => {
+          if (layer.locked || (e.target as HTMLElement).closest('.tl-clip')) return;
+          onLaneDoubleClick(layer.id, e.clientX);
+        }}
       >
         {visibleClips.map(clip => (
           <LyricClip
@@ -145,6 +165,16 @@ export function LyricTrack({
             onKeyboardSelect={onClipKeyboardSelect}
           />
         ))}
+        {editingClip && (
+          <ClipTextEditor
+            key={editingClip.id}
+            initialText={editingClip.text}
+            left={timeToPx(editingClip.startTime, pxPerSecond)}
+            width={timeToPx(clipDuration(editingClip), pxPerSecond)}
+            onCommit={(text) => onClipTextCommit(editingClip.id, text)}
+            onCancel={() => onClipEditCancel(editingClip.id)}
+          />
+        )}
       </div>
     </div>
   );

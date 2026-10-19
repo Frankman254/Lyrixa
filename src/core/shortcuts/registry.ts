@@ -109,6 +109,56 @@ export const SHORTCUT_DEFINITIONS: ShortcutDefinition[] = [
     default: { key: 'Backspace' }
   },
 
+  {
+    id: 'clip.insert',
+    label: 'Insert block at playhead',
+    description: 'Adds an empty block on the active layer and opens it for typing. Double-click an empty lane does the same at that spot.',
+    group: 'Clip',
+    default: { key: 'n' }
+  },
+  {
+    id: 'clip.editText',
+    label: 'Edit text of selected clip',
+    description: 'Opens the selected clip for typing. Double-click a clip does the same.',
+    group: 'Clip',
+    default: { key: 'Enter' }
+  },
+  {
+    id: 'clip.selectLinked',
+    label: 'Add linked lines to selection',
+    description: 'Selects the same lyric line on the other layers (translation, romanization).',
+    group: 'Clip',
+    default: { key: 'l' }
+  },
+  {
+    id: 'clip.split',
+    label: 'Split at playhead',
+    description: 'Cuts the selected clips (or the active layer\'s clip under the playhead) in two at the playhead.',
+    group: 'Clip',
+    default: { key: 's' }
+  },
+  {
+    id: 'clip.merge',
+    label: 'Merge selected clips',
+    description: 'Joins the selected clips of each layer into one line.',
+    group: 'Clip',
+    default: { key: 'j' }
+  },
+  {
+    id: 'clip.trimStart',
+    label: 'Start to playhead',
+    description: 'Moves the start of the selected clips (or the active layer\'s clip under the playhead) to the playhead.',
+    group: 'Clip',
+    default: { key: 'q' }
+  },
+  {
+    id: 'clip.trimEnd',
+    label: 'End to playhead',
+    description: 'Moves the end of the selected clips (or the active layer\'s clip under the playhead) to the playhead.',
+    group: 'Clip',
+    default: { key: 'w' }
+  },
+
   // ── General ───────────────────────────────────────────────────
   {
     id: 'project.undo',

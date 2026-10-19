@@ -261,14 +261,13 @@ portable futura y no cambia los JSON internos.
 
 ## Integración compartida
 
-Antes de intercambiar el primer archivo, Vibrix debe aplicar el mismo
-vocabulario estricto: su parser no puede aceptar `intro-window` como
-`track.kind`, `feature-slot.family` o `inherit.family`. La tarea quedó abierta
-en su cola: `LiveWallpaperAnimeGlitch/.agents/TAREA_COMPOSE_TIMELINE.md`
-(§V2.2b), y el formato del contenedor más la regla compartida de
-**carril apagado = cue inactivo** (cierre, dependencias e issues, verificada
-en Lyrixa el 2026-10-14) están documentados en
-`docs/features/VIBRIX_AUTHORING_CONTRACT.md`.
+Vibrix ya aplica el vocabulario estricto: desde `9dec2b48` su parser rechaza
+`intro-window` como `track.kind`, `feature-slot.family` e `inherit.family`, y
+lee el contenedor `.vibrix-score` con la regla compartida de **carril apagado
+= cue inactivo**. Todo está documentado en
+`docs/features/VIBRIX_AUTHORING_CONTRACT.md`. El 2026-10-16 un test cruzado
+pasó el paquete de Lyrixa por `parseVibrixScoreDocument` + `reviewVibrixScore`
+de Vibrix: sin errores y 7/7 cues `ready`.
 
 El score real de salida coloca:
 
@@ -290,11 +289,6 @@ espera al runtime de Vibrix; L1→L5 no están bloqueados.
 
 ## Siguiente archivo
 
-L5 quedó verificada en navegador real el 2026-10-14 (cierre transitivo,
-previews, herencia sin dependencia y envelope legacy intacto; pasos en
-`RELEVO.md`). El trabajo restante es del lado **Vibrix**:
-`src/features/composition/vibrixScore.ts` hoy sólo parsea el envelope plano
-(`app:'Lyrixa'` + `exportKind`), así que hay que enseñarle a reconocer
-`format:'vibrix-score'` + `packageVersion:1` con `snapshots`/`previews` y
-resolverlos por `kind:id`, además de endurecer el parser excluyendo
-`intro-window` de `track.kind`/`feature-slot.family`/`inherit.family`.
+No queda código pendiente en ninguno de los dos lados. El siguiente paso es la
+prueba real de arriba, con un `.vibrix-authoring` que tenga escenas. Pasos en
+`RELEVO.md` §«Próximo paso: intercambio real con Vibrix».

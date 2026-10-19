@@ -148,6 +148,51 @@ export function getClipsAfterTime(
   return getSelectableClips(clips, layers).filter(c => c.startTime >= time);
 }
 
+export interface TimeBox {
+  startTime: number;
+  endTime: number;
+  /** Layers the box crosses. */
+  layerIds: Iterable<string>;
+}
+
+/**
+ * Selectable clips touched by a box drawn over the timeline: on one of the
+ * crossed layers and overlapping [startTime, endTime] at all. Touching is
+ * enough, as in any DAW — a box doesn't have to swallow a clip whole.
+ */
+export function getClipsInBox(
+  clips: ReadonlyArray<LyricClip>,
+  layers: ReadonlyArray<LyricLayer>,
+  box: TimeBox
+): LyricClip[] {
+  const from = Math.min(box.startTime, box.endTime);
+  const to = Math.max(box.startTime, box.endTime);
+  const crossed = new Set(box.layerIds);
+  return getSelectableClips(clips, layers).filter(c =>
+    crossed.has(c.layerId) && c.startTime <= to && c.endTime >= from
+  );
+}
+
+/**
+ * The selection plus every selectable clip carrying the same lyric line on
+ * another layer (same `sourceId`): the original, its romanization and its
+ * translations go together. Clips without a `sourceId` bring nobody along.
+ */
+export function withLinkedClips(
+  clips: ReadonlyArray<LyricClip>,
+  layers: ReadonlyArray<LyricLayer>,
+  ids: Iterable<string>
+): Set<string> {
+  const out = new Set(ids);
+  const lines = new Set<string>();
+  for (const c of clips) if (out.has(c.id) && c.sourceId) lines.add(c.sourceId);
+  if (lines.size === 0) return out;
+  for (const c of getSelectableClips(clips, layers)) {
+    if (c.sourceId && lines.has(c.sourceId)) out.add(c.id);
+  }
+  return out;
+}
+
 export interface SelectionBounds {
   count: number;
   startTime: number;

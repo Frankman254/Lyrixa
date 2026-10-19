@@ -13,8 +13,18 @@ import {
   shiftClips,
   getSelectableClips,
   getClipsAfterTime,
-  getSelectionBounds
+  getClipsInBox,
+  getSelectionBounds,
+  withLinkedClips
 } from '../../core/timeline/clipSelection';
+import {
+  applyPlayheadEdit,
+  insertClipsAt,
+  linesFromPastedText,
+  mergeClips,
+  setClipText,
+  type PlayheadEdit
+} from '../../core/timeline/clipEditing';
 import { duplicateClipSelection } from '../../core/timeline/duplicateClips';
 import { TimelinePlayhead } from './TimelinePlayhead';
 import { TimelineAudioLanes } from './TimelineAudioLanes';
@@ -83,6 +93,39 @@ interface DragState {
   initialClips: LyricClipModel[];
 }
 
+/** In-progress box selection. Coordinates are lane-container pixels, so the
+ *  box stays anchored to the content if the view scrolls mid-drag. */
+interface MarqueeState {
+  pointerId: number;
+  startX: number;
+  startY: number;
+  /** Shift / Cmd / Ctrl: add to the selection instead of replacing it. */
+  additive: boolean;
+  base: Set<string>;
+  /** False until the pointer travels far enough to tell a drag from a click. */
+  active: boolean;
+}
+
+interface MarqueeRect {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+const MARQUEE_THRESHOLD_PX = 4;
+/** Two presses on the same clip this close together open it for typing. A
+ *  `dblclick` listener can't do it: a clip press captures the pointer on the
+ *  lane container, so the browser retargets the click events there. */
+const DOUBLE_PRESS_MS = 400;
+
+function isEditableTarget(target: EventTarget | null): boolean {
+  const el = target as HTMLElement | null;
+  if (!el) return false;
+  const tag = el.tagName;
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable;
+}
+
 const TRACK_HEIGHT = 64;
 const MASTER_WAVEFORM_HEIGHT = 96;
 const RULER_HEIGHT = 28;
@@ -128,6 +171,8 @@ export function TimelineEditor({
   const [scrollMetrics, setScrollMetrics] = useState({ scrollLeft: 0, clientWidth: 0 });
   const [minimapVisible, setMinimapVisible] = useState(true);
   const [compositionExpanded, setCompositionExpanded] = useState(true);
+  const [editingClipId, setEditingClipId] = useState<string | null>(null);
+  const [marquee, setMarquee] = useState<MarqueeRect | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const laneContainerRef = useRef<HTMLDivElement>(null);
@@ -138,6 +183,18 @@ export function TimelineEditor({
   const selectedIdsRef = useRef<Set<string>>(selectedClipIds);
   const lastSelectedClipIdRef = useRef<string | null>(null);
   const snapRef = useRef(snapSeconds);
+  const marqueeRef = useRef<MarqueeState | null>(null);
+  // A box drag ends with a click on the lane; that click must not seek and
+  // wipe the selection the box just made.
+  const suppressClickRef = useRef(false);
+  // A block inserted for typing that the user abandons empty is removed.
+  const freshInsertRef = useRef<string | null>(null);
+  const lastClipPressRef = useRef<{ clipId: string; at: number } | null>(null);
+  // When a double press on a clip opened its editor; the browser's dblclick
+  // that follows lands on the lane and must not insert a new block there.
+  const clipDoublePressAtRef = useRef(-Infinity);
+  const currentTimeRef = useRef(currentTime);
+  useEffect(() => { currentTimeRef.current = currentTime; }, [currentTime]);
   // Stable ref so the keyboard handler can call onPlayToggle without stale closure.
   const onPlayToggleRef = useRef(onPlayToggle);
   useEffect(() => { onPlayToggleRef.current = onPlayToggle; }, [onPlayToggle]);
@@ -198,6 +255,8 @@ export function TimelineEditor({
     selectedLayerId && layers.some(layer => layer.id === selectedLayerId)
       ? selectedLayerId
       : sortedLayers[0]?.id ?? null;
+  const activeLayerIdRef = useRef(effectiveSelectedLayerId);
+  useEffect(() => { activeLayerIdRef.current = effectiveSelectedLayerId; }, [effectiveSelectedLayerId]);
 
   const clipsByLayer = useMemo(() => {
     const map = new Map<string, LyricClipModel[]>();
@@ -329,19 +388,23 @@ export function TimelineEditor({
    * Uses the SCROLL CONTAINER rect (scrollRef) which is stable in viewport
    * coords — see getTimelinePointerTime for the full explanation.
    */
-  const handleSeekClick = useCallback((e: React.MouseEvent) => {
+  const timeAtClientX = useCallback((clientX: number): number | null => {
     const rect = scrollRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const time = getTimelinePointerTime({
-      clientX: e.clientX,
+    if (!rect) return null;
+    return getTimelinePointerTime({
+      clientX,
       scrollContainerRect: rect,
       scrollLeft: scrollRef.current?.scrollLeft ?? 0,
       pxPerSecond,
       headerWidth,
       duration: effectiveDuration
     });
-    onSeek(time);
-  }, [pxPerSecond, headerWidth, effectiveDuration, onSeek]);
+  }, [pxPerSecond, headerWidth, effectiveDuration]);
+
+  const handleSeekClick = useCallback((e: React.MouseEvent) => {
+    const time = timeAtClientX(e.clientX);
+    if (time != null) onSeek(time);
+  }, [timeAtClientX, onSeek]);
 
   const handleRulerClick = (e: React.MouseEvent<HTMLDivElement>) => {
     handleSeekClick(e);
@@ -404,6 +467,179 @@ export function TimelineEditor({
     clearSelection();
   }, [clearSelection, onClipsChange]);
 
+  /** Split / Start / End at the playhead (see `applyPlayheadEdit`). */
+  const playheadEdit = useCallback((edit: PlayheadEdit) => {
+    const { clips: nextClips, affectedIds } = applyPlayheadEdit(clipsRef.current, layersRef.current, {
+      edit,
+      time: currentTimeRef.current,
+      selectedIds: selectedIdsRef.current,
+      activeLayerId: activeLayerIdRef.current,
+      idPrefix: `cut-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`
+    });
+    if (affectedIds.length === 0) return;
+    clipsRef.current = nextClips;
+    onClipsChange(nextClips);
+    setSelectedClipIds(new Set(affectedIds));
+    lastSelectedClipIdRef.current = affectedIds[affectedIds.length - 1] ?? null;
+  }, [onClipsChange]);
+
+  const mergeSelected = useCallback(() => {
+    const editable = new Set(
+      getSelectableClips(clipsRef.current, layersRef.current, { requireVisible: false })
+        .filter(clip => selectedIdsRef.current.has(clip.id))
+        .map(clip => clip.id)
+    );
+    const { clips: nextClips, mergedIds } = mergeClips(clipsRef.current, editable);
+    if (mergedIds.length === 0) return;
+    clipsRef.current = nextClips;
+    onClipsChange(nextClips);
+    setSelectedClipIds(new Set(mergedIds));
+    lastSelectedClipIdRef.current = mergedIds[mergedIds.length - 1] ?? null;
+  }, [onClipsChange]);
+
+  const selectLinked = useCallback(() => {
+    if (selectedIdsRef.current.size === 0) return;
+    setSelectedClipIds(withLinkedClips(clipsRef.current, layersRef.current, selectedIdsRef.current));
+  }, []);
+
+  /** Scroll horizontally just enough to show `time` when it is off-screen. */
+  const revealTime = useCallback((time: number) => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const px = headerWidth + time * pxPerSecond;
+    if (px < el.scrollLeft + headerWidth || px > el.scrollLeft + el.clientWidth - 280) {
+      el.scrollLeft = scrollLeftForCenteredTime(time, pxPerSecond, el.clientWidth, headerWidth);
+    }
+  }, [headerWidth, pxPerSecond]);
+
+  /** Add one block per line on `layerId` from `time`; they arrive selected. */
+  const insertBlocks = useCallback((layerId: string, time: number, lines: string[]): string[] => {
+    const layer = layersRef.current.find(l => l.id === layerId);
+    if (!layer || layer.locked) return [];
+    const { clips: nextClips, insertedIds } = insertClipsAt(clipsRef.current, lines, {
+      layerId,
+      time,
+      trackDuration: effectiveDuration,
+      idPrefix: `manual-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`
+    });
+    if (insertedIds.length === 0) return [];
+    clipsRef.current = nextClips;
+    onClipsChange(nextClips);
+    setSelectedLayerId(layerId);
+    setSelectedClipIds(new Set(insertedIds));
+    lastSelectedClipIdRef.current = insertedIds[insertedIds.length - 1] ?? null;
+    revealTime(time);
+    return insertedIds;
+  }, [effectiveDuration, onClipsChange, revealTime]);
+
+  const insertBlockForTyping = useCallback((layerId: string | null, time: number) => {
+    if (!layerId) return;
+    const [id] = insertBlocks(layerId, time, ['']);
+    if (!id) return;
+    freshInsertRef.current = id;
+    setEditingClipId(id);
+  }, [insertBlocks]);
+
+  const removeClip = useCallback((clipId: string) => {
+    const nextClips = clipsRef.current.filter(clip => clip.id !== clipId);
+    if (nextClips.length === clipsRef.current.length) return;
+    clipsRef.current = nextClips;
+    onClipsChange(nextClips);
+  }, [onClipsChange]);
+
+  const commitClipText = useCallback((clipId: string, text: string) => {
+    setEditingClipId(null);
+    const fresh = freshInsertRef.current === clipId;
+    freshInsertRef.current = null;
+    const trimmed = text.trim();
+    if (fresh && !trimmed) {
+      removeClip(clipId);
+      return;
+    }
+    const target = clipsRef.current.find(clip => clip.id === clipId);
+    if (!target) return;
+    const updated = setClipText(target, trimmed);
+    if (updated === target) return;
+    const nextClips = clipsRef.current.map(clip => (clip.id === clipId ? updated : clip));
+    clipsRef.current = nextClips;
+    onClipsChange(nextClips);
+  }, [onClipsChange, removeClip]);
+
+  const cancelClipEdit = useCallback((clipId: string) => {
+    setEditingClipId(null);
+    if (freshInsertRef.current === clipId) removeClip(clipId);
+    freshInsertRef.current = null;
+  }, [removeClip]);
+
+  const requestClipEdit = useCallback((clipId: string) => {
+    const clip = clipsRef.current.find(c => c.id === clipId);
+    if (!clip) return;
+    setSelectedLayerId(clip.layerId);
+    setSelectedClipIds(new Set([clipId]));
+    lastSelectedClipIdRef.current = clipId;
+    freshInsertRef.current = null;
+    setEditingClipId(clipId);
+  }, []);
+
+  const handleLaneDoubleClick = useCallback((layerId: string, clientX: number) => {
+    if (performance.now() - clipDoublePressAtRef.current < DOUBLE_PRESS_MS) return;
+    const time = timeAtClientX(clientX);
+    if (time != null) insertBlockForTyping(layerId, time);
+  }, [insertBlockForTyping, timeAtClientX]);
+
+  // ── Box selection ──────────────────────────────────────────────
+  const handleTracksPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    suppressClickRef.current = false;
+    if (e.button !== 0) return;
+    const target = e.target as HTMLElement;
+    if (!target.closest('.tl-track-lane') || target.closest('.tl-clip, .tl-clip-editor')) return;
+    const container = laneContainerRef.current?.getBoundingClientRect();
+    if (!container) return;
+    marqueeRef.current = {
+      pointerId: e.pointerId,
+      startX: e.clientX - container.left,
+      startY: e.clientY - container.top,
+      additive: e.shiftKey || e.metaKey || e.ctrlKey,
+      base: new Set(selectedIdsRef.current),
+      active: false
+    };
+  };
+
+  const updateMarquee = useCallback((state: MarqueeState, clientX: number, clientY: number) => {
+    const containerEl = laneContainerRef.current;
+    if (!containerEl) return;
+    const container = containerEl.getBoundingClientRect();
+    const x = clientX - container.left;
+    const y = clientY - container.top;
+    if (!state.active) {
+      if (Math.hypot(x - state.startX, y - state.startY) < MARQUEE_THRESHOLD_PX) return;
+      state.active = true;
+      // Capture only once it really is a drag: capturing on pointerdown would
+      // retarget the click of a plain seek to the container.
+      try { containerEl.setPointerCapture(state.pointerId); } catch { /* ignore */ }
+    }
+    const left = Math.min(state.startX, x);
+    const top = Math.min(state.startY, y);
+    const right = Math.max(state.startX, x);
+    const bottom = Math.max(state.startY, y);
+    setMarquee({ left, top, width: right - left, height: bottom - top });
+
+    const layerIds: string[] = [];
+    for (const [layerId, el] of laneRefs.current) {
+      const rect = el.getBoundingClientRect();
+      const laneTop = rect.top - container.top;
+      const laneBottom = rect.bottom - container.top;
+      if (laneBottom >= top && laneTop <= bottom) layerIds.push(layerId);
+    }
+    const toTime = (px: number) => Math.max(0, pxToTime(px - headerWidth, pxPerSecond));
+    const hit = getClipsInBox(clipsRef.current, layersRef.current, {
+      startTime: toTime(left),
+      endTime: toTime(right),
+      layerIds
+    }).map(clip => clip.id);
+    setSelectedClipIds(state.additive ? new Set([...state.base, ...hit]) : new Set(hit));
+  }, [headerWidth, pxPerSecond]);
+
   const nudgeSelected = useCallback(
     (delta: number) => {
       const ids = Array.from(selectedIdsRef.current);
@@ -449,6 +685,18 @@ export function TimelineEditor({
       const clip = clipsRef.current.find(c => c.id === clipId);
       if (!clip) return;
       setSelectedLayerId(clip.layerId);
+
+      if (mode === 'move' && !modifiers.additive && !modifiers.range) {
+        const now = performance.now();
+        const last = lastClipPressRef.current;
+        if (last && last.clipId === clipId && now - last.at < DOUBLE_PRESS_MS) {
+          lastClipPressRef.current = null;
+          clipDoublePressAtRef.current = now;
+          requestClipEdit(clipId);
+          return;
+        }
+        lastClipPressRef.current = { clipId, at: now };
+      }
 
       if ((modifiers.additive || modifiers.range) && mode === 'move') {
         setSelectedClipIds(prev => {
@@ -526,7 +774,7 @@ export function TimelineEditor({
         /* ignore — browsers without capture support */
       }
     },
-    []
+    [requestClipEdit]
   );
 
   // Keyboard activation of a clip (Enter / Space on the focused clip):
@@ -541,6 +789,11 @@ export function TimelineEditor({
 
   const handlePointerMove = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
+      const box = marqueeRef.current;
+      if (box && box.pointerId === e.pointerId) {
+        updateMarquee(box, e.clientX, e.clientY);
+        return;
+      }
       const state = dragStateRef.current;
       if (!state || state.pointerId !== e.pointerId) return;
       const deltaPx = e.clientX - state.initialClientX;
@@ -603,10 +856,20 @@ export function TimelineEditor({
       // Keep moveClip available for future strict-snap moves of single clips.
       void moveClip;
     },
-    [pxPerSecond, effectiveDuration, snapSeconds, onClipsChange, findLayerAtY, hoveredLayerId]
+    [pxPerSecond, effectiveDuration, snapSeconds, onClipsChange, findLayerAtY, hoveredLayerId, updateMarquee]
   );
 
   const handlePointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    const box = marqueeRef.current;
+    if (box && box.pointerId === e.pointerId) {
+      marqueeRef.current = null;
+      if (box.active) {
+        suppressClickRef.current = true;
+        setMarquee(null);
+        try { laneContainerRef.current?.releasePointerCapture(e.pointerId); } catch { /* ignore */ }
+      }
+      return;
+    }
     const state = dragStateRef.current;
     if (!state || state.pointerId !== e.pointerId) return;
 
@@ -637,7 +900,11 @@ export function TimelineEditor({
   }, [hoveredLayerId, onClipsChange]);
 
   const handleLaneBackgroundClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if ((e.target as HTMLElement).closest('.tl-clip')) return;
+    if (suppressClickRef.current) {
+      suppressClickRef.current = false;
+      return;
+    }
+    if ((e.target as HTMLElement).closest('.tl-clip, .tl-clip-editor')) return;
     handleSeekClick(e);
     setSelectedClipIds(new Set());
   };
@@ -690,15 +957,7 @@ export function TimelineEditor({
     const onKey = (e: KeyboardEvent) => {
       if (disableShortcutsRef.current) return;
       const target = e.target as HTMLElement | null;
-      if (target) {
-        const tag = target.tagName;
-        const editable =
-          tag === 'INPUT' ||
-          tag === 'TEXTAREA' ||
-          tag === 'SELECT' ||
-          (target as HTMLElement).isContentEditable;
-        if (editable) return;
-      }
+      if (isEditableTarget(target)) return;
 
       if (matches(e, 'transport.playPause')) {
         e.preventDefault();
@@ -726,6 +985,48 @@ export function TimelineEditor({
         return;
       }
 
+      if (matches(e, 'clip.insert')) {
+        e.preventDefault();
+        insertBlockForTyping(activeLayerIdRef.current, currentTimeRef.current);
+        return;
+      }
+
+      if (matches(e, 'clip.editText')) {
+        // Enter on a focused button belongs to that button; a focused clip
+        // lets it through only once it is selected (see LyricClip).
+        if (target?.closest('button, [role="button"]:not(.tl-clip)')) return;
+        if (selectedIdsRef.current.size !== 1) return;
+        e.preventDefault();
+        requestClipEdit(selectedIdsRef.current.values().next().value as string);
+        return;
+      }
+
+      if (matches(e, 'clip.selectLinked')) {
+        if (selectedIdsRef.current.size === 0) return;
+        e.preventDefault();
+        selectLinked();
+        return;
+      }
+
+      if (matches(e, 'clip.split')) {
+        e.preventDefault();
+        playheadEdit('split');
+        return;
+      }
+
+      if (matches(e, 'clip.trimStart') || matches(e, 'clip.trimEnd')) {
+        e.preventDefault();
+        playheadEdit(matches(e, 'clip.trimStart') ? 'trimStart' : 'trimEnd');
+        return;
+      }
+
+      if (matches(e, 'clip.merge')) {
+        if (selectedIdsRef.current.size < 2) return;
+        e.preventDefault();
+        mergeSelected();
+        return;
+      }
+
       if (matches(e, 'clip.delete') || e.key === 'Delete') {
         if (selectedIdsRef.current.size === 0) return;
         e.preventDefault();
@@ -750,7 +1051,24 @@ export function TimelineEditor({
 
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [matches, selectAll, clearSelection, deleteSelected, duplicateSelected, nudgeSelected]);
+  }, [matches, selectAll, clearSelection, deleteSelected, duplicateSelected, nudgeSelected,
+    insertBlockForTyping, requestClipEdit, selectLinked, playheadEdit, mergeSelected]);
+
+  // ⌘V / Ctrl+V outside any text field: each pasted line becomes a block on
+  // the active layer from the playhead. Inside the inline editor (or any
+  // input) the browser pastes as usual.
+  useEffect(() => {
+    const onPaste = (e: ClipboardEvent) => {
+      if (disableShortcutsRef.current || isEditableTarget(e.target)) return;
+      const lines = linesFromPastedText(e.clipboardData?.getData('text/plain') ?? '');
+      const layerId = activeLayerIdRef.current;
+      if (lines.length === 0 || !layerId) return;
+      e.preventDefault();
+      insertBlocks(layerId, currentTimeRef.current, lines);
+    };
+    window.addEventListener('paste', onPaste);
+    return () => window.removeEventListener('paste', onPaste);
+  }, [insertBlocks]);
 
   const {
     displayPeaks,
@@ -808,6 +1126,18 @@ export function TimelineEditor({
         onClearSelection={clearSelection}
         onDuplicateSelected={duplicateSelected}
         onDeleteSelected={deleteSelected}
+        onSelectLinked={selectLinked}
+        onInsertBlock={() => insertBlockForTyping(effectiveSelectedLayerId, currentTime)}
+        onEditText={() => {
+          const onlyId = selectedClipIds.size === 1
+            ? selectedClipIds.values().next().value as string | undefined
+            : undefined;
+          if (onlyId) requestClipEdit(onlyId);
+        }}
+        canEditText={selectedClipIds.size === 1}
+        onPlayheadEdit={playheadEdit}
+        onMergeSelected={mergeSelected}
+        canMerge={selectedClipIds.size > 1}
         onNudgeSelected={nudgeSelected}
         onOffsetInputChange={setOffsetInput}
         onApplyOffsetInput={applyOffsetInput}
@@ -874,7 +1204,11 @@ export function TimelineEditor({
             onLaneClick={handleSeekClick}
           />
 
-          <div className="tl-tracks" onClick={handleLaneBackgroundClick}>
+          <div
+            className="tl-tracks"
+            onClick={handleLaneBackgroundClick}
+            onPointerDown={handleTracksPointerDown}
+          >
             <TimelineLayerList
               layers={sortedLayers}
               clipsByLayer={clipsByLayer}
@@ -889,6 +1223,10 @@ export function TimelineEditor({
               setLaneRef={setLaneRef}
               onClipPointerDown={handleClipPointerDown}
               onClipKeyboardSelect={handleClipKeyboardSelect}
+              editingClipId={editingClipId}
+              onClipTextCommit={commitClipText}
+              onClipEditCancel={cancelClipEdit}
+              onLaneDoubleClick={handleLaneDoubleClick}
               onLayerToggleVisible={toggleLayerVisible}
               onLayerToggleLocked={toggleLayerLocked}
               onLayerPositionChange={handleLayerPositionChange}
@@ -945,6 +1283,19 @@ export function TimelineEditor({
               </>
             )}
           </div>
+
+          {marquee && (
+            <div
+              className="tl-marquee"
+              style={{
+                left: `${marquee.left}px`,
+                top: `${marquee.top}px`,
+                width: `${marquee.width}px`,
+                height: `${marquee.height}px`
+              }}
+              aria-hidden
+            />
+          )}
 
           <TimelinePlayhead
             currentTime={currentTime}

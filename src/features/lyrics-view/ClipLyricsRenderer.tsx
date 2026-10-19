@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { LyricClip, ClipPositionPreset } from '../../core/types/clip';
 import type { LyricLayer } from '../../core/types/layer';
 import type {
@@ -19,6 +19,7 @@ import {
   resolveLyricVisualStyle,
   resolveProgressIndicatorConfig
 } from '../../core/render/resolveVisualStyle';
+import { computePreviewLanes, resolveClipLane } from '../../core/render/previewLanes';
 import './ClipLyricsRenderer.css';
 
 interface ClipLyricsRendererProps {
@@ -75,6 +76,8 @@ export function ClipLyricsRenderer({
     [layers]
   );
 
+  const lanes = useMemo(() => computePreviewLanes(layers, clips), [layers, clips]);
+
   const renderable = useMemo(
     () =>
       clips.filter(clip => {
@@ -97,12 +100,35 @@ export function ClipLyricsRenderer({
     [animationConfig, clips, currentTime, layerMap, visibleLayerIds]
   );
 
+  const stageRef = useRef<HTMLDivElement>(null);
+  const [stageHeight, setStageHeight] = useState(0);
+  useLayoutEffect(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    setStageHeight(stage.clientHeight);
+    const observer = new ResizeObserver(() => setStageHeight(stage.clientHeight));
+    observer.observe(stage);
+    return () => observer.disconnect();
+  }, []);
+
+  // Re-fit only when the laned text or the stage size changes, not every frame.
+  const laneFitKey = renderable
+    .filter(clip => resolveClipLane(clip, lanes))
+    .map(clip => `${clip.id}:${clip.text}`)
+    .join('|');
+  useLayoutEffect(() => {
+    const stage = stageRef.current;
+    if (!stage || stageHeight <= 0) return;
+    stage.querySelectorAll<HTMLElement>('.clip-lyric.pos-lane').forEach(fitToLane);
+  }, [laneFitKey, stageHeight, styleConfig, layers]);
+
   return (
-    <div className="clip-lyrics-stage">
+    <div className="clip-lyrics-stage" ref={stageRef}>
       {renderable.map(clip => {
         const layer   = layerMap.get(clip.layerId);
         const pos     = resolvePosition(clip, layer);
-        const posClass = POSITION_CLASS[pos] ?? 'pos-center';
+        const lane     = resolveClipLane(clip, lanes);
+        const posClass = lane ? 'pos-lane' : POSITION_CLASS[pos] ?? 'pos-center';
         const duration = Math.max(0, clip.endTime - clip.startTime);
         const progress = duration > 0
           ? Math.max(0, Math.min(1, (currentTime - clip.startTime) / duration))
@@ -195,6 +221,10 @@ export function ClipLyricsRenderer({
           '--clip-dot-color': progressIndicator.color,
           '--clip-dot-size': `${progressIndicator.size}px`,
           '--clip-dot-glow': progressIndicator.glow,
+          ...(lane ? {
+            '--clip-lane-center': `${lane.center * 100}%`,
+            '--clip-lane-size': lane.height
+          } : {}),
           ...(zIndex !== undefined ? { zIndex } : {})
         } as React.CSSProperties;
         return (
@@ -231,6 +261,25 @@ export function ClipLyricsRenderer({
       })}
     </div>
   );
+}
+
+/**
+ * Shrink a laned clip's font until it fits the height of its lane. Wrapping
+ * changes with the font size, so a few passes converge better than one.
+ */
+function fitToLane(element: HTMLElement): void {
+  const stage = element.parentElement;
+  const laneSize = Number(element.style.getPropertyValue('--clip-lane-size'));
+  if (!stage || !(laneSize > 0)) return;
+  const laneHeight = stage.clientHeight * laneSize;
+  let fit = 1;
+  element.style.setProperty('--clip-lane-fit', '1');
+  for (let pass = 0; pass < 4; pass++) {
+    const height = element.offsetHeight;
+    if (height <= laneHeight) break;
+    fit = Math.max(0.2, fit * (laneHeight / height) * 0.98);
+    element.style.setProperty('--clip-lane-fit', String(fit));
+  }
 }
 
 function transformText(text: string, transform: LyricVisualStyle['textTransform']): string {

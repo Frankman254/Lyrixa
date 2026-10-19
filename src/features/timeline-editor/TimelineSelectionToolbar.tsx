@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { formatTimecode } from '../../core/timeline/clips';
+import type { PlayheadEdit } from '../../core/timeline/clipEditing';
 
 interface SelectionBounds {
   count: number;
@@ -17,6 +18,13 @@ interface TimelineSelectionToolbarProps {
   onClearSelection: () => void;
   onDuplicateSelected: () => void;
   onDeleteSelected: () => void;
+  onSelectLinked: () => void;
+  onInsertBlock: () => void;
+  onEditText: () => void;
+  canEditText: boolean;
+  onPlayheadEdit: (edit: PlayheadEdit) => void;
+  onMergeSelected: () => void;
+  canMerge: boolean;
   onNudgeSelected: (delta: number) => void;
   onOffsetInputChange: (value: string) => void;
   onApplyOffsetInput: () => void;
@@ -35,6 +43,13 @@ export function TimelineSelectionToolbar({
   onClearSelection,
   onDuplicateSelected,
   onDeleteSelected,
+  onSelectLinked,
+  onInsertBlock,
+  onEditText,
+  canEditText,
+  onPlayheadEdit,
+  onMergeSelected,
+  canMerge,
   onNudgeSelected,
   onOffsetInputChange,
   onApplyOffsetInput,
@@ -48,9 +63,67 @@ export function TimelineSelectionToolbar({
   return (
     <div className="tl-selection-bar" role="toolbar" aria-label="Clip selection">
       <div className="tl-sel-group">
+        <button
+          className="tl-btn small primary"
+          onClick={onInsertBlock}
+          title="Insert an empty block at the playhead on the active layer (N). Double-click an empty lane to insert there."
+        >
+          + Block
+        </button>
+        <button
+          className="tl-btn small"
+          onClick={onEditText}
+          disabled={!canEditText}
+          title="Type into the selected clip (Enter or double-click)"
+        >
+          ✎ Text
+        </button>
+      </div>
+
+      <div className="tl-sel-group" aria-label="Edit at playhead">
+        <button
+          className="tl-btn small"
+          onClick={() => onPlayheadEdit('split')}
+          title="Cut the selected clips — or the active layer's clip under the playhead — in two at the playhead (S)"
+        >
+          ✂ Split
+        </button>
+        <button
+          className="tl-btn small"
+          onClick={onMergeSelected}
+          disabled={!canMerge}
+          title="Join the selected clips of each layer into one line (J)"
+        >
+          Merge
+        </button>
+        <button
+          className="tl-btn small"
+          onClick={() => onPlayheadEdit('trimStart')}
+          title="Move the start to the playhead (Q). With nothing selected: the clip under the playhead, or the next one."
+        >
+          [ Start
+        </button>
+        <button
+          className="tl-btn small"
+          onClick={() => onPlayheadEdit('trimEnd')}
+          title="Move the end to the playhead (W). With nothing selected: the clip under the playhead, or the one just heard."
+        >
+          End ]
+        </button>
+      </div>
+
+      <div className="tl-sel-group">
         <button className="tl-btn small" onClick={onSelectAll}>Select all</button>
         <button className="tl-btn small" onClick={onSelectAfterPlayhead}>
           After playhead
+        </button>
+        <button
+          className="tl-btn small"
+          onClick={onSelectLinked}
+          disabled={!hasSelection}
+          title="Add the same lyric line on the other layers — translation, romaji (L)"
+        >
+          + Linked
         </button>
         <button
           className="tl-btn small ghost"
@@ -93,7 +166,12 @@ export function TimelineSelectionToolbar({
             </span>
           </>
         ) : (
-          <span className="muted">No selection</span>
+          <span
+            className="tl-sel-hint"
+            title="Drag empty space to box-select across layers · Shift adds · ⌘V pastes lines as blocks · double-click to add or edit · N inserts at the playhead · S splits · J merges · Q / W move start / end to the playhead · L adds linked lines"
+          >
+            Drag empty space to box-select across layers · ⇧ adds · ⌘V pastes lines as blocks
+          </span>
         )}
       </div>
 

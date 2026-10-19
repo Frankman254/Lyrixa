@@ -1,6 +1,6 @@
 # Relevo de Lyrixa
 
-> Actualizado el 2026-10-14. Continúa por
+> Actualizado el 2026-10-16. Continúa por
 > [TAREAS.md](TAREAS.md) y
 > [TAREA_SECUENCIADOR.md](TAREA_SECUENCIADOR.md).
 
@@ -47,17 +47,27 @@ completados y verificados en el navegador**:
 - El dominio v2 admite Scene, Image, familias granulares e `inherit`, sólo con
   `startTimeMs`; el sobre JSON conserva la versión del proyecto.
 
-Vibrix ya avanzó a v2: exporta `.vibrix-authoring` con slots, imágenes,
-snapshots y previews; acepta score v2 con activaciones sostenidas e `inherit`.
-Lyrixa ya abre ese paquete, entiende el score v2, muestra/mueve cues, los
-puebla desde el catálogo (L4) y exporta el contenedor `.vibrix-score`
-autocontenido (L5). Sólo falta la integración real con Vibrix (leer el
-contenedor y endurecer su parser).
+Vibrix ya avanzó a v2 y **cerró su lado del intercambio**: exporta
+`.vibrix-authoring` con slots, imágenes, snapshots, previews y, desde
+`4087135b` (V2.4a), `thumbnailDataUrl` por slot. Desde `9dec2b48` lee el
+contenedor `.vibrix-score` (`parseVibrixScoreDocument` en
+`src/features/composition/vibrixScorePackage.ts`), resuelve
+`snapshots`/`previews` por `kind:id` y su parser **ya rechaza `intro-window`**
+como `track.kind`, `feature-slot.family` e `inherit.family` (tests en
+`vibrixScore.test.ts`). W3 (preview/Play/seek) y W4 (export offline vía
+`resolveVisualStateAt`) también están hechos. Su store va por la versión 154.
 
-Revisión cruzada: Vibrix cerró W2 en `338c8e03` (sesión Compose y migración
-153). Su parser de score aún usa una unión
-demasiado amplia que admite `intro-window` como carril/target; el contrato
-cerrado lo excluye y Vibrix debe endurecer ese lector antes de la integración.
+**Comprobación cruzada del 2026-10-16 (sin UI):** un test de vitest en el
+scratchpad de la sesión importó `buildVibrixScorePackage` de Lyrixa y
+`parseVibrixScoreDocument` + `reviewVibrixScore` de Vibrix (alias `@` →
+`LiveWallpaperAnimeGlitch/src`). Con un catálogo de 2 escenas (una con
+`bindings` y `rain:'off'`), 2 imágenes (una con `sceneSlotId`), Spectrum 2,
+Looks e `inherit looks`, el paquete pasó por `JSON.stringify` y Vibrix lo
+aceptó sin errores: `selfContained:true`, cierre de 8 snapshots sin
+`rain-a`, y los 7 cues en `ready`. Las formas de `VibrixScorePreview`
+(`imageId`, `revision`, `name`, `thumbnailDataUrl`) coinciden en ambos repos.
+Lo único que queda es el intercambio real con un proyecto Vibrix que tenga
+escenas.
 
 Prueba manual del 2026-10-13: se importó
 `future-core-techcore-mix-clairvoyance.vibrix-authoring` (9.7 MB), se mostraron
@@ -67,8 +77,7 @@ pero no para probar todavía cues Scene.
 
 ## Commits reales y trabajo local actual
 
-El usuario commiteó y sincronizó L3/L4/L5 en `main`; `main == origin/main` en
-`0b90a01`:
+`main == origin/main` en `571cc51`:
 
 - L3 `b884174`: cues sostenidos, orden/duración derivada/snap (`timeline.ts` +
   test, `SustainedCompositionTrackLane.tsx`, `TimelineEditor.tsx`,
@@ -76,44 +85,31 @@ El usuario commiteó y sincronizó L3/L4/L5 en `main`; `main == origin/main` en
 - L4 `db49a23`: catálogo v2 (`catalog.ts` + test, `CompositionCatalog.tsx`).
 - L5 `0b90a01`: contenedor `.vibrix-score` (`scorePackage.ts` + test,
   `snapshotKey` exportada, `downloadVibrixScore` en `LyrixaEditorShell.tsx`).
-- **Frente B (revisión cruzada Vibrix) `ac0fa1c`:** P1 + P2 ya commiteados y
-  subidos. P1 — en `LyrixaEditorShell.tsx` + `CompositionCatalog.tsx`, al cambiar
-  de proyecto con `vibrixAuthoringRef` la fuente anterior se descarta
-  síncronamente (`setVibrixAuthoringSource(null)`) y un flag
-  `vibrixSourceLoading` deshabilita `Export score` hasta resolver IndexedDB.
-  P2 — en `score.ts` + `scorePackage.ts`, los cues cuyo `trackId` pertenece a un
-  track `enabled:false` se tratan como inactivos (igual que
-  `resolveVisualStateAt` de Vibrix): fuera del cierre, `dependencies` e issues;
-  una referencia rota bajo un carril apagado ya no bloquea el export. Tests en
-  `scorePackage.test.ts`. `main == origin/main == ac0fa1c`.
+- Frente B `ac0fa1c`: al cambiar de proyecto la fuente anterior se descarta
+  síncronamente y `vibrixSourceLoading` deshabilita `Export score`; los cues de
+  un track `enabled:false` son inactivos (fuera del cierre, `dependencies` e
+  issues), igual que `resolveVisualStateAt` de Vibrix.
+- L4.1 `202c719`: pestañas **All / Images / Scenes / Slots**, acordeones por
+  familia (≤2 clics), `WindowedList` incremental y aviso «This package has 0
+  scenes.».
+- L4.2 `571cc51`: `src/core/composition/visualState.ts` + test, panel
+  «Visual at playhead» y `VibrixManifestSlot.thumbnailDataUrl?` aditivo.
 
-Queda **sin commit** (trabajo local de esta sesión):
+Queda **sin commit**:
 
-- **L4.1 · navegación del catálogo (solo UI)** —
-  `CompositionCatalog.tsx` + `CompositionCatalog.css`: pestañas **All / Images /
-  Scenes / Slots** (filtro de vista, conteos no filtrados, selección persistida
-  en `localStorage`), **acordeones plegables** por familia (arrancan cerradas en
-  All/Slots → cualquier familia a **≤2 clics**; el search fuerza abrir),
-  **render incremental** `WindowedList` (80 filas + `IntersectionObserver`, sin
-  dependencia nueva de virtualización) para que 230 previews `data:image` no
-  congelen el panel, y aviso explícito **«This package has 0 scenes.»**. No tocó
-  el contrato ni el formato del paquete; `catalog.ts` sigue puro (agrupar/filtrar).
-
-- **L4.2 · «Visual at playhead» (Fase 0, orientativa)** —
-  nuevo **`src/core/composition/visualState.ts`** (resolver puro del pliegue
-  escena/imagen/carriles en un instante, espejo de la semántica del contrato) +
-  **`visualState.test.ts`** (9 casos). Panel `VisualAtPlayhead` en
-  `CompositionCatalog.tsx`/`.css` (hero imagen+escena, líneas por carril con
-  miniatura/iniciales, marca `(scene)`/`off`/`missing`, tiempo `m:ss`, tope con
-  scroll). **Plumbing V2.4a en Lyrixa:** `VibrixManifestSlot.thumbnailDataUrl?`
-  (aditivo, sin subir `schemaVersion`), validado como data URL en
-  `authoringManifest.ts` (+2 tests) y mostrado en `renderSlotCard`. Vibrix aún
-  no genera esas miniaturas: el panel funciona ya con nombres/placeholders.
-  `npm test` 211/211, lint 0 errores (13 warnings preexistentes), build correcto.
-  En el lado **Vibrix** (repo aparte, sin commit) se documentó el contrato
-  correspondiente: `docs/features/VIBRIX_AUTHORING_CONTRACT.md` (secciones
-  «Miniaturas de slot» y «Preview del score en vivo durante la edición»),
-  `.agents/TAREA_COMPOSE_TIMELINE.md` §V2.4 y `.agents/TAREAS.md`.
+- **Carriles de letra en el preview** — nuevo `src/core/render/previewLanes.ts`
+  + `previewLanes.test.ts` (5 casos) y su uso en
+  `src/features/lyrics-view/ClipLyricsRenderer.tsx`/`.css`. Cuando hay ≥2 capas
+  de texto visibles con preset `top`/`center`/`bottom`, cada una recibe una
+  banda horizontal propia (orden: preset top→bottom, luego rol
+  primary→transliteration→translation→backing) y `fitToLane` encoge la fuente
+  hasta que el texto envuelto cabe en su banda. Un `position` explícito no
+  `center` en el clip queda fuera de las bandas. Es el espejo del reparto
+  dinámico que Vibrix commiteó en `9ef1131a`. Sólo toca el preview; el bundle
+  `.lyrixa-lyrics.json` no cambia. Verificado en el navegador el 2026-10-16 con
+  tres capas (japonés bottom/primary, romaji bottom/transliteration, español
+  top/translation): bandas 159–269 / 295–452 / 468–597 px sin solape, fit
+  0.53 / 0.82 / 0.65, y el proyecto del usuario restaurado después.
 
 No descartar esos archivos. `.agents/*` **sí está versionado** (no es
 gitignore). El usuario decidió continuar directamente en `main`; no crear otra
@@ -185,16 +181,23 @@ Pruebas finales de la sesión: `npm test` → 197/197 (48 en
 `src/core/composition/`); `npm run lint` → 0 errores; `npm run build` →
 correcto; `tsc --noEmit` limpio.
 
-### Próximo paso: Integración con Vibrix
+### Próximo paso: intercambio real con Vibrix
 
-Lyrixa ya emite el contenedor. Falta el lado Vibrix: enseñar a
-`src/features/composition/vibrixScore.ts` a reconocer `format:'vibrix-score'`
-con `packageVersion` (hoy sólo parsea el envelope plano `app:'Lyrixa'` +
-`exportKind`), resolver `snapshots`/`previews` por `kind:id` en lugar de
-buscar en su store, y **endurecer el parser** excluyendo `intro-window` de
-`track.kind`/`feature-slot.family`/`inherit.family` (anotado en la revisión
-cruzada). Luego el primer intercambio real Clairvoyance → Vibrix y comprobar
-Play/seek/export offline con el mismo resultado.
+Ambos lados del código están listos y el contrato pasa la comprobación
+cruzada. Lo que falta necesita un proyecto Vibrix real **con escenas**
+(Clairvoyance tiene 0):
+
+1. En Vibrix: crear o abrir un proyecto con ≥2 escenas, ≥2 imágenes y un slot
+   de Spectrum 2; exportar `.vibrix-authoring`.
+2. En Lyrixa (`/#/editor` → Compose): importar ese paquete y colocar
+   Image A `00:00`, Image B `03:00`, Scene A `00:00`, Scene B `01:00`,
+   Spectrum 2 `01:30` e `inherit` `02:00`. `Export score`.
+3. En Vibrix: importar el `.vibrix-score`, revisar que todo sale `ready`, y
+   comprobar que seek, Play y export offline dan el mismo frame en cada corte.
+
+Si algo falla en el paso 3, el sitio para mirar en Vibrix es
+`src/features/composition/vibrixScorePackage.ts` (parser) y
+`resolveVisualStateAt.ts` (aplicación de snapshots).
 
 ### Cómo probar L5 manualmente
 
