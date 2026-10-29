@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getClipsInBox, withLinkedClips } from './clipSelection';
+import { getClipsInBox, shiftClips, withLinkedClips } from './clipSelection';
 import type { LyricClip } from '../types/clip';
 import type { LyricLayer } from '../types/layer';
 
@@ -64,5 +64,20 @@ describe('withLinkedClips', () => {
 
   it('leaves a clip without a sourceId alone', () => {
     expect([...withLinkedClips(clips, layers, ['es-locked'])]).toEqual(['es-locked']);
+  });
+});
+
+describe('shiftClips', () => {
+  it('moves absolute word timings with their clip', () => {
+    const timed = clip({
+      id: 'timed',
+      layerId: 'jp',
+      startTime: 10,
+      endTime: 12,
+      words: [{ text: 'line', startTime: 10.25, endTime: 11.75 }]
+    });
+    const [shifted] = shiftClips([timed], ['timed'], 5, { layers });
+    expect(shifted).toMatchObject({ startTime: 15, endTime: 17 });
+    expect(shifted?.words).toEqual([{ text: 'line', startTime: 15.25, endTime: 16.75 }]);
   });
 });

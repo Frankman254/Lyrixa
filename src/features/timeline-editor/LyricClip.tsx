@@ -48,6 +48,9 @@ export function LyricClip({
 
   const handlePointerDown = useCallback(
     (e: ReactPointerEvent<HTMLDivElement>, mode: DragMode) => {
+      // Leave the middle button available to the timeline's "move selection
+      // here" action instead of accidentally starting a clip drag.
+      if (e.button !== 0) return;
       if (locked || clip.locked) return;
       e.stopPropagation();
       const modifiers: ClipPointerModifiers = {

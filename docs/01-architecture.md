@@ -50,6 +50,27 @@ composición nunca mantiene un segundo array de cues.
 
 The timeline should not open separate style inspectors. It reports selection to the shell, and the right inspector edits that selected context.
 
+### Edicion por lotes de letras
+
+`core/timeline/clipBatch.ts` concentra las transformaciones puras que afectan
+varios clips: redimensionar una seleccion, moverla a un tiempo absoluto y
+copiar el intervalo de un parrafo a sus equivalentes en otras capas. La
+identidad `sourceId` identifica la linea y la cercania del tiempo inicial
+identifica la ocurrencia; esto evita modificar a la vez todas las repeticiones
+de un coro. En proyectos antiguos sin identidad se usa solo el tiempo inicial.
+
+`TimelineEditor` conserva la seleccion y traduce los gestos a esas operaciones:
+
+- arrastrar el asa de un clip seleccionado redimensiona toda la seleccion;
+- clic central sobre una pista coloca el inicio del grupo en ese tiempo;
+- `Match timing` copia el intervalo del unico clip seleccionado a sus hermanos;
+- `LyricsReviewPanel` ofrece una matriz virtualizada por paginas para revisar
+  texto y tiempos de todas las capas sin recorrer la linea de tiempo.
+
+Mover clips tambien desplaza sus tiempos absolutos por palabra. Copiar el
+intervalo entre capas elimina los tiempos por palabra del destino porque ya no
+son fiables respecto al nuevo intervalo; el texto y su identidad se conservan.
+
 ## Visual style inheritance
 
 Final render settings are resolved in this order:

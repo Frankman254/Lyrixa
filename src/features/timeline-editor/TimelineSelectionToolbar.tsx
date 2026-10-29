@@ -19,6 +19,10 @@ interface TimelineSelectionToolbarProps {
   onDuplicateSelected: () => void;
   onDeleteSelected: () => void;
   onSelectLinked: () => void;
+  onCopyTimingToLinked: () => void;
+  canCopyTimingToLinked: boolean;
+  onMoveSelectionToPlayhead: () => void;
+  onOpenLyricsReview: () => void;
   onInsertBlock: () => void;
   onEditText: () => void;
   canEditText: boolean;
@@ -44,6 +48,10 @@ export function TimelineSelectionToolbar({
   onDuplicateSelected,
   onDeleteSelected,
   onSelectLinked,
+  onCopyTimingToLinked,
+  canCopyTimingToLinked,
+  onMoveSelectionToPlayhead,
+  onOpenLyricsReview,
   onInsertBlock,
   onEditText,
   canEditText,
@@ -77,6 +85,13 @@ export function TimelineSelectionToolbar({
           title="Type into the selected clip (Enter or double-click)"
         >
           ✎ Text
+        </button>
+        <button
+          className="tl-btn small"
+          onClick={onOpenLyricsReview}
+          title="Review and edit every configured paragraph across all layers"
+        >
+          Review lyrics
         </button>
       </div>
 
@@ -124,6 +139,22 @@ export function TimelineSelectionToolbar({
           title="Add the same lyric line on the other layers — translation, romaji (L)"
         >
           + Linked
+        </button>
+        <button
+          className="tl-btn small"
+          onClick={onCopyTimingToLinked}
+          disabled={!canCopyTimingToLinked}
+          title="Copy the selected paragraph timing to the same source line on other layers"
+        >
+          Match timing
+        </button>
+        <button
+          className="tl-btn small"
+          onClick={onMoveSelectionToPlayhead}
+          disabled={!hasSelection}
+          title="Move the whole selection so its first clip starts at the playhead. Middle-click a lane to place it directly."
+        >
+          To playhead
         </button>
         <button
           className="tl-btn small ghost"

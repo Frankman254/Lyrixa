@@ -3,9 +3,6 @@ import type { LyricClip as LyricClipModel, ClipPositionPreset } from '../../core
 import type { LyricLayer } from '../../core/types/layer';
 import type { AudioPeak, AudioChannel, AudioBandMode } from '../../core/types/audio';
 import {
-  moveClip,
-  resizeClipStart,
-  resizeClipEnd,
   pxToTime
 } from '../../core/timeline/clips';
 import { resolveDroppedLayerId } from '../../core/timeline/clipsFromLyrics';
@@ -26,11 +23,17 @@ import {
   type PlayheadEdit
 } from '../../core/timeline/clipEditing';
 import { duplicateClipSelection } from '../../core/timeline/duplicateClips';
+import {
+  copyTimingToLinkedClips,
+  moveClipSelectionStartTo,
+  resizeClipSelection
+} from '../../core/timeline/clipBatch';
 import { TimelinePlayhead } from './TimelinePlayhead';
 import { TimelineAudioLanes } from './TimelineAudioLanes';
 import { TimelineLayerList } from './TimelineLayerList';
 import { TimelineMinimap } from './TimelineMinimap';
 import { TimelineSelectionToolbar } from './TimelineSelectionToolbar';
+import { LyricsReviewPanel } from './LyricsReviewPanel';
 import { TimelineToolbar } from './TimelineToolbar';
 import { useTimelineBandPeaks } from './useTimelineBandPeaks';
 import { useShortcuts } from '../shortcuts/useShortcuts';
@@ -173,6 +176,7 @@ export function TimelineEditor({
   const [compositionExpanded, setCompositionExpanded] = useState(true);
   const [editingClipId, setEditingClipId] = useState<string | null>(null);
   const [marquee, setMarquee] = useState<MarqueeRect | null>(null);
+  const [lyricsReviewOpen, setLyricsReviewOpen] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const laneContainerRef = useRef<HTMLDivElement>(null);
@@ -590,6 +594,10 @@ export function TimelineEditor({
   // ── Box selection ──────────────────────────────────────────────
   const handleTracksPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     suppressClickRef.current = false;
+    if (e.button === 1) {
+      e.preventDefault();
+      return;
+    }
     if (e.button !== 0) return;
     const target = e.target as HTMLElement;
     if (!target.closest('.tl-track-lane') || target.closest('.tl-clip, .tl-clip-editor')) return;
@@ -673,6 +681,40 @@ export function TimelineEditor({
     [effectiveDuration, onClipsChange]
   );
 
+  const moveSelectionStartTo = useCallback((targetTime: number) => {
+    const ids = Array.from(selectedIdsRef.current);
+    if (ids.length === 0) return;
+    const next = moveClipSelectionStartTo(clipsRef.current, ids, targetTime, {
+      trackDuration: effectiveDuration,
+      respectLocked: true,
+      layers: layersRef.current
+    });
+    clipsRef.current = next;
+    onClipsChange(next);
+  }, [effectiveDuration, onClipsChange]);
+
+  const copySelectedTimingToLinked = useCallback(() => {
+    if (selectedIdsRef.current.size !== 1) return;
+    const anchorId = selectedIdsRef.current.values().next().value as string | undefined;
+    if (!anchorId) return;
+    const result = copyTimingToLinkedClips(clipsRef.current, layersRef.current, anchorId);
+    if (result.affectedIds.length === 0) return;
+    clipsRef.current = result.clips;
+    onClipsChange(result.clips);
+    setSelectedClipIds(new Set([anchorId, ...result.affectedIds]));
+  }, [onClipsChange]);
+
+  const handleTracksAuxClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.button !== 1 || selectedIdsRef.current.size === 0) return;
+    const target = e.target as HTMLElement;
+    if (!target.closest('.tl-track-lane')) return;
+    const time = timeAtClientX(e.clientX);
+    if (time == null) return;
+    e.preventDefault();
+    e.stopPropagation();
+    moveSelectionStartTo(time);
+  }, [moveSelectionStartTo, timeAtClientX]);
+
   // ── Pointer-down on a clip: handles both selection and drag-start ──
   const handleClipPointerDown = useCallback(
     (
@@ -744,8 +786,11 @@ export function TimelineEditor({
           ? new Set(selectedIdsRef.current)
           : new Set([clipId]);
       } else {
-        // Resize handles always operate on the single clip.
-        effective = new Set([clipId]);
+        // A handle resizes the complete selection when the touched clip is
+        // already selected; otherwise it behaves as a regular single resize.
+        effective = selectedIdsRef.current.has(clipId)
+          ? new Set(selectedIdsRef.current)
+          : new Set([clipId]);
       }
 
       if (
@@ -838,23 +883,23 @@ export function TimelineEditor({
         return;
       }
 
-      // Resize paths — single clip only.
-      const base = state.initialClips[0]!;
-      let updated: LyricClipModel;
-      if (state.mode === 'resize-start') {
-        updated = resizeClipStart(base, base.startTime + deltaSec, { snap: snapSeconds });
-      } else {
-        updated = resizeClipEnd(base, base.endTime + deltaSec, {
-          trackDuration: effectiveDuration,
-          snap: snapSeconds
-        });
-      }
-      // Preserve any other clips that may have been edited mid-drag.
-      onClipsChange(
-        clipsRef.current.map(c => (c.id === updated.id ? updated : c))
+      const baseline = clipsRef.current.map(clip =>
+        state.initialClips.find(initial => initial.id === clip.id) ?? clip
       );
-      // Keep moveClip available for future strict-snap moves of single clips.
-      void moveClip;
+      const resized = resizeClipSelection(
+        baseline,
+        state.initialClips.map(clip => clip.id),
+        state.mode === 'resize-start' ? 'start' : 'end',
+        deltaSec,
+        {
+          trackDuration: effectiveDuration,
+          snap: snapSeconds,
+          respectLocked: true,
+          layers: layersRef.current
+        }
+      );
+      clipsRef.current = resized;
+      onClipsChange(resized);
     },
     [pxPerSecond, effectiveDuration, snapSeconds, onClipsChange, findLayerAtY, hoveredLayerId, updateMarquee]
   );
@@ -1127,6 +1172,10 @@ export function TimelineEditor({
         onDuplicateSelected={duplicateSelected}
         onDeleteSelected={deleteSelected}
         onSelectLinked={selectLinked}
+        onCopyTimingToLinked={copySelectedTimingToLinked}
+        canCopyTimingToLinked={selectedClipIds.size === 1}
+        onMoveSelectionToPlayhead={() => moveSelectionStartTo(currentTime)}
+        onOpenLyricsReview={() => setLyricsReviewOpen(true)}
         onInsertBlock={() => insertBlockForTyping(effectiveSelectedLayerId, currentTime)}
         onEditText={() => {
           const onlyId = selectedClipIds.size === 1
@@ -1208,6 +1257,7 @@ export function TimelineEditor({
             className="tl-tracks"
             onClick={handleLaneBackgroundClick}
             onPointerDown={handleTracksPointerDown}
+            onAuxClick={handleTracksAuxClick}
           >
             <TimelineLayerList
               layers={sortedLayers}
@@ -1305,6 +1355,27 @@ export function TimelineEditor({
           />
         </div>
       </div>
+
+      {lyricsReviewOpen && (
+        <LyricsReviewPanel
+          clips={clips}
+          layers={layers}
+          onClipsChange={(next) => {
+            clipsRef.current = next;
+            onClipsChange(next);
+          }}
+          onSelectClip={(clipId) => {
+            const clip = clipsRef.current.find(candidate => candidate.id === clipId);
+            if (!clip) return;
+            setSelectedLayerId(clip.layerId);
+            setSelectedClipIds(new Set([clipId]));
+            lastSelectedClipIdRef.current = clipId;
+            revealTime(clip.startTime);
+          }}
+          onSeek={onSeek}
+          onClose={() => setLyricsReviewOpen(false)}
+        />
+      )}
 
     </div>
   );

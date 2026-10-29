@@ -108,7 +108,12 @@ export function shiftClips(
     return {
       ...c,
       startTime: c.startTime + delta,
-      endTime: c.endTime + delta
+      endTime: c.endTime + delta,
+      words: c.words?.map(word => ({
+        ...word,
+        startTime: word.startTime + delta,
+        endTime: word.endTime + delta
+      }))
     };
   });
 }
